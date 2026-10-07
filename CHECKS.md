@@ -219,3 +219,63 @@ standalone on the phone GPU + projection-mapping output stage.
   served from the same origin: presets carry over; S.map is ignored by desktop.
 - No pinch-to-move-corner gesture (drag + nudge only); multi-surface
   projector edge-blend tuning is manual via feather sliders.
+
+## Mobile UI v2 shell rebuild (2026-10-07 — Joshua's verdict on v1 shell: "all the above")
+Rebuilt mobile.html UI shell only (style block, body shell, final script block).
+Engine (shaders, layers, post chain, cloner, params/presets/audio/MIDI) and mapping
+math (homography, masks, surfaces) untouched — verified by diff of non-shell regions.
+
+### What changed (design)
+- Play-first bottom sheet: canvas is the hero; sheet peeks (grab handle + Play/FX/Map
+  tabs + BLACKOUT/TAP gig bar + M1-M4 knobs) and drags/taps open for full controls.
+- remote.html design language adopted: same palette, section cards, 12px uppercase
+  section headers, gig-bar big buttons, CSS conic-gradient dial knobs.
+- Progressive disclosure: Play = gig bar + 8 macros + layer quick-select chips
+  (L1-L4 with source name + ON/OFF bypass toggle) + expanders (All layers & sources,
+  Presets, Audio & engine). FX = Post FX chain / Master / Shader plugin / MIDI
+  sections. Map tab keeps its structure with the new spacing/type treatment.
+- Type scale: text-size-adjust:100% (kills Android font boosting), 12px minimum
+  labels, real header hierarchy, no truncation on important controls.
+
+### What changed (real-Chrome technical)
+- 100vh -> 100dvh (vh fallback) on #gl and sheet max-height; viewport meta gains
+  interactive-widget=resizes-content; visualViewport.resize listener added
+  alongside window resize/orientationchange (mapping calibration preserved —
+  corners are stored normalized).
+- Knobs rebuilt on remote.html's proven pattern: pointerdown/move/up/cancel with
+  setPointerCapture, touch-action:none, 350ms double-tap reset (replaces dblclick,
+  which never fired on touch), 60ms fire throttle, drag math initialized from the
+  touch point (no first-move jump). Macro label editing via prompt kept.
+
+### Verification (faithful mobile emulation: CDP setDeviceMetricsOverride
+mobile:true, touch emulation on, 360x740@dpr2.5 / 390x844@dpr3 / 1024x1366@dpr2)
+- node parse of all 15 script blocks: OK. Zero console errors on load and after
+  all interactions.
+- Screenshots inspected at all three sizes (checks/v2_play_peek_360.png,
+  v2_play_open_360.png, v2_fx_360.png, v2_map_360.png, v2_play_peek_390.png,
+  v2_play_open_390.png, v2_map_390.png, v2_play_open_1024.png, v2_map_1024.png):
+  no overlap/clipping/horizontal overflow; hierarchy and spacing read clean.
+- Synthetic TouchEvent (Input.dispatchTouchEvent) knob drag: 0.50 -> 1.00,
+  monotonic intermediate values, sheetBody scrollTop and window.scrollY unchanged.
+- Double-tap reset: initial CDP test failed only due to round-trip latency pushing
+  taps past the 350ms window; deterministic in-page PointerEvent dispatch passes
+  (0.90 -> 0.50). Single tap does not reset. Logic confirmed correct for real HW.
+- Corner-handle touch drag updates homography corners; preset save/load round-trip
+  restores macro values AND mapping corners; engine still renders behind the UI.
+- 12/12 functional checks pass (11 direct + 1 logic-confirmed).
+
+### Complaint-by-complaint
+1. Ugly/cramped -> bottom-sheet play-first layout, remote design language,
+   generous whitespace, section hierarchy.
+2. Layout broken -> 100dvh, interactive-widget=resizes-content, visualViewport
+   resize handling, text-size-adjust.
+3. Knobs won't drag -> rebuilt on remote's proven pointer-capture pattern with
+   touch-action:none; verified smooth monotonic drags via real touch sequences.
+4. Text sizing off -> text-size-adjust:100%, 12px label floor, no truncation.
+
+### Still unknowable headless
+Real-device touch feel/timing, actual Android Chrome toolbar interplay, and
+phone GPU frame rates (SwiftShader did 1-3fps; his phone is ground truth).
+Note: mobile.html carries a verbatim copy of the v1.1 engine — the parallel
+v1.2 spectral-renderer work on holomapper.html will need a port pass to reach
+mobile.html (accepted tech debt, flagged for the parent).

@@ -2,103 +2,149 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
 <title>HoloMapper Mobile</title>
 <style>
+/* ============ HoloMapper Mobile v2 shell — play-first bottom sheet ============ */
 :root{
-  --bg:#0b0b12; --panel:#14141d; --panel2:#1b1b27; --line:#2a2a3d;
-  --acc:#a78bfa; --acc2:#7c5cf0; --txt:#e8e8f2; --dim:#9a9ab2; --cyan:#5eead4;
-  --danger:#f87171;
+  --bg:#08090c; --panel:#10131a; --panel2:#161b24; --line:#232b38;
+  --txt:#e2e8f2; --dim:#8b95a8; --acc:#8b5cf6; --acc2:#22d3ee;
+  --bad:#f0524d; --ok:#34d399; --warn:#f5a623;
+  --peekH:296px;
 }
-*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-html,body{margin:0;padding:0;height:100%;background:#000;color:var(--txt);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+html,body{margin:0;padding:0;background:#000;color:var(--txt);
+  font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
   overscroll-behavior:none;}
-body{position:fixed;inset:0;overflow:hidden;}
-#gl{position:fixed;inset:0;width:100vw;height:100vh;object-fit:fill;z-index:0;background:#000;touch-action:none;}
+body{position:fixed;inset:0;overflow:hidden;user-select:none;-webkit-user-select:none;}
+#gl{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;z-index:0;background:#000;touch-action:none;}
+[hidden]{display:none!important;}
 /* ---------- top bar ---------- */
-#topbar{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:6px;
-  padding:calc(6px + env(safe-area-inset-top)) 8px 6px 8px;background:rgba(10,10,16,.92);
-  border-bottom:1px solid var(--line);min-height:52px;}
-.ttl{font-weight:700;font-size:15px;white-space:nowrap;color:var(--acc);}
-.ttl em{font-style:normal;color:var(--cyan);font-size:11px;}
-#presetSel{flex:1;min-width:0;max-width:150px;}
-#presetName{width:86px;}
-#fps{font-size:11px;color:var(--dim);min-width:44px;text-align:right;}
-/* ---------- tab bar ---------- */
-#tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;
-  padding:6px 8px calc(8px + env(safe-area-inset-bottom)) 8px;background:rgba(10,10,16,.94);
-  border-top:1px solid var(--line);gap:8px;}
-#tabbar button{flex:1;min-height:52px;font-size:16px;font-weight:700;border-radius:12px;
+#topbar{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:10px;
+  padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:rgba(8,9,12,.88);
+  border-bottom:1px solid var(--line);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+.brand{font-weight:800;font-size:16px;letter-spacing:.4px;white-space:nowrap;
+  background:linear-gradient(90deg,var(--acc),var(--acc2));
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+.brand em{font-style:normal;font-size:10px;letter-spacing:1.5px;}
+#fps{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;min-width:48px;text-align:right;}
+/* ---------- bottom sheet ---------- */
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;flex-direction:column;
+  max-height:92vh;max-height:92dvh;background:var(--panel);border-top:1px solid var(--line);
+  border-radius:18px 18px 0 0;transform:translateY(calc(100% - var(--peekH)));
+  transition:transform .28s cubic-bezier(.32,.72,.35,1);box-shadow:0 -8px 32px #000c;
+  padding-bottom:env(safe-area-inset-bottom);}
+#sheet.open{transform:translateY(0);}
+#grab{touch-action:none;cursor:grab;padding:10px 0 6px;display:flex;justify-content:center;flex:none;}
+#grab .pill{width:48px;height:5px;border-radius:3px;background:#3a4356;}
+#sheet.open #grab .pill{background:var(--acc);}
+#sheetTabs{display:flex;gap:8px;padding:2px 14px 10px;flex:none;}
+#sheetTabs button{flex:1;min-height:48px;font-size:15px;font-weight:700;border-radius:12px;
   border:1px solid var(--line);background:var(--panel2);color:var(--dim);}
-#tabbar button.on{background:var(--acc2);color:#fff;border-color:var(--acc2);}
-/* ---------- panels ---------- */
-.panel{position:fixed;left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom));z-index:15;
-  max-height:56vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
-  background:rgba(16,16,24,.96);border-top:1px solid var(--line);
-  padding:10px 10px 16px 10px;display:none;}
-.panel.on{display:block;}
-/* ---------- generic controls ---------- */
-button{min-height:44px;min-width:44px;border-radius:10px;border:1px solid var(--line);
-  background:var(--panel2);color:var(--txt);font-size:14px;padding:8px 12px;touch-action:manipulation;}
-button:active{background:#2a2a40;}
-button.on{background:var(--acc2);border-color:var(--acc2);color:#fff;}
-button.warn.on{background:#7a2d2d;border-color:var(--danger);}
-select,input[type=text],textarea{font-size:14px;color:var(--txt);background:var(--panel2);
-  border:1px solid var(--line);border-radius:10px;min-height:44px;padding:8px;}
-textarea{width:100%;font-family:ui-monospace,monospace;font-size:12px;}
-input[type=range]{-webkit-appearance:none;appearance:none;flex:1;min-width:60px;height:44px;background:transparent;touch-action:none;}
-input[type=range]::-webkit-slider-runnable-track{height:8px;background:#3a3a55;border-radius:4px;}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:32px;height:32px;border-radius:50%;
-  background:var(--acc);margin-top:-12px;border:2px solid #d6c9ff;}
-input[type=range]::-moz-range-track{height:8px;background:#3a3a55;border-radius:4px;}
-input[type=range]::-moz-range-thumb{width:30px;height:30px;border-radius:50%;background:var(--acc);border:2px solid #d6c9ff;}
-input[type=checkbox]{width:26px;height:26px;accent-color:var(--acc2);}
-label.ck{display:flex;align-items:center;gap:8px;min-height:44px;font-size:14px;}
-/* engine row builders */
-.prow{padding:6px 0;border-bottom:1px solid #1e1e2c;}
-.pline{display:flex;align-items:center;gap:8px;}
-.pline label{width:88px;flex:none;font-size:13px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.pval{width:56px;flex:none;text-align:right;font-size:12px;color:var(--cyan);font-variant-numeric:tabular-nums;}
-.psub{display:flex;align-items:center;gap:8px;padding:2px 0 2px 96px;}
-.mlab{font-size:11px;color:var(--dim);}
-.msel{min-height:36px;font-size:13px;}
-.mdep{height:32px;}
-.dsel{min-height:44px;font-size:14px;}
-.ckrow{display:flex;align-items:center;}
+#sheetTabs button.on{background:var(--acc);border-color:var(--acc);color:#fff;}
+#sheetBody{overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;}
+@media(min-width:720px){
+  #grab,#sheetTabs,#sheetBody{width:100%;max-width:860px;margin-left:auto;margin-right:auto;}
+}
+/* ---------- sections ---------- */
+section{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 12px;}
+section>h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:0 0 10px;font-weight:700;}
+.trow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0;}
 .hint{font-size:12px;color:var(--dim);padding:6px 0;}
+.blab{font-size:11px;color:var(--dim);}
+/* ---------- gig bar ---------- */
+.gigbar{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 12px 4px;}
+.tapwrap{display:flex;flex-direction:column;gap:2px;}
+.bpmdisp{display:flex;align-items:baseline;justify-content:center;gap:6px;}
+#bpm{font-size:20px;font-weight:800;color:var(--acc);font-variant-numeric:tabular-nums;}
+/* ---------- buttons ---------- */
+button{min-height:44px;min-width:44px;border-radius:10px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--txt);font-size:14px;font-weight:600;padding:8px 12px;touch-action:manipulation;}
+button:active{background:#232b3d;}
+button.on{background:var(--acc);border-color:var(--acc);color:#fff;}
+button.warn.on{background:var(--bad);border-color:var(--bad);}
+.bigbtn{min-height:64px;border-radius:12px;font-size:16px;font-weight:800;letter-spacing:.5px;}
+.bigbtn:active{transform:scale(.97);}
+#btnBlackout.armed{background:var(--bad);border-color:var(--bad);color:#fff;}
+#btnTap{background:#1a1430;border-color:var(--acc);color:#d9c8ff;}
+/* ---------- macro knobs (remote-style dials) ---------- */
+.knobgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:2px 12px 6px;}
+@media(min-width:720px){.knobgrid{grid-template-columns:repeat(8,1fr);}}
+.knob{--v:.5;touch-action:none;text-align:center;padding:8px 2px;border-radius:12px;min-height:44px;}
+.knob:active{background:#ffffff08;}
+.dial{width:76px;height:76px;border-radius:50%;margin:0 auto;position:relative;
+  background:conic-gradient(from 225deg,var(--acc) 0deg calc(var(--v)*270deg),
+    #232b38 calc(var(--v)*270deg) 270deg,transparent 270deg 360deg);}
+.dial::after{content:'';position:absolute;inset:12px;border-radius:50%;background:#141922;}
+.dial::before{content:'';position:absolute;left:50%;top:8px;width:4px;height:16px;border-radius:2px;
+  background:#fff;z-index:1;transform-origin:50% 30px;
+  transform:translateX(-50%) rotate(calc(-135deg + var(--v)*270deg));}
+.klab{font-size:12px;font-weight:700;color:var(--acc2);margin-top:6px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kval{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;}
+/* ---------- layer quick-select chips ---------- */
+#layerchips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;}
+.lchip{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:8px 4px;
+  display:flex;flex-direction:column;align-items:center;gap:3px;min-height:66px;}
+.lchip.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc);}
+.lchip .ln{font-weight:800;font-size:14px;}
+.lchip .ls{font-size:10px;color:var(--dim);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lchip .lb{font-size:10px;font-weight:700;color:var(--dim);border:1px solid var(--line);
+  border-radius:6px;padding:2px 10px;margin-top:2px;background:none;min-height:0;min-width:0;}
+.lchip .lb.off{color:var(--bad);border-color:var(--bad);}
+/* ---------- collapsible groups ---------- */
 details.cgrp{border:1px solid var(--line);border-radius:12px;margin:8px 0;background:var(--panel);}
-details.cgrp>summary{min-height:48px;display:flex;align-items:center;padding:0 12px;font-weight:600;font-size:14px;cursor:pointer;}
-details.cgrp .csub{padding:4px 10px 10px 10px;}
+details.cgrp>summary{min-height:52px;display:flex;align-items:center;padding:0 14px;
+  font-weight:700;font-size:15px;cursor:pointer;list-style:none;}
+details.cgrp>summary::-webkit-details-marker{display:none;}
+details.cgrp>summary::after{content:'a';margin-left:auto;color:var(--dim);font-size:22px;
+  transform:rotate(90deg);transition:transform .2s;}
+details.cgrp[open]>summary::after{transform:rotate(-90deg);}
+details.cgrp .csub{padding:4px 12px 12px;}
 .clonerbox{border-top:1px dashed var(--line);margin-top:6px;}
-/* layer cards */
-#layers{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
+/* ---------- layer cards ---------- */
+#layers{display:flex;flex-direction:column;gap:10px;}
 .card{border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden;}
-.card>summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:56px;padding:6px 10px;cursor:pointer;}
+.card>summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:60px;padding:8px 12px;cursor:pointer;}
 .card>summary::-webkit-details-marker{display:none;}
 .cdot{width:14px;height:14px;border-radius:50%;flex:none;}
-.cname{font-weight:700;font-size:15px;flex:none;}
+.cname{font-weight:800;font-size:15px;flex:none;}
 .srcsel{flex:1;min-width:0;}
-.cbtn{flex:none;width:48px;font-weight:700;}
-.cbtn.on{background:#7a2d2d;border-color:var(--danger);}
-.cbody{padding:4px 10px 12px 10px;border-top:1px solid var(--line);}
-/* macros */
-#macros{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:6px 0;}
-.mknob{display:flex;flex-direction:column;align-items:center;gap:2px;}
-.kcv{width:76px;height:76px;touch-action:none;}
-.klab{font-size:12px;color:var(--cyan);font-weight:600;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.kval{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;}
-.trow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;}
-#btnTap{min-width:88px;font-weight:700;}
-#bpm{font-size:22px;font-weight:700;min-width:56px;text-align:center;color:var(--acc);}
-.blab{font-size:11px;color:var(--dim);}
-#btnBlackout.warn{font-weight:700;}
-.meters{display:flex;gap:6px;align-items:flex-end;height:44px;}
-.meter{width:26px;background:#22222f;border-radius:6px;position:relative;overflow:hidden;height:40px;}
-.meter>i{position:absolute;bottom:0;left:0;right:0;background:var(--cyan);height:0%;}
-#plugerr{color:var(--danger);font-size:12px;white-space:pre-wrap;font-family:ui-monospace,monospace;}
-#plugok{color:var(--cyan);font-size:12px;}
-#midilist{font-size:12px;color:var(--dim);max-height:120px;overflow-y:auto;}
+.cbtn{flex:none;width:48px;font-weight:800;}
+.cbtn.on{background:var(--bad);border-color:var(--bad);}
+.cbody{padding:6px 12px 14px;border-top:1px solid var(--line);}
+/* ---------- param rows (engine builders) ---------- */
+.prow{padding:8px 0;border-bottom:1px solid #1b2230;}
+.prow:last-child{border-bottom:none;}
+.pline{display:flex;align-items:center;gap:10px;}
+.pline label{width:92px;flex:none;font-size:13px;color:var(--dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pval{width:58px;flex:none;text-align:right;font-size:12px;color:var(--acc2);font-variant-numeric:tabular-nums;}
+.psub{display:flex;align-items:center;gap:8px;padding:4px 0 2px 102px;}
+.mlab{font-size:11px;color:var(--dim);white-space:nowrap;}
+.msel{min-height:38px;font-size:13px;flex:1;}
+.mdep{height:38px;}
+.dsel{min-height:44px;font-size:14px;}
+.ckrow{display:flex;align-items:center;}
+select,input[type=text],textarea{font-size:14px;color:var(--txt);background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;min-height:44px;padding:8px 10px;}
+textarea{width:100%;font-family:ui-monospace,monospace;font-size:12px;}
+input[type=range]{-webkit-appearance:none;appearance:none;flex:1;min-width:60px;height:44px;
+  background:transparent;touch-action:none;}
+input[type=range]::-webkit-slider-runnable-track{height:10px;border-radius:5px;background:#232b38;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:34px;height:34px;border-radius:50%;
+  background:var(--acc);margin-top:-12px;border:none;box-shadow:0 2px 8px #0009;}
+input[type=range]::-moz-range-track{height:10px;border-radius:5px;background:#232b38;}
+input[type=range]::-moz-range-thumb{width:32px;height:32px;border-radius:50%;background:var(--acc);border:none;}
+input[type=checkbox]{width:24px;height:24px;accent-color:var(--acc);}
+label.ck{display:flex;align-items:center;gap:10px;min-height:44px;font-size:14px;}
+.meters{display:flex;gap:6px;align-items:flex-end;}
+.meter{width:26px;background:#232b38;border-radius:6px;position:relative;overflow:hidden;height:40px;}
+.meter>i{position:absolute;bottom:0;left:0;right:0;background:var(--acc2);height:0%;}
+#plugerr{color:var(--bad);font-size:12px;white-space:pre-wrap;font-family:ui-monospace,monospace;}
+#plugok{color:var(--acc2);font-size:12px;}
+#midilist{font-size:12px;color:var(--dim);max-height:140px;overflow-y:auto;}
 /* ---------- mapping ---------- */
 #mapWrap{position:fixed;inset:0;z-index:30;display:none;touch-action:none;pointer-events:none;}
 #mapWrap.on{display:block;}
@@ -106,37 +152,37 @@ details.cgrp .csub{padding:4px 10px 10px 10px;}
 #handles{position:fixed;inset:0;z-index:50;display:none;pointer-events:none;}
 #handles.on{display:block;}
 .chandle{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;
-  background:rgba(167,139,250,.25);border:3px solid var(--acc);pointer-events:auto;
+  background:rgba(139,92,246,.25);border:3px solid var(--acc);pointer-events:auto;
   display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;
   color:#fff;touch-action:none;text-shadow:0 1px 3px #000;}
-.chandle.sel{background:rgba(94,234,212,.35);border-color:var(--cyan);}
+.chandle.sel{background:rgba(34,211,238,.35);border-color:var(--acc2);}
 #mhandle{position:absolute;width:48px;height:48px;margin:-24px 0 0 -24px;border-radius:8px;
-  background:rgba(94,234,212,.3);border:3px dashed var(--cyan);pointer-events:auto;touch-action:none;display:none;}
-.surfrow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #1e1e2c;}
-.surfrow .sname{flex:1;font-weight:600;}
-.seg{display:flex;gap:6px;}
+  background:rgba(34,211,238,.3);border:3px dashed var(--acc2);pointer-events:auto;touch-action:none;display:none;}
+#mapUI{padding:2px 0;}
+#mapUI section{margin:10px 12px;}
+.surfrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1b2230;}
+.surfrow .sname{flex:1;font-weight:700;font-size:15px;}
+.seg{display:flex;gap:8px;margin:8px 0;}
 .seg button{flex:1;}
-.seg button.on{background:var(--acc2);color:#fff;border-color:var(--acc2);}
 .nudge{display:grid;grid-template-columns:repeat(3,64px);gap:6px;justify-content:center;padding:8px 0;}
 .nudge button{font-size:18px;}
-.frow{display:flex;align-items:center;gap:8px;padding:4px 0;}
+.frow{display:flex;align-items:center;gap:8px;padding:6px 0;}
 .frow label{width:110px;flex:none;font-size:13px;color:var(--dim);}
+/* ---------- sheet restore fab ---------- */
+#sheetFab{position:fixed;left:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:45;display:none;
+  border-radius:999px;padding:12px 22px;font-weight:800;font-size:15px;
+  background:var(--acc);border:none;color:#fff;box-shadow:0 4px 16px #000a;}
 /* ---------- output mode ---------- */
 #btnExitOut{position:fixed;top:calc(10px + env(safe-area-inset-top));right:10px;z-index:60;display:none;
   width:52px;height:52px;border-radius:50%;background:rgba(20,20,30,.55);color:#fff;font-size:20px;
   border:1px solid rgba(255,255,255,.25);}
-body.output #topbar,body.output #tabbar,body.output .panel,body.output #mapWrap .mctl{display:none!important;}
+body.output #topbar,body.output #sheet,body.output #sheetFab{display:none!important;}
 body.output #handles{display:none!important;}
 body.output #btnExitOut{display:block;}
 body.output #mapWrap{display:block;}
-#errbanner{position:fixed;top:calc(60px + env(safe-area-inset-top));left:10px;right:10px;z-index:50;display:none;
-  background:#3a1d1d;border:1px solid var(--danger);color:#ffd7d7;border-radius:12px;padding:12px;font-size:13px;}
+#errbanner{position:fixed;top:calc(60px + env(safe-area-inset-top));left:10px;right:10px;z-index:70;display:none;
+  background:#3a1d1d;border:1px solid var(--bad);color:#ffd7d7;border-radius:12px;padding:12px;font-size:13px;}
 #errbanner.show{display:block;}
-@media (min-width:700px){
-  #macros{grid-template-columns:repeat(8,1fr);}
-  .kcv{width:88px;height:88px;}
-  .panel{max-height:62vh;}
-}
 </style>
 </head>
 <body>
@@ -144,10 +190,10 @@ body.output #mapWrap{display:block;}
 <div id="errbanner"></div>
 
 <div id="topbar">
-  <span class="ttl">HoloMapper <em>mobile</em></span>
+  <span class="brand">HoloMapper <em>MOBILE</em></span>
   <span style="flex:1"></span>
-  <button id="btnOutput" title="Projector output mode">&#x26F6;</button>
   <span id="fps"></span>
+  <button id="btnOutput" title="Projector output mode">&#x26F6;</button>
 </div>
 
 <div id="mapWrap">
@@ -156,69 +202,93 @@ body.output #mapWrap{display:block;}
 </div>
 <div id="handles"></div>
 
-<div id="panelPlay" class="panel">
-  <div class="trow">
-    <select id="presetSel" style="flex:1;min-width:0"></select>
-    <input type="text" id="presetName" placeholder="name" style="width:90px">
-    <button id="btnSavePreset" title="Save preset">Save</button>
-    <button id="btnLoadPreset" title="Load selected">Load</button>
-    <button id="btnDelPreset" title="Delete selected">Del</button>
+<div id="sheet">
+  <div id="grab"><div class="pill"></div></div>
+  <div id="sheetTabs">
+    <button data-tab="Play" class="on">Play</button>
+    <button data-tab="Fx">FX</button>
+    <button data-tab="Map">Map</button>
   </div>
-  <div id="macros"></div>
-  <div class="trow">
-    <button id="btnTap">TAP</button>
-    <span id="bpm">120</span><span class="blab">BPM</span>
-    <label class="ck"><input type="checkbox" id="ckBeatSync"> BeatSync</label>
-    <button id="btnAudio">Enable audio</button>
-    <button id="btnBlackout" class="warn">BLACKOUT</button>
-  </div>
-  <div class="trow">
-    <div class="meters">
-      <div class="meter"><i id="mBass"></i></div>
-      <div class="meter"><i id="mMid"></i></div>
-      <div class="meter"><i id="mHigh"></i></div>
+  <div id="sheetBody">
+    <div id="tabPlay">
+      <div class="gigbar">
+        <button id="btnBlackout" class="bigbtn warn">BLACKOUT</button>
+        <div class="tapwrap">
+          <button id="btnTap" class="bigbtn">TAP</button>
+          <div class="bpmdisp"><span id="bpm">120</span><span class="blab">BPM</span></div>
+        </div>
+      </div>
+      <div id="macros" class="knobgrid"></div>
+      <section>
+        <h2>Layers</h2>
+        <div id="layerchips"></div>
+        <details class="cgrp" id="layerDet">
+          <summary>All layers &amp; sources</summary>
+          <div class="csub"><div id="layers"></div></div>
+        </details>
+      </section>
+      <section>
+        <h2>Presets</h2>
+        <div class="trow">
+          <select id="presetSel" style="flex:1;min-width:0"></select>
+          <input type="text" id="presetName" placeholder="Name" style="width:110px">
+        </div>
+        <div class="trow">
+          <button id="btnSavePreset" style="flex:1">Save</button>
+          <button id="btnLoadPreset" style="flex:1">Load</button>
+          <button id="btnDelPreset" class="warn" style="flex:1">Delete</button>
+        </div>
+      </section>
+      <section>
+        <h2>Audio &amp; engine</h2>
+        <div class="trow">
+          <button id="btnAudio">Enable audio</button>
+          <div class="meters">
+            <div class="meter"><i id="mBass"></i></div>
+            <div class="meter"><i id="mMid"></i></div>
+            <div class="meter"><i id="mHigh"></i></div>
+          </div>
+          <span id="audiostat" class="blab">audio off</span>
+        </div>
+        <div class="trow">
+          <label class="ck"><input type="checkbox" id="ckBeatSync"> Beat sync</label>
+          <label class="blab" style="margin-left:auto">Quality
+            <select id="resSel">
+              <option value="960x540">960x540</option>
+              <option value="1280x720">1280x720</option>
+              <option value="640x480">640x480</option>
+            </select>
+          </label>
+        </div>
+      </section>
+      <div style="height:28px"></div>
     </div>
-    <span id="audiostat" class="blab">audio off</span>
-    <label class="blab" style="margin-left:auto">Quality
-      <select id="resSel">
-        <option value="960x540">960x540</option>
-        <option value="1280x720">1280x720</option>
-        <option value="640x480">640x480</option>
-      </select>
-    </label>
-  </div>
-  <div id="layers"></div>
-</div>
-
-<div id="panelFx" class="panel">
-  <div id="postfx"></div>
-  <div id="masterfx"></div>
-  <details class="cgrp" id="plugDet"><summary>Shader Plugin (GLSL)</summary><div class="csub">
-    <textarea id="plugcode" rows="12" spellcheck="false"></textarea>
-    <div class="trow"><button id="btnCompile">Compile</button><span id="plugok"></span></div>
-    <div id="plugerr"></div>
-  </div></details>
-  <details class="cgrp"><summary>MIDI</summary><div class="csub">
-    <div class="trow">
-      <button id="btnLearn">MIDI Learn</button>
-      <button id="btnLearn2">Learn</button>
+    <div id="tabFx" hidden>
+      <section><h2>Post FX chain</h2><div id="postfx"></div></section>
+      <section><h2>Master</h2><div id="masterfx"></div></section>
+      <section><h2>Shader plugin</h2>
+        <details class="cgrp" id="plugDet"><summary>GLSL editor</summary><div class="csub">
+          <textarea id="plugcode" rows="12" spellcheck="false"></textarea>
+          <div class="trow"><button id="btnCompile">Compile</button><span id="plugok"></span></div>
+          <div id="plugerr"></div>
+        </div></details>
+      </section>
+      <section><h2>MIDI</h2>
+        <div class="trow"><button id="btnLearn">Arm MIDI learn</button><button id="btnLearn2">Learn</button></div>
+        <div id="midistat" class="hint">MIDI not initialized</div>
+        <div id="midiCount" class="hint"></div>
+        <div id="midilist"></div>
+      </section>
+      <div style="height:28px"></div>
     </div>
-    <div id="midistat" class="hint">MIDI not initialized</div>
-    <div id="midiCount" class="hint"></div>
-    <div id="midilist"></div>
-  </div></details>
+    <div id="tabMap" hidden>
+      <div id="mapUI"></div>
+      <div style="height:28px"></div>
+    </div>
+  </div>
 </div>
 
-<div id="panelMap" class="panel">
-  <div id="mapUI"></div>
-</div>
-
-<div id="tabbar">
-  <button data-tab="Play" class="on">Play</button>
-  <button data-tab="Fx">FX</button>
-  <button data-tab="Map">Map</button>
-</div>
-
+<button id="sheetFab">Panel</button>
 <button id="btnExitOut" title="Exit output mode">&#x2715;</button>
 <script>
 
@@ -2262,12 +2332,11 @@ function positionOverlays(){ drawMapOverlay(); }
 </script><script>
 
 'use strict';
-/* ================= HOLOMAPPER MOBILE UI =================
-   Touch-first performance UI + projection-mapping stage.
-   Engine blocks above are verbatim from holomapper.html (v1.1).
-   Mobile redefines: snapshot/applySnapshot (add mapping state),
-   buildLayers/buildPostFx/buildMaster/buildDashboard/buildPerform,
-   plus init/loop/wiring. */
+'use strict';
+/* ================= HOLOMAPPER MOBILE UI (v2 shell) =================
+   Play-first bottom-sheet UI in remote.html's design language.
+   Engine blocks above are verbatim from holomapper.html (v1.1);
+   this block owns the shell only. */
 
 /* ---- preset wrappers: include mapping state ---- */
 function snapshot(){
@@ -2284,55 +2353,49 @@ function applySnapshot(snap){
   saveState();
 }
 
-/* ================= MACRO KNOBS ================= */
+/* ================= MACRO KNOBS (remote-style CSS dials) ================= */
 const knobDraws = [];
-function drawKnob(cv, v){
-  const x = cv.getContext('2d'), W = cv.width, H = cv.height, cx = W/2, cy = H/2, R = W/2 - 10;
-  x.clearRect(0, 0, W, H);
-  const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
-  x.lineWidth = 12; x.lineCap = 'round';
-  x.strokeStyle = '#2b2b40';
-  x.beginPath(); x.arc(cx, cy, R, a0, a1); x.stroke();
-  x.strokeStyle = '#a78bfa';
-  x.beginPath(); x.arc(cx, cy, R, a0, a0 + (a1 - a0) * v); x.stroke();
-  const na = a0 + (a1 - a0) * v;
-  x.strokeStyle = '#ffffff'; x.lineWidth = 5;
-  x.beginPath(); x.moveTo(cx, cy);
-  x.lineTo(cx + Math.cos(na) * (R - 16), cy + Math.sin(na) * (R - 16)); x.stroke();
-  x.fillStyle = '#17171f';
-  x.beginPath(); x.arc(cx, cy, 12, 0, 7); x.fill();
-}
 function buildDashboard(){
   const wrap = $('macros'); wrap.innerHTML = ''; knobDraws.length = 0;
   for(let i = 0; i < 8; i++){
-    const box = el('div', 'mknob');
-    const cv = document.createElement('canvas');
-    cv.width = 120; cv.height = 120; cv.className = 'kcv';
-    cv.style.touchAction = 'none';
-    const lab = el('div', 'klab', S.macros[i].label);
-    const val = el('div', 'kval', '');
-    box.appendChild(cv); box.appendChild(lab); box.appendChild(val);
-    const sync = () => {
-      drawKnob(cv, S.macros[i].val);
-      val.textContent = Math.round(S.macros[i].val * 100) + '%';
+    const k = document.createElement('div');
+    k.className = 'knob';
+    k.innerHTML = '<div class="dial"></div><div class="klab"></div><div class="kval"></div>';
+    const lab = k.querySelector('.klab'), valEl = k.querySelector('.kval');
+    const paint = () => {
+      const v = S.macros[i].val;
+      k.style.setProperty('--v', v.toFixed(4));
+      valEl.textContent = Math.round(v * 100) + '%';
       lab.textContent = S.macros[i].label;
     };
-    knobDraws[i] = sync;
-    let startY = 0, startV = 0, dragging = false;
-    cv.addEventListener('pointerdown', e => {
+    let dragging = false, y0 = 0, v0 = 0, lastDown = 0, skipDrag = false, lastSent = 0;
+    const fire = force => {
+      const now = performance.now();
+      if(force || now - lastSent > 60){ lastSent = now; setMacro(i, S.macros[i].val); }
+    };
+    k.addEventListener('pointerdown', e => {
+      const now = performance.now();
+      if(now - lastDown < 350){ /* double-tap: reset to 50% */
+        skipDrag = true; lastDown = 0;
+        setMacro(i, 0.5); paint(); fire(true);
+        e.preventDefault(); return;
+      }
+      lastDown = now; skipDrag = false;
+      dragging = true; y0 = e.clientY; v0 = S.macros[i].val;
+      try{ k.setPointerCapture(e.pointerId); }catch(err){}
       e.preventDefault();
-      cv.setPointerCapture(e.pointerId);
-      startY = e.clientY; startV = S.macros[i].val; dragging = true;
     });
-    cv.addEventListener('pointermove', e => {
+    k.addEventListener('pointermove', e => {
+      if(!dragging || skipDrag) return;
+      setMacro(i, v0 + (y0 - e.clientY) / 160); paint(); fire(false);
+    });
+    const end = e => {
       if(!dragging) return;
-      setMacro(i, startV + (startY - e.clientY) / 160, cv);
-      sync();
-    });
-    const endDrag = () => { dragging = false; };
-    cv.addEventListener('pointerup', endDrag);
-    cv.addEventListener('pointercancel', endDrag);
-    cv.addEventListener('dblclick', () => { setMacro(i, 0.5, cv); sync(); });
+      dragging = false;
+      if(!skipDrag){ setMacro(i, v0 + (y0 - e.clientY) / 160); paint(); fire(true); }
+    };
+    k.addEventListener('pointerup', end);
+    k.addEventListener('pointercancel', end);
     lab.addEventListener('click', () => {
       const n = prompt('Macro label', S.macros[i].label);
       if(n !== null && n.trim()){
@@ -2340,14 +2403,34 @@ function buildDashboard(){
         saveState(); syncMacroLabels();
       }
     });
-    sync();
-    wrap.appendChild(box);
+    knobDraws[i] = paint;
+    paint();
+    wrap.appendChild(k);
   }
 }
 function syncMacroLabels(){ for(let i = 0; i < 8; i++) if(knobDraws[i]) knobDraws[i](); }
 function buildPerform(){ syncMacroLabels(); }
 
-/* ================= LAYER CARDS ================= */
+/* ================= LAYER CARDS + QUICK-SELECT ================= */
+function buildLayerChips(){
+  const wrap = $('layerchips'); if(!wrap) return; wrap.innerHTML = '';
+  const SHORT = ['Tunnel', 'Flow', 'Nebula', 'Plugin', 'Cloner'];
+  for(let i = 0; i < 4; i++){
+    const L = S.layers[i];
+    const c = el('button', 'lchip' + (S.selLayer === i ? ' sel' : ''));
+    const nm = el('span', 'ln', 'L' + (i + 1)); c.appendChild(nm);
+    const sn = el('span', 'ls', SHORT[L.src] || ''); c.appendChild(sn);
+    const b = el('span', 'lb' + (L.bypass ? ' off' : ''), L.bypass ? 'OFF' : 'ON');
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      L.bypass = !L.bypass; S.selLayer = i; saveState();
+      buildLayers();
+    });
+    c.appendChild(b);
+    c.addEventListener('click', () => { S.selLayer = i; saveState(); buildLayerChips(); });
+    wrap.appendChild(c);
+  }
+}
 function buildLayers(){
   const wrap = $('layers'); wrap.innerHTML = '';
   for(let i = 0; i < 4; i++){
@@ -2379,7 +2462,7 @@ function buildLayers(){
       e.stopPropagation(); L.bypass = !L.bypass; S.selLayer = i; saveState(); buildLayers();
     });
     sum.appendChild(bSolo); sum.appendChild(bByp);
-    sum.addEventListener('click', () => { S.selLayer = i; saveState(); });
+    sum.addEventListener('click', () => { S.selLayer = i; saveState(); buildLayerChips(); });
     det.appendChild(sum);
     const body = el('div', 'cbody');
     paramRow(body, p + 'op', 'Opacity');
@@ -2399,12 +2482,13 @@ function buildLayers(){
     det.appendChild(body);
     wrap.appendChild(det);
   }
+  buildLayerChips();
 }
 
 /* ================= POST FX + MASTER ================= */
 function bypassBtn(parent, key){
   const on = !!S.postBypass[key];
-  const b = el('button', 'warn' + (on ? ' on' : ''), on ? 'BYPASSED — tap to enable' : 'Tap to bypass');
+  const b = el('button', 'warn' + (on ? ' on' : ''), on ? 'BYPASSED \u2014 tap to enable' : 'Tap to bypass');
   b.style.width = '100%'; b.style.margin = '6px 0';
   b.addEventListener('click', () => {
     S.postBypass[key] = !S.postBypass[key]; saveState(); buildPostFx();
@@ -2441,13 +2525,25 @@ function buildMaster(){
   paramRow(st, 'P.srate', 'Rate'); paramRow(st, 'P.samt', 'Amount');
 }
 
-/* ================= TABS ================= */
+/* ================= TABS + SHEET ================= */
+function peekH(){
+  const v = getComputedStyle($('sheet')).getPropertyValue('--peekH');
+  return parseFloat(v) || 296;
+}
+function setSheetHidden(h){
+  MUI.panelHidden = h;
+  $('sheet').style.display = h ? 'none' : '';
+  $('sheetFab').style.display = (h && MUI.tab === 'Map') ? 'block' : 'none';
+  if(!h) positionOverlays();
+}
 function showTab(name){
   MUI.tab = name;
-  MUI.panelHidden = false;
-  document.querySelectorAll('#tabbar button').forEach(b =>
+  setSheetHidden(false);
+  document.querySelectorAll('#sheetTabs button').forEach(b =>
     b.classList.toggle('on', b.dataset.tab === name));
-  ['Play', 'Fx', 'Map'].forEach(t => $('panel' + t).classList.toggle('on', t === name));
+  $('tabPlay').hidden = name !== 'Play';
+  $('tabFx').hidden = name !== 'Fx';
+  $('tabMap').hidden = name !== 'Map';
   $('mapWrap').classList.toggle('on', name === 'Map');
   $('handles').classList.toggle('on', name === 'Map');
   syncMapPointer();
@@ -2456,6 +2552,41 @@ function showTab(name){
 function syncMapPointer(){
   $('mapcv').style.pointerEvents =
     (MUI.tab === 'Map' && MUI.mapMode === 'mask') ? 'auto' : 'none';
+}
+function wireSheet(){
+  const sheet = $('sheet'), grab = $('grab');
+  let sd = null, tapOK = true;
+  grab.addEventListener('click', () => {
+    if(tapOK) sheet.classList.toggle('open');
+    tapOK = true;
+  });
+  grab.addEventListener('pointerdown', e => {
+    sd = { y0: e.clientY, open: sheet.classList.contains('open') };
+    tapOK = true;
+    try{ grab.setPointerCapture(e.pointerId); }catch(err){}
+    e.preventDefault();
+  });
+  grab.addEventListener('pointermove', e => {
+    if(!sd) return;
+    const dy = e.clientY - sd.y0;
+    if(Math.abs(dy) > 10) tapOK = false;
+    else return;
+    const ph = peekH(), travel = Math.max(0, sheet.scrollHeight - ph);
+    const base = sd.open ? 0 : travel;
+    const off = Math.max(0, Math.min(travel, base + dy));
+    sheet.style.transition = 'none';
+    sheet.style.transform = 'translateY(' + off + 'px)';
+  });
+  const end = e => {
+    if(!sd) return;
+    const dy = e.clientY - sd.y0, wasOpen = sd.open;
+    sheet.style.transition = ''; sheet.style.transform = '';
+    if(!tapOK) sheet.classList.toggle('open', wasOpen ? dy < 60 : dy < -60);
+    sd = null;
+  };
+  grab.addEventListener('pointerup', end);
+  grab.addEventListener('pointercancel', end);
+  $('sheetFab').addEventListener('click', () => setSheetHidden(false));
 }
 
 /* ================= MAP UI ================= */
@@ -2485,17 +2616,13 @@ function buildMapUI(){
   const host = $('mapUI'); host.innerHTML = '';
   const hideB = el('button', null, '\u2304 Hide panel (reach all corners)');
   hideB.style.width = '100%'; hideB.style.marginBottom = '8px';
-  hideB.addEventListener('click', () => {
-    MUI.panelHidden = true;
-    $('panelMap').classList.remove('on');
-    setTimeout(positionOverlays, 50);
-  });
+  hideB.addEventListener('click', () => setSheetHidden(true));
   host.appendChild(hideB);
   const ls = el('div');
   S.map.surfaces.forEach((sf, si) => {
     const row = el('div', 'surfrow');
-    if(si === MUI.selSurf){ row.style.outline = '2px solid #5eead4'; row.style.borderRadius = '10px'; }
-    const nm = el('span', 'sname', (si === MUI.selSurf ? '▸ ' : '') + sf.name);
+    if(si === MUI.selSurf){ row.style.outline = '2px solid #22d3ee'; row.style.borderRadius = '10px'; }
+    const nm = el('span', 'sname', (si === MUI.selSurf ? '\u25b8 ' : '') + sf.name);
     nm.addEventListener('click', () => {
       MUI.selSurf = si; MUI.selCorner = 0;
       saveState(); buildMapUI(); positionOverlays();
@@ -2507,7 +2634,7 @@ function buildMapUI(){
     });
     row.appendChild(en);
     if(S.map.surfaces.length > 1){
-      const del = el('button', 'warn', '✕');
+      const del = el('button', 'warn', '\u2715');
       del.addEventListener('click', () => {
         S.map.surfaces.splice(si, 1);
         if(MUI.selSurf >= S.map.surfaces.length) MUI.selSurf = 0;
@@ -2541,9 +2668,12 @@ function buildMapUI(){
   bT.addEventListener('click', () => { S.map.test = !S.map.test; saveState(); buildMapUI(); });
   seg.appendChild(bC); seg.appendChild(bM); seg.appendChild(bT);
   host.appendChild(seg);
-  host.appendChild(el('div', 'hint', MUI.mapMode === 'corners'
+  const sec = el('section', null, '');
+  const h = el('h2', null, 'Pinning'); sec.appendChild(h);
+  sec.appendChild(el('div', 'hint', MUI.mapMode === 'corners'
     ? 'Drag the A B C D handles on the canvas to pin corners. Tap a handle to select it, then nudge below for precision.'
     : 'Drag inside the dashed mask to move it; drag near its corner to resize.'));
+  host.appendChild(sec);
   const sf = S.map.surfaces[MUI.selSurf];
   if(sf){
     const g = cgrp(host, 'Surface ' + sf.name, true);
@@ -2582,9 +2712,9 @@ function buildMapUI(){
       });
       return b;
     };
-    pad.appendChild(el('span')); pad.appendChild(mkN('▲', 0, 1)); pad.appendChild(el('span'));
-    pad.appendChild(mkN('◀', -1, 0)); pad.appendChild(mkN('●', 0, 0)); pad.appendChild(mkN('▶', 1, 0));
-    pad.appendChild(el('span')); pad.appendChild(mkN('▼', 0, -1)); pad.appendChild(el('span'));
+    pad.appendChild(el('span')); pad.appendChild(mkN('\u25b2', 0, 1)); pad.appendChild(el('span'));
+    pad.appendChild(mkN('\u25c0', -1, 0)); pad.appendChild(mkN('\u25cf', 0, 0)); pad.appendChild(mkN('\u25b6', 1, 0));
+    pad.appendChild(el('span')); pad.appendChild(mkN('\u25bc', 0, -1)); pad.appendChild(el('span'));
     ng.appendChild(pad); ng.appendChild(stepSel);
   }
 }
@@ -2729,9 +2859,10 @@ function loop(){
 
 /* ================= WIRING ================= */
 function wireMobile(){
-  document.querySelectorAll('#tabbar button').forEach(b =>
+  document.querySelectorAll('#sheetTabs button').forEach(b =>
     b.addEventListener('click', () => showTab(b.dataset.tab)));
-  /* presets (mirror of desktop logic) */
+  wireSheet();
+  /* presets */
   $('btnSavePreset').addEventListener('click', () => {
     const name = $('presetName').value.trim();
     if(!name){ showErr('Name the preset first.'); setTimeout(() => $('errbanner').classList.remove('show'), 3000); return; }
@@ -2757,19 +2888,17 @@ function wireMobile(){
   $('btnAudio').addEventListener('click', toggleAudio);
   $('btnBlackout').addEventListener('click', () => {
     S.blackout = !S.blackout;
-    $('btnBlackout').classList.toggle('on', S.blackout);
+    $('btnBlackout').classList.toggle('armed', S.blackout);
     saveState();
   });
   $('btnCompile').addEventListener('click', () => compilePlugin(false));
   $('btnLearn').addEventListener('click', () => setLearn(!learnArmed));
   $('btnLearn2').addEventListener('click', () => setLearn(!learnArmed));
   let rzT = 0;
-  window.addEventListener('resize', () => {
-    clearTimeout(rzT); rzT = setTimeout(refitCanvas, 150);
-  });
-  window.addEventListener('orientationchange', () => {
-    setTimeout(refitCanvas, 400);
-  });
+  const onView = () => { clearTimeout(rzT); rzT = setTimeout(refitCanvas, 120); };
+  window.addEventListener('resize', onView);
+  window.addEventListener('orientationchange', () => setTimeout(refitCanvas, 400));
+  if(window.visualViewport) window.visualViewport.addEventListener('resize', onView);
 }
 
 /* ================= INIT ================= */
@@ -2795,7 +2924,7 @@ function init(){
   $('plugcode').value = S.pluginCode;
   $('resSel').value = S.res;
   $('bpm').textContent = S.bpm;
-  $('btnBlackout').classList.toggle('on', !!S.blackout);
+  $('btnBlackout').classList.toggle('armed', !!S.blackout);
   wireMobile(); wireHandles(); wireMask(); wireOutput();
   buildMapUI();
   showTab('Play');
@@ -2811,6 +2940,6 @@ function init(){
 }
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
 else init();
-
-</script></body>
+</script>
+</body>
 </html>
