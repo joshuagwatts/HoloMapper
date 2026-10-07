@@ -321,3 +321,45 @@ mobile.html (accepted tech debt, flagged for the parent).
 - Test screenshots are dim/small under SwiftShader — real-GPU look is his to judge.
 - Modulator curve edits don't live-redraw the canvas until mouseup (draw() called on drag; fine).
 - `mobile.html` still carries the v1.1 engine — v1.2 needs a port pass (accepted tech debt).
+
+## Resolume-deck UI rebuild (2026-10-07 night)
+Rebuilt the holomapper.html shell as a Resolume Arena-style deck. Engine untouched
+(all shaders, layer pipeline, Cloner 3D + spectral renderer + modulators, param /
+MIDI / macro / preset / audio systems intact).
+
+What changed:
+- Left panel: 4 layer strips (color tabs, L1-L4 select, S solo, B bypass, X clear,
+  opacity mini-slider, blend dropdown) x 8 fireable clip slots each. Click a clip
+  to fire its source; right-click for the assign-source popup; empty slots dashed.
+- Layer source is now a real param `L{i}.src` (discrete 5, MIDI-learnable). Firing
+  goes through setParam; PARAM_HOOKS mirrors into S.layers[i].src (render loop
+  untouched) and refreshes clip highlights.
+- Right panel: selection-driven properties — LAYER view (source dropdown, blend,
+  solo/bypass, full param stack with macro assigns, cloner UI when src=Cloner 3D),
+  CLIP view (source assign, Fire, Clear). Post FX / Master / MIDI / Shader Plugin
+  sections unchanged below.
+- Topbar: master slider, tap/BPM/BeatSync, MIDI learn, audio+meters, presets,
+  res select, help, PERFORM, fullscreen, phone remote/pair (two-row wrap).
+- Bottom: 8 macro sliders + labels + BLACKOUT + fps (dashboard moved from right panel).
+- Clip state: S.clips[4][8] (null or 0-4), S.fired[4]. Presets snapshot/restore both;
+  old presets (no clip data) get defaults + source derived from layers[].src.
+- All 32 clip-fire buttons registered in CTRLS (MIDI-learnable clip triggering).
+- PERFORM mode: fixed a latent layout bug (grid auto-placement put #main/#stage
+  into 0px tracks when panels hid — perform was always black). Added explicit
+  grid-row/grid-column placement; verified full-bleed canvas + macro bar.
+
+Verification (all actually run):
+- node --check on all 18 script blocks: pass. Zero console errors on load.
+- CDP interaction tests: deck renders 4 strips / 32 clips; clip click fires source
+  through the param system (S.params + S.layers + highlight + selection all sync);
+  right-click assign menu sets clip source; preset save->mutate->load restores
+  clips+fired+source; old-format preset loads with backward-compat defaults;
+  CTRLS['clip0.3'].set(1) fires via the MIDI path; keyboard 1-4/B/M all work;
+  source dropdown in props is MIDI-learnable (CTRLS['L2.src'] registered).
+- Bug found by testing: firing a clip whose source duplicated an earlier slot
+  jumped the highlight to the first matching slot (syncFiredToSrc used indexOf
+  unconditionally). Fixed: keep the fired clip if it still holds the source.
+- Screenshots (checks/): deck_full.png (full deck, Resolume layout language),
+  deck_fired.png (fired Cloner clip highlighted, props in sync),
+  deck_perform.png (perform mode: full-bleed canvas + M1-M8/MASTER bar).
+- Handler audit: no dangling $('...') ids; every new control wired.

@@ -16,7 +16,11 @@ html,body{height:100%}
 body{background:var(--bg);color:var(--txt);
   font:12px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
   overflow:hidden;user-select:none}
-#app{display:grid;grid-template-rows:44px minmax(0,1fr) 36px;height:100vh}
+#app{display:grid;grid-template-rows:auto minmax(0,1fr) 66px;height:100vh}
+#topbar{display:flex;align-items:center;gap:8px;padding:4px 10px;flex-wrap:wrap;
+  background:var(--panel);border-bottom:1px solid var(--line);min-height:46px;grid-row:1}
+#main{grid-row:2}
+#dashbar{grid-row:3}
 #topbar{display:flex;align-items:center;gap:8px;padding:0 10px;
   background:var(--panel);border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden}
 .brand{font-weight:800;font-size:15px;letter-spacing:.5px;
@@ -37,14 +41,15 @@ select{background:#0b0e13;color:var(--txt);border:1px solid var(--line);
   border-radius:6px;padding:3px 4px;font-size:11px;max-width:100%}
 label.ck{display:flex;align-items:center;gap:6px;cursor:pointer}
 input[type=checkbox]{accent-color:var(--acc);width:14px;height:14px}
-#main{display:grid;grid-template-columns:308px minmax(0,1fr) 330px;min-height:0}
-body.hideL #main{grid-template-columns:0 minmax(0,1fr) 330px}
-body.hideR #main{grid-template-columns:308px minmax(0,1fr) 0}
+#main{display:grid;grid-template-columns:476px minmax(0,1fr) 352px;min-height:0}
+body.hideL #main{grid-template-columns:0 minmax(0,1fr) 352px}
+body.hideR #main{grid-template-columns:476px minmax(0,1fr) 0}
 body.hideL.hideR #main{grid-template-columns:0 minmax(0,1fr) 0}
 body.hideL #left,body.hideR #right{display:none}
 #left,#right{background:var(--panel);overflow-y:auto;overflow-x:hidden;min-height:0}
-#left{border-right:1px solid var(--line)}
-#right{border-left:1px solid var(--line)}
+#left{border-right:1px solid var(--line);grid-column:1}
+#right{border-left:1px solid var(--line);grid-column:3}
+#stage{grid-column:2}
 #stage{position:relative;min-width:0;min-height:0;background:#000;
   display:flex;align-items:center;justify-content:center}
 #gl{width:100%;height:100%;object-fit:contain;display:block;background:#000}
@@ -145,10 +150,55 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 #ctxlost{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;z-index:70;
   align-items:center;justify-content:center;flex-direction:column;gap:14px}
 #ctxlost.show{display:flex}
+/* ---------- Resolume-style deck ---------- */
+#deck{padding:8px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+.lstrip{background:#101319;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.lstrip.sel{border-color:var(--acc)}
+.lhead{display:flex;align-items:center;gap:6px;padding:6px 8px;background:#151a24}
+.ltab{width:8px;align-self:stretch;border-radius:4px;background:hsl(var(--lhue,200),70%,55%)}
+.lname{font-weight:800;font-size:13px;min-width:30px;text-align:center;cursor:pointer;border:none;background:none;color:var(--txt);padding:2px 4px;border-radius:4px}
+.lname:hover{background:#232b3d}
+.lhead .tbtn.onS{background:#2a4a3a;border-color:#3fa46a;color:#bdf0d2}
+.lhead .tbtn.onB{background:#4a2a2a;border-color:#c46a6a;color:#f0bdbd}
+.lop{flex:1;min-width:40px}
+.lbsel{max-width:92px}
+.clipgrid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;padding:8px}
+.clip{aspect-ratio:1/1;min-height:46px;border-radius:6px;background:#1a2030;border:1px solid #2a3348;
+  color:var(--dim);font-size:9px;font-weight:700;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;text-align:center;padding:2px;line-height:1.15;user-select:none}
+.clip:hover{border-color:var(--acc);color:var(--txt)}
+.clip.fired{border-color:var(--acc2);color:#fff;background:#1c2a3e;box-shadow:0 0 10px rgba(94,234,212,.35)}
+.clip.selc{outline:2px solid var(--acc);outline-offset:-2px}
+.clip.empty{border-style:dashed;opacity:.55;font-size:14px}
+#clipmenu{position:fixed;z-index:200;background:#161b26;border:1px solid var(--acc);border-radius:8px;
+  padding:4px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+#clipmenu button{display:block;width:100%;text-align:left;background:none;border:none;color:var(--txt);
+  padding:8px 10px;font-size:12px;cursor:pointer;border-radius:5px}
+#clipmenu button:hover{background:#232b3d}
+/* ---------- properties panel ---------- */
+#propsel{border-bottom:1px solid var(--line);padding:8px;max-height:46vh;overflow-y:auto}
+.phead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.ptitle{font-weight:800;font-size:13px;color:var(--acc2);letter-spacing:.06em}
+.psec .plab{font-size:11px;color:var(--dim);display:block;margin:6px 0 2px}
+/* ---------- bottom dashboard ---------- */
+#dashbar{display:flex;align-items:center;gap:10px;padding:4px 12px;background:var(--panel);
+  border-top:1px solid var(--line);min-height:0;overflow:hidden}
+#dashmacros{display:flex;gap:10px;flex:1;align-items:center;min-width:0}
+.dmacro{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.dmacrolab{width:40px;flex:none;background:transparent;border:1px solid transparent;border-radius:4px;
+  color:var(--acc2);font-size:11px;font-weight:700;text-align:center;padding:2px}
+.dmacrolab:hover{border-color:var(--line)}
+.dmacro input[type=range]{flex:1;min-width:30px}
+.dmacro .pval{min-width:34px;text-align:right}
+#btnBlackout.armed{background:#5a1d1d;border-color:#e05a5a;color:#ffd7d7}
+.tgrp{display:flex;align-items:center;gap:6px}
+.tlab{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+#masterSl{width:90px}
+.dim{color:var(--dim);font-size:11px}
 /* perform mode */
 #performbar{display:none;position:absolute;left:0;right:0;bottom:0;z-index:20;
   background:rgba(10,12,16,.93);border-top:1px solid var(--line);padding:10px 14px}
-body.perform #topbar,body.perform #left,body.perform #right,body.perform #statusbar{display:none}
+body.perform #topbar,body.perform #left,body.perform #right,body.perform #dashbar{display:none}
 body.perform #main{grid-template-columns:0 minmax(0,1fr) 0}
 body.perform #performbar{display:block}
 .pmacros{display:grid;grid-template-columns:repeat(8,minmax(0,1fr)) 120px;gap:10px;align-items:center}
@@ -181,8 +231,20 @@ body.perform #performbar{display:block}
   <!-- ================= TOP BAR ================= -->
   <header id="topbar">
     <span class="brand">&#9670; HoloMapper</span><span class="vtag">v1</span>
-    <button id="btnHideL" title="Toggle layer panel">&#10218; Layers</button>
-    <button id="btnHideR" title="Toggle control panel">Panels &#10219;</button>
+    <button id="btnHideL" title="Toggle layer deck">&#10218; Deck</button>
+    <button id="btnHideR" title="Toggle properties panel">Props &#10219;</button>
+    <span class="tgrp"><span class="tlab">Master</span><input type="range" id="masterSl" min="0" max="1" step="0.001" value="1" data-ctrl="P.master" title="Master output — click while MIDI Learn is armed to map"></span>
+    <span class="sep"></span>
+    <button id="btnTap" title="Tap tempo (Space)">Tap</button>
+    <span id="bpm">120</span><span class="dim">BPM</span>
+    <label class="ck" title="Snap layer speeds to beat divisions"><input type="checkbox" id="ckBeatSync">BeatSync</label>
+    <span class="sep"></span>
+    <button id="btnLearn" title="MIDI learn (M)">MIDI Learn</button>
+    <span id="midistat">MIDI: not scanned</span>
+    <span class="sep"></span>
+    <button id="btnAudio" title="Enable microphone for audio reactivity">Enable audio</button>
+    <span class="meters"><span class="meter"><i id="mBass"></i></span><span class="meter"><i id="mMid"></i></span><span class="meter"><i id="mHigh"></i></span></span>
+    <span id="audiostat" style="color:var(--dim)">audio off</span>
     <span class="sp"></span>
     <input type="text" id="presetName" placeholder="preset name" title="Name for the preset to save">
     <button id="btnSavePreset" title="Save current state as a named preset">Save</button>
@@ -198,11 +260,16 @@ body.perform #performbar{display:block}
       <option value="1920x1080">1920x1080</option>
     </select>
     <button id="btnHelp" title="Keyboard shortcuts (?)">?</button>
+    <button id="btnPerform" title="Perform mode (P)">PERFORM</button>
+    <button id="btnFull" title="Fullscreen (F)">Fullscreen</button>
+    <button id="btnPrm" title="Connect to the phone remote via bridge.py">Phone remote</button>
+    <button id="btnPair" title="Show the pairing QR for your phone">Pair phone</button>
+    <span id="prmstat" style="color:var(--dim)"></span>
   </header>
 
   <!-- ================= MAIN ================= -->
   <div id="main">
-    <aside id="left"><div id="layers"></div></aside>
+    <aside id="left"><div id="deck"></div></aside>
 
     <section id="stage">
       <canvas id="gl"></canvas>
@@ -213,6 +280,7 @@ body.perform #performbar{display:block}
     </section>
 
     <aside id="right">
+      <div id="propsel"></div>
       <details class="sec" open>
         <summary>Post FX Chain <span class="x">feedback &#8594; kaleido &#8594; glitch &#8594; grade</span></summary>
         <div class="secbody" id="postfx"></div>
@@ -220,10 +288,6 @@ body.perform #performbar{display:block}
       <details class="sec" open>
         <summary>Master <span class="x">grade + strobe + audio</span></summary>
         <div class="secbody" id="master"></div>
-      </details>
-      <details class="sec" open>
-        <summary>Dashboard <span class="x">8 macro knobs</span></summary>
-        <div class="secbody" id="dashboard"></div>
       </details>
       <details class="sec">
         <summary>MIDI Mappings <span class="x" id="midiCount"></span></summary>
@@ -253,36 +317,15 @@ body.perform #performbar{display:block}
     </aside>
   </div>
 
-  <!-- ================= STATUS BAR ================= -->
-  <footer id="statusbar">
-    <span class="grp">
-      <button id="btnTap" title="Tap tempo (Space)">Tap</button>
-      <span id="bpm">120</span><span style="color:var(--dim)">BPM</span>
-      <label class="ck" title="Snap layer speeds to beat divisions"><input type="checkbox" id="ckBeatSync">BeatSync</label>
-    </span>
+  <!-- ================= BOTTOM DASHBOARD ================= -->
+  <footer id="dashbar">
+    <div id="dashmacros"></div>
+    <button id="btnBlackout" title="Blackout: cut all output">BLACKOUT</button>
     <span class="sep"></span>
-    <span class="grp">
-      <button id="btnLearn" title="MIDI learn (M)">MIDI Learn</button>
-      <span id="midistat">MIDI: not scanned</span>
-    </span>
-    <span class="sep"></span>
-    <span class="grp">
-      <button id="btnAudio" title="Enable microphone for audio reactivity">Enable audio</button>
-      <span class="meters"><span class="meter"><i id="mBass"></i></span><span class="meter"><i id="mMid"></i></span><span class="meter"><i id="mHigh"></i></span></span>
-      <span id="audiostat" style="color:var(--dim)">audio off</span>
-    </span>
-    <span class="sp"></span>
-    <span class="grp"><span id="fps">-- fps</span></span>
-    <span class="sep"></span>
-    <span class="grp">
-      <button id="btnFull" title="Fullscreen (F)">Fullscreen</button>
-      <button id="btnPerform" title="Perform mode (P)">PERFORM</button>
-      <button id="btnPrm" title="Connect to the phone remote via bridge.py">Phone remote</button>
-      <button id="btnPair" title="Show the pairing QR for your phone">Pair phone</button>
-      <span id="prmstat" style="color:var(--dim)"></span>
-    </span>
+    <span id="fps">-- fps</span>
   </footer>
 </div>
+<div id="clipmenu" style="display:none"></div>
 <!-- help overlay -->
 <div id="help"><div class="box">
   <h2>HoloMapper &mdash; shortcuts</h2>
@@ -562,6 +605,14 @@ const clIntFmt=(lo,hi)=>v=>String(Math.round(lo+v*(hi-lo)));
 const clDiscMap=n=>v=>Math.min(n-1,Math.round(v*(n-1)));
 const clDiscFmt=opts=>v=>opts[Math.min(opts.length-1,Math.round(v*(opts.length-1)))];
 const clTglFmt=v=>(v>=0.5?'on':'off');
+/* Layer source as a real param: clip firing flows through setParam so MIDI
+   learn, macro assign, presets and the phone remote keep working. The render
+   loop keeps reading S.layers[i].src; PARAM_HOOKS (registered in the deck
+   section below) mirrors the param into it. */
+const SRC_DEF=[0, 0.5, 0.25, 0.75]; /* default src index /4 per layer */
+for(let i=0;i<4;i++){
+  defParam('L'+i+'.src', LAYER_NAMES[i]+' Source', SRC_DEF[i], clDiscMap(5), clDiscFmt(LAYER_SRC));
+}
 for(let i=0;i<4;i++){
   const c='L'+i+'.cl', LB=LAYER_NAMES[i]+' ';
   /* cloner mode */
@@ -753,17 +804,31 @@ function sanitizeMods(m){
     });
   }catch(e){ return defaultMods(); }
 }
+function defaultClips(){
+  const c=[];
+  for(let i=0;i<4;i++){ const r=[]; for(let k=0;k<8;k++) r.push(k<5?k:null); c.push(r); }
+  return c;
+}
+function validClips(c){
+  if(!Array.isArray(c)||c.length!==4) return null;
+  for(let i=0;i<4;i++){
+    if(!Array.isArray(c[i])||c[i].length!==8) return null;
+    for(let k=0;k<8;k++){ const v=c[i][k]; if(v!==null&&(typeof v!=='number'||v<0||v>4)) return null; }
+  }
+  return c;
+}
 function defaultState(){
   const params={};
   for(const id in PARAMS) params[id]=PARAMS[id].def;
   return {
-    v:1, res:'1280x720', selLayer:0,
+    v:1, res:'1280x720', selLayer:0, sel:{kind:'layer', i:0},
     layers:[
       {src:0, blend:0, bypass:false, solo:false},
       {src:2, blend:2, bypass:false, solo:false},
       {src:1, blend:1, bypass:false, solo:false},
       {src:3, blend:1, bypass:true,  solo:false}
     ],
+    clips:defaultClips(), fired:[null,null,null,null],
     params:params, assigns:{},
     postBypass:{feedback:false, kaleido:true, glitch:true},
     strobeOn:false, beatSync:false, bpm:120, blackout:false,
@@ -2567,57 +2632,177 @@ function paramRow(parent, id, short){
 }
 
 /* ---------- layer cards ---------- */
-const layerBtns=[null,null,null,null];
+/* ================= RESOLUME-STYLE DECK =================
+   4 layer strips x 8 clip slots. Clicking a clip fires its source on the
+   layer THROUGH setParam('L{i}.src') so MIDI learn / macro / preset / phone
+   remote integration keeps working. PARAM_HOOKS mirrors the param into
+   S.layers[i].src (which the render loop reads) and refreshes highlights. */
+for(let i=0;i<4;i++){
+  PARAM_HOOKS['L'+i+'.src']=[((ii)=>()=>{
+    const pk='L'+ii+'.src';
+    const v=(S.params[pk]!==undefined)?S.params[pk]:SRC_DEF[ii];
+    const ni=Math.min(4,Math.max(0,Math.round(v*4)));
+    const changed=ni!==S.layers[ii].src;
+    S.layers[ii].src=ni;
+    syncFiredToSrc(ii); syncDeckSel();
+    if(changed && S.sel && S.sel.kind==='layer' && S.sel.i===ii && $('propsel')) buildProps();
+  })(i)];
+}
+function syncFiredToSrc(i){
+  const src=S.layers[i].src, cur=S.fired[i];
+  if(cur!==null&&cur!==undefined&&S.clips[i][cur]===src) return; /* fired clip still matches */
+  const k=S.clips[i].indexOf(src);
+  S.fired[i]=k>=0?k:null;
+}
+function syncDeckSel(){
+  document.querySelectorAll('#deck .lstrip').forEach((st,i)=>{
+    st.classList.toggle('sel', !!S.sel && S.sel.kind==='layer' && S.sel.i===i);
+    const L=S.layers[i];
+    const bB=st.querySelector('.bByp'), bS=st.querySelector('.bSolo');
+    if(bB) bB.classList.toggle('onB',L.bypass);
+    if(bS) bS.classList.toggle('onS',L.solo);
+  });
+  document.querySelectorAll('#deck .clip').forEach(c=>{
+    const i=+c.dataset.i, k=+c.dataset.k;
+    c.classList.toggle('fired', S.fired[i]===k);
+    c.classList.toggle('selc', !!S.sel && S.sel.kind==='clip' && S.sel.i===i && S.sel.c===k);
+  });
+}
 function selectLayer(i){
-  S.selLayer=i;
-  document.querySelectorAll('#layers .card').forEach((c,ci)=>c.classList.toggle('sel',ci===i));
-  saveState();
+  S.selLayer=i; S.sel={kind:'layer', i};
+  syncDeckSel(); buildProps(); saveState();
+}
+function selectClip(i,k){
+  S.selLayer=i; S.sel={kind:'clip', i:i, c:k};
+  syncDeckSel(); buildProps(); saveState();
 }
 function toggleBypass(i){
-  const L=S.layers[i];
-  L.bypass=!L.bypass;
-  const b=layerBtns[i];
-  if(b) b.byp.classList.toggle('onB',L.bypass);
-  saveState();
+  const L=S.layers[i]; L.bypass=!L.bypass; saveState(); syncDeckSel();
 }
-function buildLayers(){
-  const host=$('layers'); host.innerHTML='';
+function fireClip(i,k){
+  const src=S.clips[i][k];
+  if(src===null||src===undefined) return;
+  S.fired[i]=k;
+  setParam('L'+i+'.src', src/4);
+}
+function buildDeck(){
+  const host=$('deck'); host.innerHTML='';
   for(let i=0;i<4;i++){
     const L=S.layers[i];
-    const card=el('div','card'+(S.selLayer===i?' sel':''));
-    const head=el('div','chead');
-    const nm=el('span','lname','L'+(i+1));
-    nm.title='Click: collapse card. Key '+(i+1)+': select layer.';
-    const body=el('div','cbody');
-    nm.addEventListener('click',(e)=>{ e.stopPropagation(); body.classList.toggle('collapsed'); });
-    head.appendChild(nm);
-    const src=document.createElement('select'); src.className='srcsel'; src.title='Layer source';
-    LAYER_SRC.forEach((s,si)=>src.appendChild(new Option(s,si)));
-    src.value=L.src;
-    src.addEventListener('change',()=>{ L.src=parseInt(src.value,10); saveState(); buildLayers(); });
-    head.appendChild(src);
-    const bSolo=el('button','tbtn'+(L.solo?' onS':''),'S'); bSolo.title='Solo this layer';
-    bSolo.addEventListener('click',(e)=>{ e.stopPropagation(); L.solo=!L.solo; bSolo.classList.toggle('onS',L.solo); saveState(); });
-    const bByp=el('button','tbtn'+(L.bypass?' onB':''),'B'); bByp.title='Bypass layer (key B)';
-    bByp.addEventListener('click',(e)=>{ e.stopPropagation(); toggleBypass(i); });
-    head.appendChild(bSolo); head.appendChild(bByp);
-    layerBtns[i]={byp:bByp, solo:bSolo};
-    card.appendChild(head);
-    card.addEventListener('pointerdown',()=>selectLayer(i));
-    const br=el('div','blendrow'); br.appendChild(mkSpan(null,'Blend'));
-    const bs=document.createElement('select'); bs.title='Blend mode';
-    BLENDS.forEach((b,bi)=>bs.appendChild(new Option(b,bi)));
-    bs.value=L.blend;
+    const st=el('div','lstrip'+((S.sel&&S.sel.kind==='layer'&&S.sel.i===i)?' sel':''));
+    st.style.setProperty('--lhue', Math.round(LAYER_HUES[i]*360));
+    const head=el('div','lhead');
+    head.appendChild(el('span','ltab'));
+    const nm=el('button','lname','L'+(i+1)); nm.title='Select layer (key '+(i+1)+')';
+    nm.addEventListener('click',()=>selectLayer(i)); head.appendChild(nm);
+    const bS=el('button','tbtn bSolo'+(L.solo?' onS':''),'S'); bS.title='Solo layer';
+    bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); syncDeckSel(); });
+    const bB=el('button','tbtn bByp'+(L.bypass?' onB':''),'B'); bB.title='Bypass layer (key B)';
+    bB.addEventListener('click',()=>toggleBypass(i));
+    const bX=el('button','tbtn bClr','\u2715'); bX.title='Clear layer (unload clip)';
+    bX.addEventListener('click',()=>{ L.bypass=true; S.fired[i]=null; saveState(); syncDeckSel(); });
+    head.appendChild(bS); head.appendChild(bB); head.appendChild(bX);
+    const op=document.createElement('input');
+    op.type='range'; op.min=0; op.max=1; op.step=0.001; op.className='lop';
+    op.value=(S.params['L'+i+'.op']!==undefined)?S.params['L'+i+'.op']:1;
+    op.setAttribute('data-ctrl','L'+i+'.op');
+    op.title=LAYER_NAMES[i]+' Opacity \u2014 click while MIDI Learn is armed to map';
+    op.addEventListener('input',()=>setParam('L'+i+'.op',parseFloat(op.value),op));
+    CTRLS['L'+i+'.op']={set:v=>setParam('L'+i+'.op',v), label:LAYER_NAMES[i]+' Opacity'};
+    head.appendChild(op);
+    const bs=document.createElement('select'); bs.className='lbsel'; bs.title='Blend mode';
+    BLENDS.forEach((b,bi)=>bs.appendChild(new Option(b,bi))); bs.value=L.blend;
     bs.addEventListener('change',()=>{ L.blend=parseInt(bs.value,10); saveState(); });
-    br.appendChild(bs); body.appendChild(br);
-    const p='L'+i+'.';
-    paramRow(body,p+'op','Opacity'); paramRow(body,p+'speed','Speed');
-    paramRow(body,p+'hue','Hue');    paramRow(body,p+'audio','Audio');
-    paramRow(body,p+'p1','Param 1'); paramRow(body,p+'p2','Param 2');
-    if(L.src===4) buildClonerUI(body,i);
-    card.appendChild(body);
-    host.appendChild(card);
+    head.appendChild(bs);
+    st.appendChild(head);
+    const grid=el('div','clipgrid');
+    for(let k=0;k<8;k++){
+      const src=S.clips[i][k];
+      const c=el('button','clip'+(src===null?' empty':'')+((S.fired[i]===k)?' fired':'')+((S.sel&&S.sel.kind==='clip'&&S.sel.i===i&&S.sel.c===k)?' selc':''),
+        src===null?'+':LAYER_SRC[src].split(' ')[0]);
+      c.dataset.i=i; c.dataset.k=k;
+      c.title=(src===null?'Empty slot \u2014 right-click to assign a source':'Fire '+LAYER_SRC[src]+' on '+LAYER_NAMES[i]+' \u2014 right-click to reassign');
+      c.setAttribute('data-ctrl','clip'+i+'.'+k);
+      CTRLS['clip'+i+'.'+k]={set:((ii,kk)=>v=>{ if(v>=0.5) fireClip(ii,kk); })(i,k), label:'Fire '+LAYER_NAMES[i]+' clip '+(k+1)};
+      c.addEventListener('click',()=>{ fireClip(i,k); selectClip(i,k); });
+      c.addEventListener('contextmenu',(e)=>{ e.preventDefault(); showClipMenu(e.clientX,e.clientY,i,k); });
+      grid.appendChild(c);
+    }
+    st.appendChild(grid);
+    host.appendChild(st);
   }
+}
+/* clip source-assign popup */
+function showClipMenu(x,y,i,k){
+  const m=$('clipmenu'); m.innerHTML='';
+  const cur=S.clips[i][k];
+  LAYER_SRC.forEach((s,si)=>{
+    const b=el('button',null,(si===cur?'\u2713 ':'')+s);
+    b.addEventListener('click',()=>{ S.clips[i][k]=si; hideClipMenu(); saveState(); buildDeck(); buildProps(); });
+    m.appendChild(b);
+  });
+  const bc=el('button',null,'Clear slot'); bc.style.color='#ff7b7b';
+  bc.addEventListener('click',()=>{
+    S.clips[i][k]=null; if(S.fired[i]===k) S.fired[i]=null;
+    hideClipMenu(); saveState(); buildDeck(); buildProps();
+  });
+  m.appendChild(bc);
+  m.style.display='block';
+  m.style.left=Math.min(x,Math.max(0,window.innerWidth-180))+'px';
+  m.style.top=Math.min(y,Math.max(0,window.innerHeight-230))+'px';
+}
+function hideClipMenu(){ const m=$('clipmenu'); if(m) m.style.display='none'; }
+/* ---------- properties panel (selection-driven) ---------- */
+function buildProps(){
+  const host=$('propsel'); if(!host) return; host.innerHTML='';
+  const sel=S.sel||{kind:'layer',i:0};
+  if(sel.kind==='clip'){
+    const i=sel.i, k=sel.c, src=S.clips[i][k];
+    const h=el('div','phead'); h.appendChild(el('span','ptitle','CLIP  '+LAYER_NAMES[i]+' \u00B7 '+(k+1)));
+    host.appendChild(h);
+    const wrap=el('div','psec');
+    const lab=el('label','plab','Source'); wrap.appendChild(lab);
+    const se=document.createElement('select'); se.className='dsel';
+    se.appendChild(new Option('(empty)','-1'));
+    LAYER_SRC.forEach((s,si)=>se.appendChild(new Option(s,si)));
+    se.value=String(src===null?-1:src);
+    se.addEventListener('change',()=>{
+      const v=parseInt(se.value,10);
+      S.clips[i][k]=v<0?null:v; saveState(); buildDeck(); buildProps();
+    });
+    wrap.appendChild(se);
+    const row=el('div','krow');
+    const bf=el('button',null,'Fire clip'); bf.title='Load this source on '+LAYER_NAMES[i];
+    bf.addEventListener('click',()=>fireClip(i,k));
+    const bc=el('button',null,'Clear slot');
+    bc.addEventListener('click',()=>{ S.clips[i][k]=null; if(S.fired[i]===k)S.fired[i]=null; saveState(); buildDeck(); buildProps(); });
+    row.appendChild(bf); row.appendChild(bc); wrap.appendChild(row);
+    wrap.appendChild(mkHint('Click a deck clip to fire it. Right-click a clip to assign a source.'));
+    host.appendChild(wrap);
+    return;
+  }
+  const i=Math.min(3,Math.max(0,sel.i||0)), L=S.layers[i];
+  const h=el('div','phead'); h.appendChild(el('span','ptitle','LAYER '+LAYER_NAMES[i])); host.appendChild(h);
+  const wrap=el('div','psec'); host.appendChild(wrap);
+  discreteRow(wrap,'L'+i+'.src','Source',LAYER_SRC,()=>buildProps());
+  const br=el('div','prow'); const bl=el('div','pline');
+  const blab=el('label'); blab.textContent='Blend'; bl.appendChild(blab);
+  const bs=document.createElement('select'); bs.className='dsel'; bs.title='Blend mode';
+  BLENDS.forEach((b,bi)=>bs.appendChild(new Option(b,bi))); bs.value=L.blend;
+  const bv=el('span','pval',BLENDS[L.blend]); bl.appendChild(bs); bl.appendChild(bv);
+  bs.addEventListener('change',()=>{ L.blend=parseInt(bs.value,10); bv.textContent=BLENDS[L.blend]; saveState(); });
+  br.appendChild(bl); wrap.appendChild(br);
+  const trow=el('div','krow');
+  const bS=el('button','tbtn'+(L.solo?' onS':''),'Solo'); bS.title='Solo layer';
+  bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); syncDeckSel(); buildProps(); });
+  const bB=el('button','tbtn'+(L.bypass?' onB':''),'Bypass'); bB.title='Bypass layer (key B)';
+  bB.addEventListener('click',()=>{ toggleBypass(i); buildProps(); });
+  trow.appendChild(bS); trow.appendChild(bB); wrap.appendChild(trow);
+  const p='L'+i+'.';
+  paramRow(wrap,p+'op','Opacity'); paramRow(wrap,p+'speed','Speed');
+  paramRow(wrap,p+'hue','Hue');    paramRow(wrap,p+'audio','Audio');
+  paramRow(wrap,p+'p1','Param 1'); paramRow(wrap,p+'p2','Param 2');
+  if(S.layers[i].src===4) buildClonerUI(wrap,i);
 }
 </script>
 <script>
@@ -2905,29 +3090,28 @@ function buildMaster(){
   paramRow(host,'P.master','Master');
 }
 function buildDashboard(){
-  const host=$('dashboard'); host.innerHTML='';
-  host.appendChild(mkHint('Macros add to any assigned param, scaled by its depth. Every macro knob is MIDI-learnable. Rename by editing the label.'));
+  const host=$('dashmacros'); host.innerHTML='';
   for(let m=0;m<8;m++){
-    const row=el('div','macrorow');
+    const d=el('div','dmacro');
     const lab=document.createElement('input');
-    lab.className='macrolab'; lab.value=S.macros[m].label; lab.maxLength=8;
+    lab.className='dmacrolab'; lab.value=S.macros[m].label; lab.maxLength=8;
     lab.title='Rename macro (click, type, Enter)';
     lab.addEventListener('change',()=>{
       S.macros[m].label=lab.value.trim()||('M'+(m+1));
-      syncMacroLabels(); saveState();
+      syncMacroLabels(); saveState(); buildDashboard();
     });
-    row.appendChild(lab);
+    d.appendChild(lab);
     const sl=document.createElement('input');
     sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001; sl.value=S.macros[m].val;
     sl.setAttribute('data-ctrl','macro'+m);
-    sl.title='Macro '+(m+1)+' — click while MIDI Learn is armed to map';
+    sl.title='Macro '+(m+1)+' \u2014 click while MIDI Learn is armed to map';
     sl.addEventListener('input',()=>setMacro(m,parseFloat(sl.value),sl));
     CTRLS['macro'+m]={set:v=>setMacro(m,v), label:'Macro '+(m+1)};
-    row.appendChild(sl);
+    d.appendChild(sl);
     const vv=el('span','pval',Math.round(S.macros[m].val*100)+'%');
     vv.setAttribute('data-val','macro'+m);
-    row.appendChild(vv);
-    host.appendChild(row);
+    d.appendChild(vv);
+    host.appendChild(d);
   }
 }
 function syncMacroLabels(){
@@ -2996,6 +3180,7 @@ function refreshPresetSel(){
 function snapshot(){
   return JSON.parse(JSON.stringify({
     params:S.params, assigns:S.assigns, layers:S.layers,
+    clips:S.clips, fired:S.fired,
     postBypass:S.postBypass, strobeOn:S.strobeOn, beatSync:S.beatSync,
     bpm:S.bpm, macros:S.macros, res:S.res, pluginCode:S.pluginCode, midi:S.midi,
     mods:S.mods
@@ -3006,6 +3191,17 @@ function applySnapshot(snap){
   S.params=Object.assign({}, d.params, snap.params||{});
   S.assigns=snap.assigns||{};
   S.layers=(snap.layers||d.layers).map((l,i)=>Object.assign({}, d.layers[i], l));
+  S.clips=validClips(snap.clips)||defaultClips();
+  S.fired=Array.isArray(snap.fired)?snap.fired.slice(0,4):[null,null,null,null];
+  while(S.fired.length<4) S.fired.push(null);
+  S.sel={kind:'layer', i:0};
+  /* source authority: new presets carry L{i}.src params; old ones only have layers[].src */
+  for(let i=0;i<4;i++){
+    const pk='L'+i+'.src';
+    if(snap.params && snap.params[pk]!==undefined) S.layers[i].src=Math.min(4,Math.max(0,Math.round(clamp(S.params[pk],0,1)*4)));
+    else { S.layers[i].src=Math.min(4,Math.max(0,S.layers[i].src|0)); S.params[pk]=S.layers[i].src/4; }
+    syncFiredToSrc(i);
+  }
   S.postBypass=Object.assign({}, d.postBypass, snap.postBypass||{});
   S.strobeOn=!!snap.strobeOn; S.beatSync=!!snap.beatSync; S.bpm=snap.bpm||120;
   S.macros=(snap.macros||d.macros).map((m,i)=>({label:(m&&m.label)||('M'+(i+1)), val:clamp(+((m&&m.val)||0),0,1)}));
@@ -3016,7 +3212,7 @@ function applySnapshot(snap){
     S.pluginCode=snap.pluginCode; $('plugcode').value=S.pluginCode; compilePlugin(true);
   }
   if(snap.res && snap.res!==S.res){ S.res=snap.res; $('resSel').value=S.res; buildTargets(); }
-  buildLayers(); buildPostFx(); buildMaster(); buildDashboard(); buildPerform();
+  buildDeck(); buildProps(); buildPostFx(); buildMaster(); buildDashboard(); buildPerform();
   renderMidiList(); syncTopToggles();
   $('bpm').textContent=S.bpm;
   saveState();
@@ -3042,6 +3238,21 @@ function wireStatic(){
   /* panel toggles */
   $('btnHideL').addEventListener('click',()=>document.body.classList.toggle('hideL'));
   $('btnHideR').addEventListener('click',()=>document.body.classList.toggle('hideR'));
+  /* master slider (topbar) — synced via data-ctrl like every param */
+  $('masterSl').addEventListener('input',(e)=>setParam('P.master',parseFloat(e.target.value),e.target));
+  $('masterSl').value=(S.params['P.master']!==undefined)?S.params['P.master']:1;
+  /* blackout */
+  $('btnBlackout').addEventListener('click',()=>{
+    S.blackout=!S.blackout;
+    $('btnBlackout').classList.toggle('armed',S.blackout);
+    saveState(); if(typeof broadcastState==='function') broadcastState();
+  });
+  /* clip assign popup: click-away closes */
+  document.addEventListener('click',(e)=>{
+    const m=$('clipmenu');
+    if(m&&m.style.display==='block'&&!m.contains(e.target)) hideClipMenu();
+  });
+  document.addEventListener('keydown',(e)=>{ if(e.key==='Escape') hideClipMenu(); });
   /* presets */
   $('btnSavePreset').addEventListener('click',()=>{
     const name=$('presetName').value.trim();
@@ -3174,7 +3385,11 @@ function loop(){
 /* ================= INIT ================= */
 function init(){
   S.blackout=false; /* never wake up blacked-out after a reload */
-  buildLayers();
+  if(!validClips(S.clips)) S.clips=defaultClips();
+  if(!Array.isArray(S.fired)||S.fired.length!==4) S.fired=[null,null,null,null];
+  if(!S.sel||typeof S.sel.i!=='number') S.sel={kind:'layer',i:0};
+  for(let i=0;i<4;i++){ S.params['L'+i+'.src']=S.layers[i].src/4; syncFiredToSrc(i); }
+  buildDeck(); buildProps();
   buildPostFx();
   buildMaster();
   buildDashboard();
