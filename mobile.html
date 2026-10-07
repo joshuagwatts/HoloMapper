@@ -176,9 +176,15 @@ label.ck{display:flex;align-items:center;gap:10px;min-height:44px;font-size:14px
 #btnExitOut{position:fixed;top:calc(10px + env(safe-area-inset-top));right:10px;z-index:60;display:none;
   width:52px;height:52px;border-radius:50%;background:rgba(20,20,30,.55);color:#fff;font-size:20px;
   border:1px solid rgba(255,255,255,.25);}
+#btnOutPins{position:fixed;top:calc(10px + env(safe-area-inset-top));right:72px;z-index:60;display:none;
+  width:52px;height:52px;border-radius:50%;background:rgba(20,20,30,.55);color:#fff;font-size:20px;
+  border:1px solid rgba(255,255,255,.25);touch-action:manipulation;}
 body.output #topbar,body.output #sheet,body.output #sheetFab{display:none!important;}
 body.output #handles{display:none!important;}
+body.output.pins #handles{display:block!important;}
 body.output #btnExitOut{display:block;}
+body.output #btnOutPins{display:block;}
+body.output.pins #btnOutPins{background:rgba(139,92,246,.75);border-color:var(--acc);}
 body.output #mapWrap{display:block;}
 #errbanner{position:fixed;top:calc(60px + env(safe-area-inset-top));left:10px;right:10px;z-index:70;display:none;
   background:#3a1d1d;border:1px solid var(--bad);color:#ffd7d7;border-radius:12px;padding:12px;font-size:13px;}
@@ -290,6 +296,7 @@ body.output #mapWrap{display:block;}
 
 <button id="sheetFab">Panel</button>
 <button id="btnExitOut" title="Exit output mode">&#x2715;</button>
+<button id="btnOutPins" title="Edit corner pins in fullscreen">&#x1F4CD;</button>
 <script>
 
 'use strict';
@@ -2052,7 +2059,7 @@ function defaultMap(){
   }]};
 }
 /* Runtime-only map UI state (not persisted) */
-const MUI = { tab:'Play', selSurf:0, selCorner:0, mapMode:'corners', out:false };
+const MUI = { tab:'Play', selSurf:0, selCorner:0, mapMode:'corners', out:false, outPins:false };
 
 /* ---- homography: unit square -> 4 corners (px, y-up). DLT, h33 = 1 ---- */
 function solveH(c){
@@ -2255,7 +2262,8 @@ function drawMapOverlay(){
   mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const r = canvas.getBoundingClientRect();
   mctx.clearRect(0, 0, r.width, r.height);
-  if(MUI.tab !== 'Map') return; /* output mode: no overlay chrome */
+  const showPinsOut = MUI.out && MUI.outPins;
+  if(MUI.tab !== 'Map' && !showPinsOut) return; /* output mode: no overlay chrome unless pins editing */
   const sfs = S.map.surfaces;
   sfs.forEach((sf, si) => {
     if(!sf.enabled) return;
@@ -2302,7 +2310,8 @@ function drawMapOverlay(){
 function positionHandles(){
   const host = document.getElementById('handles');
   const sf = S.map.surfaces[MUI.selSurf];
-  if(MUI.tab !== 'Map' || !sf || MUI.mapMode !== 'corners'){ host.style.display = 'none'; }
+  const showH = (MUI.tab === 'Map' && MUI.mapMode === 'corners') || (MUI.out && MUI.outPins);
+  if(!showH || !sf){ host.style.display = 'none'; }
   else{
     host.style.display = 'block';
     let hs = host.children;
@@ -2801,7 +2810,9 @@ function wireMask(){
 /* ================= OUTPUT MODE ================= */
 function setOutput(on){
   MUI.out = on;
+  if(!on){ MUI.outPins = false; }
   document.body.classList.toggle('output', on);
+  document.body.classList.toggle('pins', on && MUI.outPins);
   if(on){
     const de = document.documentElement;
     if(de.requestFullscreen) de.requestFullscreen().catch(() => {});
@@ -2814,6 +2825,11 @@ let tapTimes = [];
 function wireOutput(){
   $('btnOutput').addEventListener('click', () => setOutput(true));
   $('btnExitOut').addEventListener('click', () => setOutput(false));
+  $('btnOutPins').addEventListener('click', () => {
+    MUI.outPins = !MUI.outPins;
+    document.body.classList.toggle('pins', MUI.outPins);
+    positionOverlays();
+  });
   canvas.addEventListener('pointerdown', () => {
     if(!MUI.out) return;
     const n = performance.now();
