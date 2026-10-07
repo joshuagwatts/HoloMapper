@@ -93,3 +93,59 @@ Date: 2026-10-07. Everything below was actually run, not claimed.
 - SwiftShader renders at ~1fps; real-GPU performance not measured here.
 - QR scannability eyeballed from renders, not scanned with a phone camera.
 - `.exe` packaging, node-graph editor, video/NDI inputs: deliberately v2.
+
+## v1.1 — Cloner 3D layer source (2026-10-07)
+C4D-style mograph cloners as a 5th per-layer source ("Cloner 3D"), WebGL2 GPU
+instancing, fully integrated into the existing param system.
+
+**What was added**
+- `holomapper.html` only (still self-contained, zero network deps). New script
+  blocks: "CLONER 3D — GL" (procedural mesh geometry, instanced shaders,
+  layout engine, render pass) and "CLONER 3D — UI" (discreteRow/toggleRow/
+  buildClonerUI). Plus: 70 new params per layer (`L{i}.cl*`, 280 total),
+  depth renderbuffers on the 4 layer FBOs (2D sources untouched — they never
+  enable DEPTH_TEST), cloner branch in renderLayer, cloner program in
+  compileAll, PARAM_HOOKS mechanism, SYNC_FN overrides for selects/checkboxes.
+- Cloner modes: Grid (count XYZ 1..12, spacing/axis), Radial (count 2..256,
+  radius, arc, plane XY/XZ/YZ), Linear (count 2..256, step vector XYZ).
+- Meshes: icosahedron (subdivided), torus knot (parametric p=2,q=3), box,
+  tetrahedron — generated in JS, flat/smooth toggle, wireframe overlay
+  (2nd instanced LINES draw only when enabled).
+- Effectors: Plain (pos/rot/scale group toggles, 9 axis sliders, strength,
+  falloff Infinite/Linear/Sphere/Box + invert + size + animated offset),
+  Random (seed + re-roll, 9 per-axis amounts), Shader (3D noise field:
+  scale/speed/displace/scale-amt), Sound (bass/mid/high/beat source select,
+  gain punch, lift), Delay (per-instance time lag on the Plain target).
+- Render: key + rim lighting, per-instance hue-range color, fog toggle +
+  density, orbit camera (auto-orbit toggle, azimuth/elevation/distance).
+- Integration: every param is MIDI-learnable (CTRLS pre-registered for all 4
+  layers), macro-assignable with depth, in preset snapshots, and settable via
+  the phone-remote `param` protocol. Conditional mode subgroups retoggle on
+  ANY setParam source (MIDI/phone/preset), not just direct UI clicks.
+
+**Verification (all actually run)**
+- JS: `node --check` on browser-faithful extraction of all 18 script blocks — OK.
+- Render: headless Chromium 152 + SwiftShader. `checks/cloner_grid.png` —
+  6x6 grid of smooth-shaded icosahedrons, per-instance color variation,
+  visible key lighting and perspective, full cloner UI in the layer card.
+  `checks/cloner_radial_wire.png` — 96 wireframe torus knots in a radial
+  ring (proves instancing + wireframe overlay + radial layout).
+  `checks/cloner_trails_melt.png` — feedback trails at 85% smearing the
+  cloners (proves the 3D layer composites through the normal pipeline and
+  the feedback engine melts it like everything else). Zero GLSL errors,
+  zero errbanner, in all runs.
+- Handlers: audit script — 280/280 cloner params present in PARAMS, CTRLS,
+  and preset snapshots; MIDI bind + CC fire verified on a dropdown (mode
+  0->2 with correct subgroup retoggle) and a toggle; phone-remote
+  `prmHandle` verified on continuous + discrete cloner ids; macro assign on
+  a cloner param verified; preset save/apply round-trip restores mode,
+  spacing, wireframe with UI in sync.
+- Bug found & fixed during verification: conditional mode subgroups only
+  retoggled on direct select changes, not on MIDI/phone/preset-driven
+  setParam — fixed via the PARAM_HOOKS mechanism (also flags instance
+  buffer rebuilds for layout params from any source).
+
+**Deliberately not in v1.1**
+- Node-graph editor, video/webcam/NDI inputs (still v2 per the v1 plan).
+- Real-GPU perf measurement (SwiftShader only; thousands of instances in
+  one instanced draw call by construction).

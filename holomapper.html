@@ -92,6 +92,18 @@ details.sec>summary .x{color:var(--dim);font-weight:400;font-size:10px}
 #plugerr{color:var(--bad);font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;
   white-space:pre-wrap;margin-top:6px;max-height:120px;overflow:auto}
 #plugok{color:var(--ok);font-size:11px;margin-top:6px}
+/* cloner 3d */
+.clonerbox{margin-top:6px;border-top:1px dashed var(--line);padding-top:4px}
+details.cgrp{margin:4px 0}
+details.cgrp>summary{cursor:pointer;font-weight:700;font-size:11px;color:var(--acc2);
+  padding:3px 0;list-style:none}
+details.cgrp>summary::-webkit-details-marker{display:none}
+details.cgrp>summary:before{content:'\25B8  ';color:var(--dim)}
+details.cgrp[open]>summary:before{content:'\25BE  '}
+.csub{padding-left:8px;border-left:2px solid var(--line);margin:2px 0 6px 2px}
+.dsel{min-width:104px}
+.ckrow{display:inline-flex;align-items:center}
+.reroll{padding:2px 10px;font-size:10px;margin:2px 0}
 </style>
 <style>
 /* status bar */
@@ -349,8 +361,14 @@ function defParam(id, label, defN, map, fmt){
 }
 const LAYER_NAMES = ['L1','L2','L3','L4'];
 const LAYER_HUES  = [0.02, 0.38, 0.62, 0.15];
-const LAYER_SRC   = ['Tunnel','Flow Field','Nebula','Plugin'];
+const LAYER_SRC   = ['Tunnel','Flow Field','Nebula','Plugin','Cloner 3D'];
 const BLENDS      = ['Normal','Add','Screen','Multiply','Overlay','Difference'];
+/* Cloner 3D option lists (shared by param defs and UI builders) */
+const CL_MODES=['Grid','Radial','Linear'];
+const CL_MESHES=['Icosahedron','Torus Knot','Box','Tetra'];
+const CL_FALLS=['Infinite','Linear','Sphere','Box'];
+const CL_SND=['Bass','Mid','High','Beat'];
+const CL_PLANES=['XY','XZ','YZ'];
 for(let i=0;i<4;i++){
   const p = 'L'+i+'.';
   defParam(p+'op',   LAYER_NAMES[i]+' Opacity', 1,   v=>v, v=>Math.round(v*100)+'%');
@@ -359,6 +377,101 @@ for(let i=0;i<4;i++){
   defParam(p+'audio',LAYER_NAMES[i]+' Audio',   0.6);
   defParam(p+'p1',   LAYER_NAMES[i]+' Param 1', 0.5);
   defParam(p+'p2',   LAYER_NAMES[i]+' Param 2', 0.5);
+}
+/* ---- Cloner 3D params (per layer). Every one flows through the standard
+   param system: MIDI learn, macro assign + depth, presets, phone remote. ---- */
+const clIntMap=(lo,hi)=>v=>Math.round(lo+v*(hi-lo));
+const clIntFmt=(lo,hi)=>v=>String(Math.round(lo+v*(hi-lo)));
+const clDiscMap=n=>v=>Math.min(n-1,Math.round(v*(n-1)));
+const clDiscFmt=opts=>v=>opts[Math.min(opts.length-1,Math.round(v*(opts.length-1)))];
+const clTglFmt=v=>(v>=0.5?'on':'off');
+for(let i=0;i<4;i++){
+  const c='L'+i+'.cl', LB=LAYER_NAMES[i]+' ';
+  /* cloner mode */
+  defParam(c+'Mode',LB+'Cloner Mode',0, clDiscMap(3), clDiscFmt(CL_MODES));
+  defParam(c+'CntX',LB+'Count X',5/11, clIntMap(1,12), clIntFmt(1,12));
+  defParam(c+'CntY',LB+'Count Y',5/11, clIntMap(1,12), clIntFmt(1,12));
+  defParam(c+'CntZ',LB+'Count Z',0,    clIntMap(1,12), clIntFmt(1,12));
+  defParam(c+'SpX',LB+'Space X',0.36, v=>0.2+v*2.8, v=>(0.2+v*2.8).toFixed(2));
+  defParam(c+'SpY',LB+'Space Y',0.36, v=>0.2+v*2.8, v=>(0.2+v*2.8).toFixed(2));
+  defParam(c+'SpZ',LB+'Space Z',0.36, v=>0.2+v*2.8, v=>(0.2+v*2.8).toFixed(2));
+  defParam(c+'RCnt',LB+'Radial Count',63/254, clIntMap(2,256), clIntFmt(2,256));
+  defParam(c+'Rad',LB+'Radial Radius',0.33, v=>0.5+v*7.5, v=>(0.5+v*7.5).toFixed(2));
+  defParam(c+'Arc',LB+'Radial Arc',1, v=>v*360, v=>Math.round(v*360)+'\u00B0');
+  defParam(c+'Plane',LB+'Radial Plane',0, clDiscMap(3), clDiscFmt(CL_PLANES));
+  defParam(c+'LCnt',LB+'Linear Count',46/254, clIntMap(2,256), clIntFmt(2,256));
+  defParam(c+'StpX',LB+'Step X',0.575, v=>(v-0.5)*4, v=>((v-0.5)*4).toFixed(2));
+  defParam(c+'StpY',LB+'Step Y',0.5,   v=>(v-0.5)*4, v=>((v-0.5)*4).toFixed(2));
+  defParam(c+'StpZ',LB+'Step Z',0.5,   v=>(v-0.5)*4, v=>((v-0.5)*4).toFixed(2));
+  /* mesh */
+  defParam(c+'Mesh',LB+'Mesh',0, clDiscMap(4), clDiscFmt(CL_MESHES));
+  defParam(c+'Flat',LB+'Flat Shade',0, v=>v, clTglFmt);
+  defParam(c+'Wire',LB+'Wireframe',0, v=>v, clTglFmt);
+  defParam(c+'IScl',LB+'Instance Scale',0.22, v=>0.1+v*1.9, v=>(0.1+v*1.9).toFixed(2));
+  defParam(c+'HueR',LB+'Hue Range',0.35);
+  defParam(c+'Sat',LB+'Saturation',0.57, v=>v*1.5, v=>(v*1.5).toFixed(2));
+  /* plain effector */
+  defParam(c+'POn',LB+'Plain On',1, v=>v, clTglFmt);
+  defParam(c+'PPos',LB+'Plain Pos On',1, v=>v, clTglFmt);
+  defParam(c+'PRt',LB+'Plain Rot On',0, v=>v, clTglFmt);
+  defParam(c+'PSl',LB+'Plain Scl On',1, v=>v, clTglFmt);
+  defParam(c+'PStr',LB+'Plain Strength',0.5, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'PPx',LB+'Plain Pos X',0.5, v=>(v-0.5)*2, v=>((v-0.5)*2).toFixed(2));
+  defParam(c+'PPy',LB+'Plain Pos Y',1,   v=>(v-0.5)*2, v=>((v-0.5)*2).toFixed(2));
+  defParam(c+'PPz',LB+'Plain Pos Z',0.5, v=>(v-0.5)*2, v=>((v-0.5)*2).toFixed(2));
+  defParam(c+'PRx',LB+'Plain Rot X',0.5, v=>(v-0.5)*360, v=>Math.round((v-0.5)*360)+'\u00B0');
+  defParam(c+'PRy',LB+'Plain Rot Y',0.5, v=>(v-0.5)*360, v=>Math.round((v-0.5)*360)+'\u00B0');
+  defParam(c+'PRz',LB+'Plain Rot Z',0.5, v=>(v-0.5)*360, v=>Math.round((v-0.5)*360)+'\u00B0');
+  defParam(c+'PSx',LB+'Plain Scl X',0.5, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'PSy',LB+'Plain Scl Y',0.5, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'PSz',LB+'Plain Scl Z',0.5, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'PFall',LB+'Falloff',2/3, clDiscMap(4), clDiscFmt(CL_FALLS));
+  defParam(c+'PInv',LB+'Falloff Invert',0, v=>v, clTglFmt);
+  defParam(c+'PSize',LB+'Falloff Size',0.29, v=>0.2+v*9.8, v=>(0.2+v*9.8).toFixed(1));
+  defParam(c+'PSpd',LB+'Falloff Speed',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  /* random effector */
+  defParam(c+'ROn',LB+'Random On',0, v=>v, clTglFmt);
+  defParam(c+'Seed',LB+'Random Seed',7/99, clIntMap(0,99), clIntFmt(0,99));
+  defParam(c+'RPx',LB+'Rnd Pos X',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'RPy',LB+'Rnd Pos Y',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'RPz',LB+'Rnd Pos Z',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'RRx',LB+'Rnd Rot X',0.11, v=>v*180, v=>Math.round(v*180)+'\u00B0');
+  defParam(c+'RRy',LB+'Rnd Rot Y',0.11, v=>v*180, v=>Math.round(v*180)+'\u00B0');
+  defParam(c+'RRz',LB+'Rnd Rot Z',0.11, v=>v*180, v=>Math.round(v*180)+'\u00B0');
+  defParam(c+'RSx',LB+'Rnd Scl X',0.2);
+  defParam(c+'RSy',LB+'Rnd Scl Y',0.2);
+  defParam(c+'RSz',LB+'Rnd Scl Z',0.2);
+  /* shader effector */
+  defParam(c+'SOn',LB+'Shader On',0, v=>v, clTglFmt);
+  defParam(c+'SScl',LB+'Noise Scale',0.23, v=>0.1+v*3.9, v=>(0.1+v*3.9).toFixed(2));
+  defParam(c+'SSpd',LB+'Noise Speed',0.17, v=>v*3, v=>(v*3).toFixed(2));
+  defParam(c+'SAmt',LB+'Noise Displace',0.27, v=>v*3, v=>(v*3).toFixed(2));
+  defParam(c+'SScA',LB+'Noise Scale Amt',0.4);
+  /* sound effector */
+  defParam(c+'SndOn',LB+'Sound On',0, v=>v, clTglFmt);
+  defParam(c+'SndSrc',LB+'Sound Source',0, clDiscMap(4), clDiscFmt(CL_SND));
+  defParam(c+'SndG',LB+'Sound Gain',0.33, v=>v*3, v=>(v*3).toFixed(2));
+  defParam(c+'SndL',LB+'Sound Lift',0.25, v=>v*2, v=>(v*2).toFixed(2));
+  /* delay effector */
+  defParam(c+'DOn',LB+'Delay On',0, v=>v, clTglFmt);
+  defParam(c+'DAmt',LB+'Delay Lag',0.27, v=>v*1.5, v=>(v*1.5).toFixed(2)+'s');
+  /* render */
+  defParam(c+'Fog',LB+'Fog',1, v=>v, clTglFmt);
+  defParam(c+'FogD',LB+'Fog Density',0.12, v=>v*0.5, v=>(v*0.5).toFixed(3));
+  defParam(c+'Key',LB+'Key Light',0.55, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'Rim',LB+'Rim Light',0.4, v=>v*3, v=>(v*3).toFixed(2));
+  defParam(c+'Amb',LB+'Ambient',0.25);
+  /* camera */
+  defParam(c+'Orb',LB+'Auto Orbit',1, v=>v, clTglFmt);
+  defParam(c+'Az',LB+'Azimuth',0.125, v=>v*360, v=>Math.round(v*360)+'\u00B0');
+  defParam(c+'El',LB+'Elevation',0.62);
+  defParam(c+'Dist',LB+'Distance',0.25, v=>2+v*28, v=>(2+v*28).toFixed(1));
+}
+/* discrete option counts, so discVal() works even before the UI is built */
+for(let i=0;i<4;i++){
+  const c='L'+i+'.cl';
+  PARAMS[c+'Mode'].nopts=3; PARAMS[c+'Plane'].nopts=3;
+  PARAMS[c+'Mesh'].nopts=4; PARAMS[c+'PFall'].nopts=4; PARAMS[c+'SndSrc'].nopts=4;
 }
 defParam('P.trails','FB Trails',    0.55);
 defParam('P.zoom',  'FB Zoom',      1/3, v=>0.9+v*0.3,      v=>(0.9+v*0.3).toFixed(3)+'x');
@@ -423,12 +536,20 @@ function eff(id){
 }
 /* Control registry: every MIDI-learnable control registers here. */
 const CTRLS = {};
+/* Per-param UI sync overrides (for selects/checkboxes; default assumes range inputs). */
+const SYNC_FN = {};
+/* Post-setParam hooks: id -> [fn]. Used by Cloner 3D so that MIDI / phone /
+   preset-driven param changes also rebuild instance buffers and toggle the
+   conditional mode subgroups (setParam alone only syncs the raw control). */
+const PARAM_HOOKS = {};
 function setParam(id, v01, fromEl){
   v01 = clamp(v01,0,1);
   S.params[id]=v01;
   const sel='[data-ctrl="'+id+'"]';
-  document.querySelectorAll(sel).forEach(elm=>{ if(elm!==fromEl) elm.value=v01; });
+  document.querySelectorAll(sel).forEach(elm=>{ if(elm!==fromEl){ const fn=SYNC_FN[id]; if(fn) fn(elm,v01); else elm.value=v01; } });
   document.querySelectorAll('[data-val="'+id+'"]').forEach(sp=>{ sp.textContent=PARAMS[id].fmt(v01); });
+  const hooks=PARAM_HOOKS[id];
+  if(hooks) for(const fn of hooks) fn();
   saveState();
 }
 function setMacro(i, v01, fromEl){
@@ -793,7 +914,7 @@ function drawQuad(prog){
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   gl.disableVertexAttribArray(0);
 }
-function makeTarget(w,h){
+function makeTarget(w,h,depth){
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -805,6 +926,13 @@ function makeTarget(w,h){
   const fb = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  if(depth){
+    const rb = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+  }
   const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   return {tex:tex, fb:fb, w:w, h:h, ok:ok};
@@ -813,7 +941,7 @@ function buildTargets(){
   const wh = S.res.split('x').map(Number);
   RW=wh[0]; RH=wh[1];
   canvas.width=RW; canvas.height=RH;
-  layerT=[makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH)];
+  layerT=[makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true)];
   compT=makeTarget(RW,RH);
   fbT=[makeTarget(RW,RH),makeTarget(RW,RH)];
   postT=[makeTarget(RW,RH),makeTarget(RW,RH)];
@@ -844,14 +972,421 @@ function compileAll(){
     if(!pr){ showErr('Shader "'+name+'" failed: '+lastGlslErr); return false; }
     PROG[name]=pr;
   }
+  { /* Cloner 3D (v1.1): own vertex shader, instanced */
+    const pr = makeProgram(CL_VERT_SRC, CL_FRAG_SRC);
+    if(!pr){ showErr('Shader "cloner" failed: '+lastGlslErr); return false; }
+    PROG.cloner=pr;
+  }
   return true;
+}
+</script>
+<script>
+'use strict';
+/* ================= CLONER 3D — GL (v1.1) =================
+   C4D-style mograph cloners via WebGL2 GPU instancing.
+   One instanced draw call per cloner layer (plus one more only when the
+   wireframe overlay is enabled). Per-instance effector evaluation happens
+   in the vertex shader; Delay is implemented as per-instance time lag. */
+
+/* ---- procedural mesh geometry (JS) ---- */
+function clBuildIcosa(){
+  const t=(1+Math.sqrt(5))/2;
+  let v=[[-1,t,0],[1,t,0],[-1,-t,0],[1,-t,0],[0,-1,t],[0,1,t],[0,-1,-t],[0,1,-t],
+         [t,0,-1],[t,0,1],[-t,0,-1],[-t,0,1]];
+  let f=[[0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],[1,5,9],[5,11,4],[11,10,2],
+         [10,7,6],[7,1,8],[3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],[4,9,5],
+         [2,4,11],[6,2,10],[8,6,7],[9,8,1]];
+  const midCache={};
+  const mid=(a,b)=>{
+    const k=a<b?a+'_'+b:b+'_'+a;
+    if(midCache[k]!==undefined) return midCache[k];
+    const pa=v[a],pb=v[b];
+    const m=[(pa[0]+pb[0])/2,(pa[1]+pb[1])/2,(pa[2]+pb[2])/2];
+    const l=Math.hypot(m[0],m[1],m[2])||1;
+    v.push([m[0]/l,m[1]/l,m[2]/l]);
+    midCache[k]=v.length-1; return v.length-1;
+  };
+  const nf=[];
+  for(const [a,b,c] of f){
+    const ab=mid(a,b),bc=mid(b,c),ca=mid(c,a);
+    nf.push([a,ab,ca],[b,bc,ab],[c,ca,bc],[ab,bc,ca]);
+  }
+  f=nf;
+  const pos=new Float32Array(v.length*3), nor=new Float32Array(v.length*3);
+  v.forEach((p,i2)=>{
+    const l=Math.hypot(p[0],p[1],p[2])||1;
+    pos[i2*3]=p[0]/l*0.9; pos[i2*3+1]=p[1]/l*0.9; pos[i2*3+2]=p[2]/l*0.9;
+    nor[i2*3]=p[0]/l; nor[i2*3+1]=p[1]/l; nor[i2*3+2]=p[2]/l;
+  });
+  return {pos:pos,nor:nor,idx:new Uint32Array(f.flat())};
+}
+function clBuildKnot(){
+  const p=2,q=3,segT=140,segR=12,R=0.62,r=0.24;
+  const cu=u=>[(R+r*Math.cos(q*u))*Math.cos(p*u),(R+r*Math.cos(q*u))*Math.sin(p*u),r*Math.sin(q*u)];
+  const pos=[],nor=[],idx=[];
+  for(let i2=0;i2<=segT;i2++){
+    const u=i2/segT*Math.PI*2;
+    const c=cu(u),c2=cu(u+0.01);
+    let T=[c2[0]-c[0],c2[1]-c[1],c2[2]-c[2]];
+    const tl=Math.hypot(T[0],T[1],T[2])||1; T=[T[0]/tl,T[1]/tl,T[2]/tl];
+    const ref=Math.abs(T[2])>0.9?[1,0,0]:[0,0,1];
+    let N=[T[1]*ref[2]-T[2]*ref[1],T[2]*ref[0]-T[0]*ref[2],T[0]*ref[1]-T[1]*ref[0]];
+    const nl=Math.hypot(N[0],N[1],N[2])||1; N=[N[0]/nl,N[1]/nl,N[2]/nl];
+    const B=[T[1]*N[2]-T[2]*N[1],T[2]*N[0]-T[0]*N[2],T[0]*N[1]-T[1]*N[0]];
+    for(let j=0;j<=segR;j++){
+      const a=j/segR*Math.PI*2, nx=Math.cos(a), ny=Math.sin(a);
+      const ox=N[0]*nx+B[0]*ny, oy=N[1]*nx+B[1]*ny, oz=N[2]*nx+B[2]*ny;
+      pos.push(c[0]+r*ox,c[1]+r*oy,c[2]+r*oz);
+      nor.push(ox,oy,oz);
+    }
+  }
+  for(let i2=0;i2<segT;i2++)for(let j=0;j<segR;j++){
+    const a=i2*(segR+1)+j,b=a+segR+1;
+    idx.push(a,b,a+1,b,b+1,a+1);
+  }
+  return {pos:new Float32Array(pos),nor:new Float32Array(nor),idx:new Uint32Array(idx)};
+}
+function clBuildBox(){
+  const F=[
+    [[0,0,1],[-.7,-.7,.7],[.7,-.7,.7],[.7,.7,.7],[-.7,.7,.7]],
+    [[0,0,-1],[.7,-.7,-.7],[-.7,-.7,-.7],[-.7,.7,-.7],[.7,.7,-.7]],
+    [[1,0,0],[.7,-.7,.7],[.7,-.7,-.7],[.7,.7,-.7],[.7,.7,.7]],
+    [[-1,0,0],[-.7,-.7,-.7],[-.7,-.7,.7],[-.7,.7,.7],[-.7,.7,-.7]],
+    [[0,1,0],[-.7,.7,.7],[.7,.7,.7],[.7,.7,-.7],[-.7,.7,-.7]],
+    [[0,-1,0],[-.7,-.7,-.7],[.7,-.7,-.7],[.7,-.7,.7],[-.7,-.7,.7]]
+  ];
+  const pos=[],nor=[],idx=[]; let b=0;
+  for(const [n,c0,c1,c2,c3] of F){
+    for(const pt of [c0,c1,c2,c3]){ pos.push(pt[0],pt[1],pt[2]); nor.push(n[0],n[1],n[2]); }
+    idx.push(b,b+1,b+2,b,b+2,b+3); b+=4;
+  }
+  return {pos:new Float32Array(pos),nor:new Float32Array(nor),idx:new Uint32Array(idx)};
+}
+function clBuildTetra(){
+  const vv=[[1,1,1],[-1,-1,1],[-1,1,-1],[1,-1,-1]].map(p=>{
+    const l=Math.hypot(p[0],p[1],p[2])*1.15||1; return [p[0]/l,p[1]/l,p[2]/l];
+  });
+  const f=[[0,2,1],[0,1,3],[0,3,2],[1,2,3]];
+  const pos=[],nor=[];
+  for(const [a,b,c] of f){
+    const pa=vv[a],pb=vv[b],pc=vv[c];
+    const u=[pb[0]-pa[0],pb[1]-pa[1],pb[2]-pa[2]], w=[pc[0]-pa[0],pc[1]-pa[1],pc[2]-pa[2]];
+    let n=[u[1]*w[2]-u[2]*w[1],u[2]*w[0]-u[0]*w[2],u[0]*w[1]-u[1]*w[0]];
+    const l=Math.hypot(n[0],n[1],n[2])||1; n=[n[0]/l,n[1]/l,n[2]/l];
+    pos.push(pa[0],pa[1],pa[2],pb[0],pb[1],pb[2],pc[0],pc[1],pc[2]);
+    nor.push(n[0],n[1],n[2],n[0],n[1],n[2],n[0],n[1],n[2]);
+  }
+  const idx=new Uint32Array(pos.length/3);
+  for(let i2=0;i2<idx.length;i2++) idx[i2]=i2;
+  return {pos:new Float32Array(pos),nor:new Float32Array(nor),idx:idx};
+}
+function clEdges(idx){
+  const s=new Set(), e=[];
+  for(let i2=0;i2<idx.length;i2+=3){
+    const t=[idx[i2],idx[i2+1],idx[i2+2]];
+    for(let k=0;k<3;k++){
+      const a=t[k],b=t[(k+1)%3], key=a<b?a*100000+b:b*100000+a;
+      if(!s.has(key)){ s.add(key); e.push(a,b); }
+    }
+  }
+  return new Uint32Array(e);
+}
+let CLGEO=null;
+function ensureClonerGL(){
+  if(CLGEO||!gl) return;
+  CLGEO=[];
+  for(const g of [clBuildIcosa(),clBuildKnot(),clBuildBox(),clBuildTetra()]){
+    const o={};
+    o.pos=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,o.pos);
+    gl.bufferData(gl.ARRAY_BUFFER,g.pos,gl.STATIC_DRAW);
+    o.nor=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,o.nor);
+    gl.bufferData(gl.ARRAY_BUFFER,g.nor,gl.STATIC_DRAW);
+    o.idx=gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,o.idx);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,g.idx,gl.STATIC_DRAW);
+    const ed=clEdges(g.idx);
+    o.edge=gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,o.edge);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,ed,gl.STATIC_DRAW);
+    o.n=g.idx.length; o.ne=ed.length;
+    CLGEO.push(o);
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,null);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,null);
+}
+
+/* ---- cloner shaders ---- */
+const CL_VERT_SRC = `#version 300 es
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec3 a_nor;
+layout(location=2) in vec3 a_inst;
+layout(location=3) in float a_rnd;
+uniform mat4 u_vp;
+uniform vec3 u_camPos;
+uniform float u_time,u_audioBass,u_audioMid,u_audioHigh,u_beat,u_hue;
+uniform float u_pOn,u_pPosOn,u_pRotOn,u_pSclOn,u_pStr;
+uniform vec3 u_pPos,u_pRot,u_pScl;
+uniform int u_fallShape;
+uniform float u_fallInv,u_fallSize,u_fallSpd;
+uniform float u_rOn,u_seed;
+uniform vec3 u_rPos,u_rRot,u_rScl;
+uniform float u_sOn,u_nScale,u_nSpd,u_nAmt,u_nSclAmt;
+uniform float u_sndOn;
+uniform int u_sndSrc;
+uniform float u_sndGain,u_sndLift;
+uniform float u_dOn,u_dMax;
+uniform float u_hueR,u_sat,u_instScale;
+out vec3 v_col;
+out vec3 v_nor;
+flat out vec3 v_norF;
+out vec3 v_world;
+vec3 hsv(vec3 c){
+  vec3 rgb=clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0,0.0,1.0);
+  return c.z*mix(vec3(1.0),rgb,c.y);
+}
+float h31(vec3 p){
+  p=fract(p*0.3183099+vec3(0.11,0.17,0.13));
+  p*=19.19;
+  return fract(p.x*p.y*p.z*(p.x+p.y+p.z));
+}
+float vn3(vec3 p){
+  vec3 i=floor(p),f=fract(p);
+  f=f*f*(3.0-2.0*f);
+  float a=h31(i),b=h31(i+vec3(1.,0.,0.)),c=h31(i+vec3(0.,1.,0.)),d=h31(i+vec3(1.,1.,0.));
+  float e=h31(i+vec3(0.,0.,1.)),g=h31(i+vec3(1.,0.,1.)),h=h31(i+vec3(0.,1.,1.)),k=h31(i+vec3(1.,1.,1.));
+  return mix(mix(mix(a,b,f.x),mix(c,d,f.x),f.y),mix(mix(e,g,f.x),mix(h,k,f.x),f.y),f.z);
+}
+float falloff(vec3 ip,float t){
+  if(u_fallShape==0) return 1.0;
+  vec3 c=vec3(sin(t*u_fallSpd)*2.2,cos(t*u_fallSpd*0.77)*1.6,sin(t*u_fallSpd*0.53+1.7)*2.2);
+  float d;
+  if(u_fallShape==1) d=abs(ip.x-c.x);
+  else if(u_fallShape==2) d=length(ip-c);
+  else d=max(max(abs(ip.x-c.x),abs(ip.y-c.y)),abs(ip.z-c.z));
+  float f=clamp(1.0-d/max(u_fallSize,0.001),0.0,1.0);
+  f=f*f*(3.0-2.0*f);
+  return mix(f,1.0-f,u_fallInv);
+}
+mat3 euler(vec3 r){
+  float cx=cos(r.x),sx=sin(r.x),cy=cos(r.y),sy=sin(r.y),cz=cos(r.z),sz=sin(r.z);
+  return mat3(cy*cz,cy*sz,-sy,
+              sx*sy*cz-cx*sz,sx*sy*sz+cx*cz,sx*cy,
+              cx*sy*cz+sx*sz,cx*sy*sz-sx*cz,cx*cy);
+}
+void main(){
+  /* Delay = per-instance time lag on the Plain effector target */
+  float tl=u_time-a_rnd*u_dMax*u_dOn;
+  float f=falloff(a_inst,tl)*u_pOn*u_pStr;
+  vec3 off=u_pPos*f*u_pPosOn;
+  vec3 rot=u_pRot*f*u_pRotOn;
+  vec3 scl=vec3(1.0)+(u_pScl-vec3(1.0))*f*u_pSclOn;
+  /* Random effector (seeded per instance) */
+  vec3 r1=vec3(h31(vec3(a_rnd*91.7,u_seed,u_seed*0.37)),
+               h31(vec3(u_seed*1.3,a_rnd*57.3,7.7)),
+               h31(vec3(3.1,u_seed*2.9,a_rnd*113.1)));
+  vec3 r2=vec3(h31(vec3(a_rnd*31.7,u_seed*3.1,9.2)),
+               h31(vec3(u_seed*7.7,a_rnd*77.7,1.3)),
+               h31(vec3(5.9,u_seed*1.7,a_rnd*43.7)));
+  off+=(r1-0.5)*2.0*u_rPos*u_rOn;
+  rot+=(r2-0.5)*2.0*u_rRot*u_rOn;
+  scl*=vec3(1.0)+(r1-0.5)*2.0*u_rScl*u_rOn;
+  /* Shader effector: animated 3D noise field */
+  float n=vn3(a_inst*u_nScale+vec3(0.0,u_time*u_nSpd,u_time*u_nSpd*0.6));
+  off+=(n-0.5)*u_nAmt*u_sOn;
+  scl*=1.0+(n-0.5)*u_nSclAmt*u_sOn;
+  /* Sound effector: scale punch + lift from the audio buses */
+  float bus=u_sndSrc==0?u_audioBass:(u_sndSrc==1?u_audioMid:(u_sndSrc==2?u_audioHigh:u_beat));
+  scl*=1.0+bus*u_sndGain*u_sndOn;
+  off.y+=bus*u_sndLift*u_sndOn;
+  /* compose instance transform */
+  mat3 R=euler(rot);
+  vec3 p=R*(a_pos*u_instScale*scl);
+  vec3 world=a_inst+off+p;
+  vec3 N=R*a_nor;
+  v_world=world;
+  v_nor=N;
+  v_norF=N;
+  v_col=hsv(vec3(fract(u_hue+a_rnd*u_hueR),u_sat,1.0));
+  gl_Position=u_vp*vec4(world,1.0);
+}
+`;
+const CL_FRAG_SRC = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec3 v_col;
+in vec3 v_nor;
+flat in vec3 v_norF;
+in vec3 v_world;
+uniform vec3 u_camPos;
+uniform float u_keyI,u_rimI,u_amb,u_fogOn,u_fogD,u_wire;
+uniform int u_flat;
+void main(){
+  vec3 N=normalize(u_flat==1?v_norF:v_nor);
+  vec3 V=normalize(u_camPos-v_world);
+  vec3 Ld=normalize(vec3(0.45,0.75,0.55));
+  float dif=max(dot(N,Ld),0.0)*u_keyI;
+  float rim=pow(1.0-max(dot(N,V),0.0),2.5)*u_rimI;
+  vec3 col=v_col*(u_amb+dif)+vec3(0.55,0.75,1.0)*rim*0.6;
+  if(u_wire>0.5) col=mix(col,vec3(1.0),0.8);
+  float fd=length(u_camPos-v_world);
+  float f=1.0-exp(-fd*fd*u_fogD*u_fogD);
+  col=mix(col,vec3(0.0),f*u_fogOn);
+  O=vec4(col,1.0);
+}
+`;
+
+/* ---- tiny mat4 helpers (column-major) ---- */
+function m4persp(fovy,asp,n,f){
+  const t=1/Math.tan(fovy/2), o=new Float32Array(16);
+  o[0]=t/asp; o[5]=t; o[10]=(f+n)/(n-f); o[11]=-1; o[14]=2*f*n/(n-f);
+  return o;
+}
+function m4look(eye,c,up){
+  let z=[eye[0]-c[0],eye[1]-c[1],eye[2]-c[2]];
+  let l=Math.hypot(z[0],z[1],z[2])||1; z=[z[0]/l,z[1]/l,z[2]/l];
+  let x=[up[1]*z[2]-up[2]*z[1],up[2]*z[0]-up[0]*z[2],up[0]*z[1]-up[1]*z[0]];
+  l=Math.hypot(x[0],x[1],x[2])||1; x=[x[0]/l,x[1]/l,x[2]/l];
+  const y=[z[1]*x[2]-z[2]*x[1],z[2]*x[0]-z[0]*x[2],z[0]*x[1]-z[1]*x[0]];
+  const o=new Float32Array(16);
+  o[0]=x[0];o[1]=y[0];o[2]=z[0];
+  o[4]=x[1];o[5]=y[1];o[6]=z[1];
+  o[8]=x[2];o[9]=y[2];o[10]=z[2];
+  o[12]=-(x[0]*eye[0]+x[1]*eye[1]+x[2]*eye[2]);
+  o[13]=-(y[0]*eye[0]+y[1]*eye[1]+y[2]*eye[2]);
+  o[14]=-(z[0]*eye[0]+z[1]*eye[1]+z[2]*eye[2]);
+  o[15]=1;
+  return o;
+}
+function m4mul(a,b){
+  const o=new Float32Array(16);
+  for(let c=0;c<4;c++)for(let r=0;r<4;r++){
+    let s=0; for(let k=0;k<4;k++) s+=a[k*4+r]*b[c*4+k];
+    o[c*4+r]=s;
+  }
+  return o;
+}
+
+/* ---- per-layer instance buffers ---- */
+const clonerDirty=[true,true,true,true];
+let clInstBuf=[null,null,null,null], clInstRnd=[null,null,null,null], clInstCount=[0,0,0,0];
+function clv(i,n){
+  const id='L'+i+'.cl'+n;
+  return PARAMS[id].map(eff(id));
+}
+function rebuildClonerInstances(i){
+  const mode=clv(i,'Mode'), positions=[];
+  const push=(x,y,z)=>positions.push(x,y,z);
+  if(mode===0){
+    const nx=clv(i,'CntX'),ny=clv(i,'CntY'),nz=clv(i,'CntZ');
+    const sx=clv(i,'SpX'),sy=clv(i,'SpY'),sz=clv(i,'SpZ');
+    for(let ix=0;ix<nx;ix++)for(let iy=0;iy<ny;iy++)for(let iz=0;iz<nz;iz++)
+      push((ix-(nx-1)/2)*sx,(iy-(ny-1)/2)*sy,(iz-(nz-1)/2)*sz);
+  }else if(mode===1){
+    const n=clv(i,'RCnt'),R=clv(i,'Rad'),arc=clv(i,'Arc')*Math.PI/180,pl=clv(i,'Plane');
+    for(let k=0;k<n;k++){
+      const a=(n<=1?0:(k/(n-1))*arc), ca=Math.cos(a)*R, sa=Math.sin(a)*R;
+      if(pl===0) push(ca,sa,0);
+      else if(pl===1) push(ca,0,sa);
+      else push(0,ca,sa);
+    }
+  }else{
+    const n=clv(i,'LCnt'),sx=clv(i,'StpX'),sy=clv(i,'StpY'),sz=clv(i,'StpZ');
+    for(let k=0;k<n;k++) push((k-(n-1)/2)*sx,(k-(n-1)/2)*sy,(k-(n-1)/2)*sz);
+  }
+  const count=positions.length/3;
+  let seed=Math.floor(clv(i,'Seed')*1000)+i*77+1;
+  const rndArr=new Float32Array(count);
+  for(let k=0;k<count;k++){
+    seed=(seed*16807)%2147483647;
+    rndArr[k]=(seed-1)/2147483646;
+  }
+  if(!clInstBuf[i]){ clInstBuf[i]=gl.createBuffer(); clInstRnd[i]=gl.createBuffer(); }
+  gl.bindBuffer(gl.ARRAY_BUFFER,clInstBuf[i]);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(positions),gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,clInstRnd[i]);
+  gl.bufferData(gl.ARRAY_BUFFER,rndArr,gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,null);
+  clInstCount[i]=count;
+  clonerDirty[i]=false;
+}
+
+/* ---- the cloner render pass ---- */
+function renderCloner(i,t,T){
+  gl.clearColor(0,0,0,1);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  if(!layerEnabled(i)) return;
+  ensureClonerGL();
+  const P=PROG.cloner;
+  if(!P||!CLGEO) return;
+  if(clonerDirty[i]) rebuildClonerInstances(i);
+  if(!clInstCount[i]) return;
+  const aud=eff('L'+i+'.audio')*eff('P.aamt');
+  let sp=PARAMS['L'+i+'.speed'].map(eff('L'+i+'.speed'));
+  if(S.beatSync) sp=snapBeat(sp);
+  const ct=t*sp;
+  /* camera: orbit azimuth + elevation + distance */
+  let az=clv(i,'Az')*Math.PI*2;
+  if(clv(i,'Orb')>0.5) az+=ct*0.12;
+  const elv=(clv(i,'El')-0.5)*2.6, dist=clv(i,'Dist');
+  const eye=[dist*Math.cos(elv)*Math.cos(az),dist*Math.sin(elv),dist*Math.cos(elv)*Math.sin(az)];
+  const vp=m4mul(m4persp(0.785,T.w/T.h,0.1,120),m4look(eye,[0,0,0],[0,1,0]));
+  const g=CLGEO[clv(i,'Mesh')];
+  gl.useProgram(P);
+  gl.bindBuffer(gl.ARRAY_BUFFER,g.pos);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,g.nor);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,3,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(1,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,clInstBuf[i]);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2,3,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(2,1);
+  gl.bindBuffer(gl.ARRAY_BUFFER,clInstRnd[i]);
+  gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3,1,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(3,1);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,g.idx);
+  const F=(n,v)=>gl.uniform1f(U(P,n),v);
+  const V3=(n,x,y,z)=>gl.uniform3f(U(P,n),x,y,z);
+  const dg=Math.PI/180;
+  gl.uniformMatrix4fv(U(P,'u_vp'),false,vp);
+  V3('u_camPos',eye[0],eye[1],eye[2]);
+  F('u_time',ct);
+  F('u_audioBass',bassSm*aud); F('u_audioMid',midSm*aud); F('u_audioHigh',highSm*aud);
+  F('u_beat',beatPulse); F('u_hue',eff('L'+i+'.hue'));
+  F('u_pOn',clv(i,'POn')); F('u_pPosOn',clv(i,'PPos')); F('u_pRotOn',clv(i,'PRt'));
+  F('u_pSclOn',clv(i,'PSl')); F('u_pStr',clv(i,'PStr'));
+  V3('u_pPos',clv(i,'PPx'),clv(i,'PPy'),clv(i,'PPz'));
+  V3('u_pRot',clv(i,'PRx')*dg,clv(i,'PRy')*dg,clv(i,'PRz')*dg);
+  V3('u_pScl',clv(i,'PSx'),clv(i,'PSy'),clv(i,'PSz'));
+  gl.uniform1i(U(P,'u_fallShape'),clv(i,'PFall'));
+  F('u_fallInv',clv(i,'PInv')); F('u_fallSize',clv(i,'PSize')); F('u_fallSpd',clv(i,'PSpd'));
+  F('u_rOn',clv(i,'ROn')); F('u_seed',clv(i,'Seed'));
+  V3('u_rPos',clv(i,'RPx'),clv(i,'RPy'),clv(i,'RPz'));
+  V3('u_rRot',clv(i,'RRx')*dg,clv(i,'RRy')*dg,clv(i,'RRz')*dg);
+  V3('u_rScl',clv(i,'RSx'),clv(i,'RSy'),clv(i,'RSz'));
+  F('u_sOn',clv(i,'SOn')); F('u_nScale',clv(i,'SScl')); F('u_nSpd',clv(i,'SSpd'));
+  F('u_nAmt',clv(i,'SAmt')); F('u_nSclAmt',clv(i,'SScA'));
+  F('u_sndOn',clv(i,'SndOn'));
+  gl.uniform1i(U(P,'u_sndSrc'),clv(i,'SndSrc'));
+  F('u_sndGain',clv(i,'SndG')); F('u_sndLift',clv(i,'SndL'));
+  F('u_dOn',clv(i,'DOn')); F('u_dMax',clv(i,'DAmt'));
+  F('u_hueR',clv(i,'HueR')); F('u_sat',clv(i,'Sat')); F('u_instScale',clv(i,'IScl'));
+  gl.uniform1i(U(P,'u_flat'),clv(i,'Flat')>0.5?1:0);
+  F('u_fogOn',clv(i,'Fog')); F('u_fogD',clv(i,'FogD'));
+  F('u_keyI',clv(i,'Key')); F('u_rimI',clv(i,'Rim')); F('u_amb',clv(i,'Amb'));
+  F('u_wire',0);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+  gl.drawElementsInstanced(gl.TRIANGLES,g.n,gl.UNSIGNED_INT,0,clInstCount[i]);
+  if(clv(i,'Wire')>0.5){
+    F('u_wire',1);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,g.edge);
+    gl.drawElementsInstanced(gl.LINES,g.ne,gl.UNSIGNED_INT,0,clInstCount[i]);
+  }
+  gl.disable(gl.DEPTH_TEST);
+  for(let a=0;a<4;a++){ gl.vertexAttribDivisor(a,0); gl.disableVertexAttribArray(a); }
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,null);
+  gl.bindBuffer(gl.ARRAY_BUFFER,null);
 }
 </script>
 <script>
 'use strict';
 /* ================= RENDER PIPELINE =================
    layers -> combine -> feedback(ping-pong) -> kaleido -> glitch -> grade -> screen */
-const SRC_KEYS = ['tunnel','flow','nebula','plugin'];
+const SRC_KEYS = ['tunnel','flow','nebula','plugin','cloner'];
 let beatPulse=0;
 function snapBeat(v){
   const divs=[0.25,0.5,1,2,4];
@@ -868,6 +1403,7 @@ function renderLayer(i,t){
   const T=layerT[i];
   gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
   gl.viewport(0,0,T.w,T.h);
+  if(S.layers[i].src===4){ renderCloner(i,t,T); return; }
   gl.clearColor(0,0,0,1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   if(!layerEnabled(i)) return;
@@ -1195,7 +1731,7 @@ function buildLayers(){
     const src=document.createElement('select'); src.className='srcsel'; src.title='Layer source';
     LAYER_SRC.forEach((s,si)=>src.appendChild(new Option(s,si)));
     src.value=L.src;
-    src.addEventListener('change',()=>{ L.src=parseInt(src.value,10); saveState(); });
+    src.addEventListener('change',()=>{ L.src=parseInt(src.value,10); saveState(); buildLayers(); });
     head.appendChild(src);
     const bSolo=el('button','tbtn'+(L.solo?' onS':''),'S'); bSolo.title='Solo this layer';
     bSolo.addEventListener('click',(e)=>{ e.stopPropagation(); L.solo=!L.solo; bSolo.classList.toggle('onS',L.solo); saveState(); });
@@ -1215,9 +1751,211 @@ function buildLayers(){
     paramRow(body,p+'op','Opacity'); paramRow(body,p+'speed','Speed');
     paramRow(body,p+'hue','Hue');    paramRow(body,p+'audio','Audio');
     paramRow(body,p+'p1','Param 1'); paramRow(body,p+'p2','Param 2');
+    if(L.src===4) buildClonerUI(body,i);
     card.appendChild(body);
     host.appendChild(card);
   }
+}
+</script>
+<script>
+'use strict';
+/* ================= CLONER 3D — UI (v1.1) =================
+   discreteRow: dropdown param (MIDI-learnable, macro-assignable like sliders).
+   toggleRow:   checkbox param (same). Both register SYNC_FN overrides because
+   setParam's default sync assumes range inputs. */
+function macroSub(wrap,id){
+  const sub=el('div','psub');
+  const ml=el('span','mlab','macro \u2192'); sub.appendChild(ml);
+  const ms=document.createElement('select'); ms.className='msel'; ms.title='Assign a macro knob';
+  ms.appendChild(new Option('none','-1'));
+  for(let m=0;m<8;m++) ms.appendChild(new Option('M'+(m+1),String(m)));
+  const as=S.assigns[id]||{m:-1,d:1};
+  ms.value=String(as.m);
+  ms.addEventListener('change',()=>{
+    const cur=S.assigns[id]||{m:-1,d:1};
+    cur.m=parseInt(ms.value,10);
+    S.assigns[id]=cur; saveState();
+  });
+  sub.appendChild(ms);
+  const dp=document.createElement('input');
+  dp.type='range'; dp.min=0; dp.max=1; dp.step=0.01; dp.value=as.d;
+  dp.className='mdep'; dp.title='Macro depth';
+  dp.addEventListener('input',()=>{
+    const cur=S.assigns[id]||{m:-1,d:1};
+    cur.d=parseFloat(dp.value); S.assigns[id]=cur; saveState();
+  });
+  sub.appendChild(dp);
+  wrap.appendChild(sub);
+}
+function discVal(id){
+  const p=PARAMS[id], n=p.nopts||2;
+  const v=(S.params[id]!==undefined)?S.params[id]:p.def;
+  return Math.min(n-1,Math.round(v*(n-1)));
+}
+function discreteRow(parent,id,short,options,onChange){
+  const def=PARAMS[id], n=options.length;
+  def.nopts=n;
+  const wrap=el('div','prow');
+  const line=el('div','pline');
+  const lab=el('label'); lab.textContent=short||def.label; lab.title=def.label;
+  line.appendChild(lab);
+  const se=document.createElement('select'); se.className='dsel';
+  se.setAttribute('data-ctrl',id); se.title=def.label+' \u2014 click while MIDI Learn is armed to map';
+  options.forEach((o,oi)=>se.appendChild(new Option(o,oi)));
+  se.value=String(discVal(id));
+  se.addEventListener('change',()=>{
+    const idx2=parseInt(se.value,10);
+    setParam(id,idx2/(n-1),se);
+    if(onChange) onChange(idx2);
+  });
+  SYNC_FN[id]=(elm,v)=>{ elm.value=String(Math.min(n-1,Math.round(v*(n-1)))); };
+  CTRLS[id]={set:v=>setParam(id,clamp(v,0,1)),label:def.label};
+  line.appendChild(se);
+  const vv=el('span','pval',options[discVal(id)]); vv.setAttribute('data-val',id);
+  line.appendChild(vv);
+  wrap.appendChild(line);
+  macroSub(wrap,id);
+  parent.appendChild(wrap);
+}
+function toggleRow(parent,id,short){
+  const def=PARAMS[id];
+  const wrap=el('div','prow');
+  const line=el('div','pline');
+  const lab=el('label'); lab.textContent=short||def.label; lab.title=def.label;
+  line.appendChild(lab);
+  const ckw=el('span','ckrow');
+  const ck=document.createElement('input'); ck.type='checkbox';
+  ck.setAttribute('data-ctrl',id); ck.title=def.label+' \u2014 click while MIDI Learn is armed to map';
+  ck.checked=((S.params[id]!==undefined)?S.params[id]:def.def)>=0.5;
+  ck.addEventListener('change',()=>setParam(id,ck.checked?1:0,ck));
+  SYNC_FN[id]=(elm,v)=>{ elm.checked=v>=0.5; };
+  CTRLS[id]={set:v=>setParam(id,v>=0.5?1:0),label:def.label};
+  ckw.appendChild(ck);
+  line.appendChild(ckw);
+  const vv=el('span','pval',ck.checked?'on':'off'); vv.setAttribute('data-val',id);
+  line.appendChild(vv);
+  wrap.appendChild(line);
+  macroSub(wrap,id);
+  parent.appendChild(wrap);
+}
+function cgrp(parent,title,open){
+  const d=el('details','cgrp'); if(open) d.open=true;
+  const s=el('summary'); s.textContent=title; d.appendChild(s);
+  const b=el('div','csub'); d.appendChild(b); parent.appendChild(d);
+  return b;
+}
+function showModeSub(i,v){
+  const g=$('clmodeG'+i), r=$('clmodeR'+i), l=$('clmodeL'+i);
+  if(g) g.style.display=v===0?'':'none';
+  if(r) r.style.display=v===1?'':'none';
+  if(l) l.style.display=v===2?'':'none';
+}
+const CL_LAYOUT_IDS=['Mode','CntX','CntY','CntZ','SpX','SpY','SpZ','RCnt','Rad','Arc',
+                     'Plane','LCnt','StpX','StpY','StpZ','Seed','Mesh'];
+/* Pre-register every cloner param in the MIDI-learn registry for all 4 layers,
+   even when that layer's cloner UI isn't built (UI only builds for layers
+   with src == Cloner 3D). Bound CCs then work regardless of visible UI;
+   discreteRow/toggleRow re-register the same semantics when the UI builds. */
+for(let _ri=0;_ri<4;_ri++){
+  const _rp='L'+_ri+'.cl';
+  Object.keys(PARAMS).forEach(_pid=>{
+    if(_pid.indexOf(_rp)===0 && !CTRLS[_pid]){
+      const _isTgl=PARAMS[_pid].fmt===clTglFmt;
+      CTRLS[_pid]={set:v=>setParam(_pid,_isTgl?(v>=0.5?1:0):clamp(v,0,1)),
+                  label:PARAMS[_pid].label};
+    }
+  });
+}
+/* Global param hooks (registered once): any setParam on a layout-affecting
+   cloner param flags that layer's instance buffer for rebuild; Mode changes
+   also retoggle the conditional subgroups. This covers MIDI, phone remote,
+   macro, and preset-driven changes — not just direct UI interaction. */
+for(let _hi=0;_hi<4;_hi++){
+  const _pre='L'+_hi+'.cl';
+  CL_LAYOUT_IDS.forEach(suf=>{
+    const _id=_pre+suf;
+    (PARAM_HOOKS[_id]=PARAM_HOOKS[_id]||[]).push(()=>{ clonerDirty[_hi]=true; });
+  });
+  const _mid=_pre+'Mode';
+  (PARAM_HOOKS[_mid]=PARAM_HOOKS[_mid]||[]).push(()=>{ showModeSub(_hi,discVal(_mid)); });
+}
+function buildClonerUI(body,i){
+  const pre='L'+i+'.cl';
+  clonerDirty[i]=true; /* preset apply / src switch may have changed layout */
+  const box=el('div','clonerbox'); box.id='clbox'+i;
+  /* ---- cloner mode ---- */
+  const gM=cgrp(box,'Cloner mode',true);
+  discreteRow(gM,pre+'Mode','Mode',CL_MODES,(v)=>{ clonerDirty[i]=true; showModeSub(i,v); });
+  const subG=el('div'); subG.id='clmodeG'+i; gM.appendChild(subG);
+  const subR=el('div'); subR.id='clmodeR'+i; gM.appendChild(subR);
+  const subL=el('div'); subL.id='clmodeL'+i; gM.appendChild(subL);
+  paramRow(subG,pre+'CntX','Count X'); paramRow(subG,pre+'CntY','Count Y');
+  paramRow(subG,pre+'CntZ','Count Z');
+  paramRow(subG,pre+'SpX','Space X'); paramRow(subG,pre+'SpY','Space Y');
+  paramRow(subG,pre+'SpZ','Space Z');
+  paramRow(subR,pre+'RCnt','Count'); paramRow(subR,pre+'Rad','Radius');
+  paramRow(subR,pre+'Arc','Arc');
+  discreteRow(subR,pre+'Plane','Plane',CL_PLANES,()=>{ clonerDirty[i]=true; });
+  paramRow(subL,pre+'LCnt','Count');
+  paramRow(subL,pre+'StpX','Step X'); paramRow(subL,pre+'StpY','Step Y');
+  paramRow(subL,pre+'StpZ','Step Z');
+  showModeSub(i,discVal(pre+'Mode'));
+  /* ---- mesh ---- */
+  const gMe=cgrp(box,'Mesh',false);
+  discreteRow(gMe,pre+'Mesh','Mesh',CL_MESHES,()=>{ clonerDirty[i]=true; });
+  toggleRow(gMe,pre+'Flat','Flat shade');
+  toggleRow(gMe,pre+'Wire','Wireframe');
+  paramRow(gMe,pre+'IScl','Inst scale');
+  paramRow(gMe,pre+'HueR','Hue range');
+  paramRow(gMe,pre+'Sat','Saturation');
+  /* ---- effectors ---- */
+  const gE=cgrp(box,'Effectors',true);
+  const eP=cgrp(gE,'Plain',true);
+  toggleRow(eP,pre+'POn','Enabled');
+  toggleRow(eP,pre+'PPos','Position'); toggleRow(eP,pre+'PRt','Rotation');
+  toggleRow(eP,pre+'PSl','Scale');
+  paramRow(eP,pre+'PStr','Strength');
+  paramRow(eP,pre+'PPx','Pos X'); paramRow(eP,pre+'PPy','Pos Y'); paramRow(eP,pre+'PPz','Pos Z');
+  paramRow(eP,pre+'PRx','Rot X'); paramRow(eP,pre+'PRy','Rot Y'); paramRow(eP,pre+'PRz','Rot Z');
+  paramRow(eP,pre+'PSx','Scl X'); paramRow(eP,pre+'PSy','Scl Y'); paramRow(eP,pre+'PSz','Scl Z');
+  discreteRow(eP,pre+'PFall','Falloff',CL_FALLS);
+  toggleRow(eP,pre+'PInv','Invert');
+  paramRow(eP,pre+'PSize','Fall size'); paramRow(eP,pre+'PSpd','Fall speed');
+  const eR=cgrp(gE,'Random',false);
+  toggleRow(eR,pre+'ROn','Enabled');
+  paramRow(eR,pre+'Seed','Seed');
+  const rrw=el('div','prow');
+  const rb=el('button','reroll','re-roll seed'); rb.title='Randomize the seed';
+  rb.addEventListener('click',()=>{ setParam(pre+'Seed',Math.random()); clonerDirty[i]=true; });
+  rrw.appendChild(rb); eR.appendChild(rrw);
+  paramRow(eR,pre+'RPx','Pos X'); paramRow(eR,pre+'RPy','Pos Y'); paramRow(eR,pre+'RPz','Pos Z');
+  paramRow(eR,pre+'RRx','Rot X'); paramRow(eR,pre+'RRy','Rot Y'); paramRow(eR,pre+'RRz','Rot Z');
+  paramRow(eR,pre+'RSx','Scl X'); paramRow(eR,pre+'RSy','Scl Y'); paramRow(eR,pre+'RSz','Scl Z');
+  const eS=cgrp(gE,'Shader',false);
+  toggleRow(eS,pre+'SOn','Enabled');
+  paramRow(eS,pre+'SScl','Noise scale'); paramRow(eS,pre+'SSpd','Noise speed');
+  paramRow(eS,pre+'SAmt','Displace'); paramRow(eS,pre+'SScA','Scale amt');
+  const eSnd=cgrp(gE,'Sound',false);
+  toggleRow(eSnd,pre+'SndOn','Enabled');
+  discreteRow(eSnd,pre+'SndSrc','Source',CL_SND);
+  paramRow(eSnd,pre+'SndG','Gain'); paramRow(eSnd,pre+'SndL','Lift');
+  const eD=cgrp(gE,'Delay',false);
+  toggleRow(eD,pre+'DOn','Enabled');
+  paramRow(eD,pre+'DAmt','Lag');
+  /* ---- render ---- */
+  const gR=cgrp(box,'Render',false);
+  toggleRow(gR,pre+'Fog','Fog');
+  paramRow(gR,pre+'FogD','Fog dens');
+  paramRow(gR,pre+'Key','Key light'); paramRow(gR,pre+'Rim','Rim light');
+  paramRow(gR,pre+'Amb','Ambient');
+  /* ---- camera ---- */
+  const gC=cgrp(box,'Camera',false);
+  toggleRow(gC,pre+'Orb','Auto orbit');
+  paramRow(gC,pre+'Az','Azimuth'); paramRow(gC,pre+'El','Elevation');
+  paramRow(gC,pre+'Dist','Distance');
+  /* layout-affecting params are covered by the global PARAM_HOOKS registered
+     above (instance rebuild + subgroup toggles on ANY setParam source) */
+  body.appendChild(box);
 }
 </script>
 <script>
