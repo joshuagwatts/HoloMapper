@@ -149,3 +149,73 @@ instancing, fully integrated into the existing param system.
 - Node-graph editor, video/webcam/NDI inputs (still v2 per the v1 plan).
 - Real-GPU perf measurement (SwiftShader only; thousands of instances in
   one instanced draw call by construction).
+
+## HoloMapper Mobile (mobile.html) — 2026-10-07 night
+New file `mobile.html` (~116KB, self-contained, zero network deps): full engine
+standalone on the phone GPU + projection-mapping output stage.
+- Engine core copied VERBATIM from holomapper.html v1.1 (script blocks
+  00,01,02,03,04,05,06,07,08,09,10,12 — params, all 5 sources incl. Cloner 3D,
+  layer combine, feedback/kaleido/glitch/grade chain, audio, MIDI core,
+  presets, row builders). Duplication vs refactor is accepted tech debt.
+  NOT copied: desktop panel builders, desktop static wiring, phone-remote
+  pairing (prm*), vendored QR lib. Mobile redefines: snapshot/applySnapshot
+  (mapping state added), buildLayers/buildPostFx/buildMaster/buildDashboard/
+  buildPerform, init/loop/wiring.
+- Mobile UI: Play tab (8 touch macro knobs w/ double-tap reset + tap-to-rename,
+  tap tempo, blackout, beat-sync, audio+meters, quality selector, 4 collapsible
+  layer cards incl. full Cloner 3D UI), FX tab (feedback/kaleido/glitch/grade/
+  strobe/master, shader plugin editor, MIDI learn section), Map tab (surfaces).
+- Mapping stage: post chain renders to mapSrcT, then per-surface homography warp
+  shader to screen (JS DLT solve + 3x3 inverse). Per surface: enable, opacity,
+  flip H/V, per-edge feather px, rect/ellipse alpha mask (drag move + corner
+  resize, invert), test pattern (grid+rings+crosshair+corner emphasis).
+  Corners draggable via 56px touch handles (z-50, above topbar/tabbar/panel),
+  tap-to-select + nudge pad (fine/med/coarse), "hide panel" for full-canvas
+  calibration, 2D overlay draws outlines + warped mask shapes. Corners stored
+  normalized (y-up) so resize/orientation preserves calibration. Output mode:
+  fullscreen + UI hidden + floating exit + triple-tap exit.
+- Fixed during verification: (1) test-pattern grid was inverted (pink wash) —
+  corrected smoothstep direction; (2) smoothstep(0.004,0.0,…) reversed edges
+  (UB) in crosshair — fixed to (0.0,0.004); (3) topbar overflow on 390px —
+  preset controls moved into Play panel; (4) corner handles hidden under
+  topbar/tabbar/panel — handles layer raised to z-50, mapWrap pointer-events
+  none (mask mode re-enables on overlay canvas only).
+
+### Verification (all actually run)
+- `node --check` on all 15 script blocks: OK.
+- Headless Chromium 152 + SwiftShader, 0 console errors across all runs.
+- Screenshots: mob_play_390.png (engine rendering behind Play UI, knobs, layers),
+  mob_map_390.png / mob_mapopen_390.png (map UI, handles visible incl. over
+  tabbar), mob_test_390.png (test pattern: grid+rings+crosshair correct),
+  mob_play_1024.png / mob_fx_1024.png / mob_map_1024.png (tablet: 8-knob row,
+  FX groups, no overlap/clipping at either size).
+- Corner drag via synthetic PointerEvents: surface corner updated
+  [0,0] -> [0.1026,0.0355] (asserted from S.map).
+- Mask drag via synthetic PointerEvents: mask center moved
+  [0.5,0.5] -> [0.63,0.45] (asserted).
+- Preset round-trip incl. mapping state: save -> mutate corners -> apply ->
+  corners restored exactly. OK.
+- Output mode: body.output toggles, exit button appears, triple-tap path wired
+  (fullscreen request guarded for iOS Safari which lacks the API).
+- Cloner 3D in mobile: 36 instances built, renders (same verbatim render path
+  as desktop v1.1; default camera framing identical to desktop).
+- Handler audit: every `$('id')` referenced in JS exists in the shell (grep:
+  none missing); every control created with its listener inline; static buttons
+  all wired in wireMobile/wireOutput.
+- Screenshots: checks/mob_play_390.png, mob_map_390.png, mob_mapopen_390.png,
+  mob_test_390.png, mob_play_1024.png, mob_fx_1024.png, mob_map_1024.png,
+  mob_cloner_390.png.
+
+### Known limitations / honest notes
+- Headless SwiftShader runs at 1-3 fps; real-device GPU is untested here and is
+  ground truth (same caveat as v1.1). Default internal res 960x540 for thermal
+  headroom; 1280x720 / 640x480 selectable.
+- requestFullscreen is not supported on iPhone Safari — output mode still hides
+  all UI there, but won't take over the screen chrome; triple-tap + floating
+  exit still work.
+- Web MIDI on mobile: kept as a collapsed section (works on Android Chrome);
+  not foregrounded.
+- mobile.html and holomapper.html share localStorage (holomapper.state.v1) when
+  served from the same origin: presets carry over; S.map is ignored by desktop.
+- No pinch-to-move-corner gesture (drag + nudge only); multi-surface
+  projector edge-blend tuning is manual via feather sliders.
