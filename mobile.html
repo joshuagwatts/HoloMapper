@@ -941,7 +941,11 @@ function buildTargets(){
 }
 function initGL(){
   gl = canvas.getContext('webgl2',{antialias:false, alpha:false, powerPreference:'high-performance'});
-  if(!gl){ showErr('WebGL2 is not available in this browser — HoloMapper cannot run.'); return false; }
+  if(!gl){ showErr('WebGL2 is not available in this browser — HoloMapper cannot run. Open this page in Chrome.'); return false; }
+  canvas.addEventListener('webglcontextlost', function(e){
+    e.preventDefault();
+    showErr('Graphics context was lost (this viewer may not support WebGL) — reload, or open in Chrome.');
+  }, false);
   floatOK = !!gl.getExtension('EXT_color_buffer_float');
   return true;
 }
@@ -2936,6 +2940,7 @@ function init(){
   compilePlugin(true);
   initMidi();
   refitCanvas();
+  if(canvas.width < 2 || canvas.height < 2){ showErr('This viewer gives the page no screen space — open in Chrome.'); return; }
   requestAnimationFrame(loop);
 }
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
