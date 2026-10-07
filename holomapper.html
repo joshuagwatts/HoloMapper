@@ -156,6 +156,19 @@ body.perform #performbar{display:block}
 .pmacro .ml{font-size:11px;font-weight:700;color:var(--acc2);margin-bottom:2px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pexit{color:var(--dim);font-size:10px;text-align:center}
+/* v1.2 modulator curve editor */
+.modcv{width:100%;height:104px;background:#0b0e16;border:1px solid var(--line);
+  border-radius:6px;cursor:crosshair;touch-action:none;display:block;margin:4px 0}
+.mbtn{padding:3px 9px;font-size:10px;margin:2px 3px 2px 0;border:1px solid var(--line);
+  background:var(--panel2);color:var(--txt);border-radius:5px;cursor:pointer}
+.mbtn:hover{border-color:var(--acc)}
+.mbtn.on{border-color:var(--acc);color:var(--acc)}
+.tgrow{display:grid;grid-template-columns:minmax(0,1fr) 90px 22px;gap:6px;align-items:center;margin:3px 0}
+.tgrow input[type=range]{min-width:0}
+.tgx{background:none;border:none;color:var(--dim);font-size:13px;cursor:pointer;padding:2px}
+.tgx:hover{color:#ff7b7b}
+.modrow{display:flex;gap:6px;align-items:center;margin:4px 0;flex-wrap:wrap}
+.modrow .dsel{min-width:0}
 ::-webkit-scrollbar{width:9px;height:9px}
 ::-webkit-scrollbar-thumb{background:#2a3342;border-radius:5px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -323,6 +336,170 @@ function showErr(msg){
   b.classList.add('show');
   console.error('[HoloMapper]', msg);
 }
+/* ================= SHAPER MODULATORS — UI (v1.2) =================
+   Drawable LFO curves (ShaperBox-style) driving cloner params. Depth/Rate/
+   Phase/Bipolar are real params (MIDI-learnable, macro-assignable); curve
+   points, smoothing, sync mode, bus, and routings live in S.mods. */
+const MOD_WAVES={
+  sine:[[0,.5],[.125,.854],[.25,1],[.375,.854],[.5,.5],[.625,.146],[.75,0],[.875,.146],[1,.5]],
+  tri:[[0,.5],[.25,1],[.75,0],[1,.5]],
+  saw:[[0,0],[.99,1]],
+  sqr:[[0,1],[.495,1],[.5,0],[.995,0]],
+  rnd:null
+};
+function setModWave(i,m,w){
+  const cfg=S.mods[i][m];
+  if(w==='rnd'){
+    const pts=[];
+    for(let k=0;k<8;k++) pts.push([k/7,Math.random()]);
+    cfg.pts=pts;
+  }else{
+    cfg.pts=MOD_WAVES[w].map(p=>p.slice());
+  }
+  saveState();
+}
+function drawModCurve(cv,cfg){
+  const ctx=cv.getContext('2d'),W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0b0e16';ctx.fillRect(0,0,W,H);
+  /* beat-division grid */
+  ctx.strokeStyle='rgba(120,140,180,0.18)';ctx.lineWidth=1;
+  for(let k=0;k<=4;k++){const x=k/4*W;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  ctx.strokeStyle='rgba(120,140,180,0.28)';
+  ctx.beginPath();ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();
+  /* curve */
+  ctx.strokeStyle='#5eead4';ctx.lineWidth=2;ctx.beginPath();
+  for(let s=0;s<=96;s++){
+    const ph=s/96,v=sampleCurve(cfg.pts,ph,cfg.smooth);
+    const x=ph*W,y=(1-v)*H;
+    if(s===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  /* points */
+  ctx.fillStyle='#c4b5fd';
+  for(const p of cfg.pts){
+    ctx.beginPath();ctx.arc(p[0]*W,(1-p[1])*H,4,0,6.2832);ctx.fill();
+  }
+}
+function wireModCanvas(cv,i,m,draw){
+  const cfg=()=>S.mods[i][m];
+  const pos=e=>{
+    const r=cv.getBoundingClientRect();
+    return [clamp((e.clientX-r.left)/r.width,0,1),clamp(1-(e.clientY-r.top)/r.height,0,1)];
+  };
+  let drag=-1;
+  cv.addEventListener('pointerdown',e=>{
+    const [x,y]=pos(e),pts=cfg().pts;
+    let best=-1,bd=1e9;
+    pts.forEach((p,pi)=>{const d=Math.hypot(p[0]-x,(p[1]-y)*0.45);if(d<bd){bd=d;best=pi;}});
+    if(bd<0.07){drag=best;}
+    else{pts.push([x,y]);pts.sort((a,b)=>a[0]-b[0]);drag=pts.findIndex(p=>p[0]===x&&p[1]===y);}
+    try{cv.setPointerCapture(e.pointerId);}catch(err){}
+    draw();saveState();e.preventDefault();
+  });
+  cv.addEventListener('pointermove',e=>{
+    if(drag<0)return;
+    const [x,y]=pos(e),pts=cfg().pts;
+    pts[drag]=[x,y];pts.sort((a,b)=>a[0]-b[0]);
+    drag=pts.findIndex(p=>p[0]===x&&p[1]===y);
+    draw();
+  });
+  const end=()=>{if(drag>=0){drag=-1;saveState();}};
+  cv.addEventListener('pointerup',end);
+  cv.addEventListener('pointercancel',end);
+  cv.addEventListener('dblclick',e=>{
+    const [x,y]=pos(e),pts=cfg().pts;
+    if(pts.length<=2)return;
+    let best=-1,bd=1e9;
+    pts.forEach((p,pi)=>{const d=Math.hypot(p[0]-x,(p[1]-y)*0.45);if(d<bd){bd=d;best=pi;}});
+    if(bd<0.07){pts.splice(best,1);draw();saveState();}
+  });
+  cv.addEventListener('contextmenu',e=>e.preventDefault());
+}
+/* routable cloner params for the target picker (excludes modulator params) */
+function clonerParamOptions(i){
+  const pre='L'+i+'.cl';
+  return Object.keys(PARAMS)
+    .filter(id=>id.indexOf(pre)===0 && id.indexOf('.clM')!==0)
+    .map(id=>({id:id,label:PARAMS[id].label}));
+}
+function drawModTargets(tg,i,m,refresh){
+  const cfg=S.mods[i][m],opts=clonerParamOptions(i);
+  cfg.targets.forEach((tg2,ti)=>{
+    const row=el('div','tgrow');
+    const se=document.createElement('select');se.className='dsel';se.title='Target cloner param';
+    opts.forEach(o=>se.appendChild(new Option(o.label,o.id)));
+    se.value=PARAMS[tg2.id]?tg2.id:opts[0].id;
+    se.addEventListener('change',()=>{tg2.id=se.value;saveState();});
+    row.appendChild(se);
+    const dp=document.createElement('input');
+    dp.type='range';dp.min=0;dp.max=1;dp.step=0.01;dp.value=tg2.depth;dp.title='Routing depth';
+    dp.addEventListener('input',()=>{tg2.depth=parseFloat(dp.value);});
+    dp.addEventListener('change',()=>saveState());
+    row.appendChild(dp);
+    const x=el('button','tgx','\u00D7');x.title='Remove routing';
+    x.addEventListener('click',()=>{cfg.targets.splice(ti,1);saveState();refresh();});
+    row.appendChild(x);
+    tg.appendChild(row);
+  });
+}
+function buildModulatorsUI(parent,i){
+  const gM=cgrp(parent,'Modulators A\u2013F',false);
+  gM.appendChild(mkHint('Drawable LFOs. Raise a Depth to activate. Double-click a point to delete.'));
+  for(let m=0;m<6;m++){
+    const L=MOD_LETTERS[m],cfg=S.mods[i][m],pre='L'+i+'.clM'+L+'_';
+    const det=el('details','cgrp'),sum=el('summary');
+    sum.textContent='Mod '+L;det.appendChild(sum);
+    const b=el('div','csub');det.appendChild(b);gM.appendChild(det);
+    const cv=document.createElement('canvas');
+    cv.width=248;cv.height=104;cv.className='modcv';
+    cv.title='Click: add point \u00B7 drag: move \u00B7 double-click: delete';
+    b.appendChild(cv);
+    const draw=()=>drawModCurve(cv,cfg);
+    draw();
+    wireModCanvas(cv,i,m,draw);
+    const pr=el('div','modrow');
+    ['sine','tri','saw','sqr','rnd'].forEach(w=>{
+      const btn=el('button','mbtn',w);btn.title='Load '+w+' wave';
+      btn.addEventListener('click',()=>{setModWave(i,m,w);draw();});
+      pr.appendChild(btn);
+    });
+    const slb=el('label');slb.style.cssText='font-size:11px;color:var(--dim)';
+    const sm=document.createElement('input');
+    sm.type='checkbox';sm.checked=cfg.smooth;sm.title='Smooth curve interpolation';
+    sm.addEventListener('change',()=>{cfg.smooth=sm.checked;draw();saveState();});
+    slb.appendChild(sm);slb.appendChild(document.createTextNode(' smooth'));
+    pr.appendChild(slb);b.appendChild(pr);
+    const sy=el('div','modrow');
+    const ssel=document.createElement('select');ssel.className='dsel';ssel.title='Sync mode';
+    [['bpm','BPM Sync'],['free','Free Hz'],['audio','Audio Follow']]
+      .forEach(([v,t])=>ssel.appendChild(new Option(t,v)));
+    ssel.value=cfg.sync;
+    const busSel=document.createElement('select');busSel.className='dsel';busSel.title='Audio bus';
+    ['bass','mid','high'].forEach(b2=>busSel.appendChild(new Option(b2[0].toUpperCase()+b2.slice(1),b2)));
+    busSel.value=cfg.bus;
+    busSel.style.display=cfg.sync==='audio'?'':'none';
+    ssel.addEventListener('change',()=>{
+      cfg.sync=ssel.value;busSel.style.display=cfg.sync==='audio'?'':'none';saveState();});
+    busSel.addEventListener('change',()=>{cfg.bus=busSel.value;saveState();});
+    sy.appendChild(ssel);sy.appendChild(busSel);b.appendChild(sy);
+    paramRow(b,pre+'Rate','Rate');paramRow(b,pre+'Depth','Depth');
+    paramRow(b,pre+'Phase','Phase');toggleRow(b,pre+'Bip','Bipolar');
+    const tg=el('div');b.appendChild(tg);
+    const refresh=()=>{tg.innerHTML='';drawModTargets(tg,i,m,refresh);};
+    refresh();
+    const add=el('button','mbtn','+ route target');
+    add.title='Route this modulator to a cloner param (up to 4)';
+    add.addEventListener('click',()=>{
+      if(cfg.targets.length<4){
+        const opts=clonerParamOptions(i);
+        cfg.targets.push({id:opts[0].id,depth:0.5});
+        saveState();refresh();
+      }
+    });
+    b.appendChild(add);
+  }
+}
 </script>
 <script>
 'use strict';
@@ -365,7 +542,7 @@ const LAYER_SRC   = ['Tunnel','Flow Field','Nebula','Plugin','Cloner 3D'];
 const BLENDS      = ['Normal','Add','Screen','Multiply','Overlay','Difference'];
 /* Cloner 3D option lists (shared by param defs and UI builders) */
 const CL_MODES=['Grid','Radial','Linear'];
-const CL_MESHES=['Icosahedron','Torus Knot','Box','Tetra'];
+const CL_MESHES=['Icosahedron','Torus Knot','Box','Tetra','Torus','Cone','Cylinder','Capsule','Helix','Star','Gem','Diamond','Flower','Particles'];
 const CL_FALLS=['Infinite','Linear','Sphere','Box'];
 const CL_SND=['Bass','Mid','High','Beat'];
 const CL_PLANES=['XY','XZ','YZ'];
@@ -404,7 +581,7 @@ for(let i=0;i<4;i++){
   defParam(c+'StpY',LB+'Step Y',0.5,   v=>(v-0.5)*4, v=>((v-0.5)*4).toFixed(2));
   defParam(c+'StpZ',LB+'Step Z',0.5,   v=>(v-0.5)*4, v=>((v-0.5)*4).toFixed(2));
   /* mesh */
-  defParam(c+'Mesh',LB+'Mesh',0, clDiscMap(4), clDiscFmt(CL_MESHES));
+  defParam(c+'Mesh',LB+'Mesh',0, clDiscMap(14), clDiscFmt(CL_MESHES));
   defParam(c+'Flat',LB+'Flat Shade',0, v=>v, clTglFmt);
   defParam(c+'Wire',LB+'Wireframe',0, v=>v, clTglFmt);
   defParam(c+'IScl',LB+'Instance Scale',0.22, v=>0.1+v*1.9, v=>(0.1+v*1.9).toFixed(2));
@@ -466,12 +643,58 @@ for(let i=0;i<4;i++){
   defParam(c+'Az',LB+'Azimuth',0.125, v=>v*360, v=>Math.round(v*360)+'\u00B0');
   defParam(c+'El',LB+'Elevation',0.62);
   defParam(c+'Dist',LB+'Distance',0.25, v=>2+v*28, v=>(2+v*28).toFixed(1));
+  /* ---- spectral materials (v1.2) ---- */
+  defParam(c+'Mat',LB+'Material',0, clDiscMap(2), clDiscFmt(['Standard','Spectral']));
+  defParam(c+'Metal',LB+'Metallic',0.15);
+  defParam(c+'Rough',LB+'Roughness',0.4);
+  defParam(c+'IOR',LB+'IOR',0.28, v=>1.0+v*1.5, v=>(1.0+v*1.5).toFixed(2));
+  defParam(c+'Disp',LB+'Dispersion',0.35, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'Film',LB+'Film Thick',0.4, v=>v*3, v=>(v*3).toFixed(2));
+  defParam(c+'Iri',LB+'Iridescence',0.0);
+  defParam(c+'AbsH',LB+'Absorb Hue',0.55, v=>v, v=>Math.round(v*360)+'\u00B0');
+  defParam(c+'AbsD',LB+'Absorb Dens',0.0);
+  defParam(c+'Env',LB+'Env Refl',0.8, v=>v*2.5, v=>(v*2.5).toFixed(2));
+  defParam(c+'ACES',LB+'ACES',1, v=>v, clTglFmt);
+  defParam(c+'Exp',LB+'Exposure',0.5, v=>0.25+v*2.75, v=>(0.25+v*2.75).toFixed(2));
+  defParam(c+'Bloom',LB+'Bloom',0, v=>v, clTglFmt);
+  defParam(c+'BlmT',LB+'Bloom Thr',0.55, v=>v*2.5, v=>(v*2.5).toFixed(2));
+  defParam(c+'BlmS',LB+'Bloom Str',0.4, v=>v*3, v=>(v*3).toFixed(2));
+  defParam(c+'Ground',LB+'Ground',0, v=>v, clTglFmt);
+  /* ---- flowers (v1.2) ---- */
+  defParam(c+'FPet',LB+'Petals',5/13, clIntMap(3,16), clIntFmt(3,16));
+  defParam(c+'FLen',LB+'Petal Len',0.4, v=>0.4+v*1.8, v=>(0.4+v*1.8).toFixed(2));
+  defParam(c+'FWid',LB+'Petal Wid',0.35, v=>0.12+v*0.6, v=>(0.12+v*0.6).toFixed(2));
+  defParam(c+'FCurl',LB+'Petal Curl',0.65, v=>(v-0.5)*2, v=>((v-0.5)*2).toFixed(2));
+  defParam(c+'FBloom',LB+'Bloom Open',0.65);
+  defParam(c+'FBud',LB+'Bud Size',0.4, v=>0.05+v*0.35, v=>(0.05+v*0.35).toFixed(2));
+  defParam(c+'FStem',LB+'Stem',1, v=>v, clTglFmt);
+  /* ---- particles (v1.2) ---- */
+  defParam(c+'PtN',LB+'Particles',0.28, v=>Math.round(100+v*3900), v=>String(Math.round(100+v*3900)));
+  defParam(c+'PtShape',LB+'Emit Shape',0, clDiscMap(3), clDiscFmt(['Box','Sphere','Disc']));
+  defParam(c+'PtSpd',LB+'Velocity',0.35, v=>v*6, v=>(v*6).toFixed(2));
+  defParam(c+'PtTurb',LB+'Turbulence',0.3, v=>v*4, v=>(v*4).toFixed(2));
+  defParam(c+'PtLife',LB+'Life',0.35, v=>0.5+v*7.5, v=>(0.5+v*7.5).toFixed(1)+'s');
+  defParam(c+'PtSize',LB+'Size',0.3, v=>0.05+v*1.2, v=>(0.05+v*1.2).toFixed(2));
+  defParam(c+'PtDrag',LB+'Drag',0.25, v=>v*4, v=>(v*4).toFixed(2));
+  defParam(c+'PtColA',LB+'Color A',0.55, v=>v, v=>Math.round(v*360)+'\u00B0');
+  defParam(c+'PtColB',LB+'Color B',0.85, v=>v, v=>Math.round(v*360)+'\u00B0');
+  defParam(c+'PtBurst',LB+'Audio Burst',0.4, v=>v*3, v=>(v*3).toFixed(2));
+  /* ---- shaper modulators A-F (v1.2): depth/rate/phase/bipolar are real
+     params (MIDI-learnable, macro-assignable); curve+sync+targets live in S.mods ---- */
+  for(let m=0;m<6;m++){
+    const ML='ABCDEF'[m], ml=LB+'Mod '+ML+' ';
+    defParam(c+'M'+ML+'_Depth',ml+'Depth',0);
+    defParam(c+'M'+ML+'_Rate',ml+'Rate',0.5);
+    defParam(c+'M'+ML+'_Phase',ml+'Phase',0);
+    defParam(c+'M'+ML+'_Bip',ml+'Bipolar',0, v=>v, clTglFmt);
+  }
 }
 /* discrete option counts, so discVal() works even before the UI is built */
 for(let i=0;i<4;i++){
   const c='L'+i+'.cl';
   PARAMS[c+'Mode'].nopts=3; PARAMS[c+'Plane'].nopts=3;
-  PARAMS[c+'Mesh'].nopts=4; PARAMS[c+'PFall'].nopts=4; PARAMS[c+'SndSrc'].nopts=4;
+  PARAMS[c+'Mesh'].nopts=14; PARAMS[c+'PFall'].nopts=4; PARAMS[c+'SndSrc'].nopts=4;
+  PARAMS[c+'Mat'].nopts=2; PARAMS[c+'PtShape'].nopts=3;
 }
 defParam('P.trails','FB Trails',    0.55);
 defParam('P.zoom',  'FB Zoom',      1/3, v=>0.9+v*0.3,      v=>(0.9+v*0.3).toFixed(3)+'x');
@@ -495,6 +718,41 @@ defParam('P.master','Master',       1,   v=>v,              v=>Math.round(v*100)
 
 /* ================= STATE ================= */
 const LS_STATE='holomapper.state.v1', LS_MIDI='holomapper.midi.v1', LS_PRESETS='holomapper.presets.v1';
+/* ---- ShaperBox-style modulators (v1.2): 6 per layer (A-F). Curve + sync +
+   targets live here; Depth/Rate/Phase/Bipolar are real params (above). ---- */
+const MOD_LETTERS='ABCDEF';
+function defaultMod(){
+  return {pts:[[0,0.5],[0.25,1],[0.5,0.5],[0.75,0],[1,0.5]],
+          smooth:true, sync:'bpm', bus:'bass', targets:[]};
+}
+function defaultMods(){
+  const a=[];
+  for(let i=0;i<4;i++){ const l=[]; for(let m=0;m<6;m++) l.push(defaultMod()); a.push(l); }
+  return a;
+}
+function sanitizeMods(m){
+  try{
+    if(!Array.isArray(m)||m.length!==4) return defaultMods();
+    return m.map(layer=>{
+      if(!Array.isArray(layer)||layer.length!==6) return defaultMods()[0];
+      return layer.map(c=>{
+        const pts=(Array.isArray(c.pts)&&c.pts.length>=2)
+          ? c.pts.map(p=>[clamp(+p[0]||0,0,1),clamp((+p[1]===undefined?0.5:+p[1]),0,1)])
+          : defaultMod().pts;
+        pts.sort((a,b)=>a[0]-b[0]);
+        return {
+          pts:pts, smooth:!!c.smooth,
+          sync:['bpm','free','audio'].indexOf(c.sync)>=0?c.sync:'bpm',
+          bus:['bass','mid','high'].indexOf(c.bus)>=0?c.bus:'bass',
+          rate:clamp(+c.rate||0,0,1), phase:clamp(+c.phase||0,0,1), bip:!!c.bip,
+          targets:(Array.isArray(c.targets)?c.targets:[]).slice(0,4)
+            .map(t=>({id:String(t.id),depth:clamp(+t.depth||0,0,1)}))
+            .filter(t=>PARAMS[t.id])
+        };
+      });
+    });
+  }catch(e){ return defaultMods(); }
+}
 function defaultState(){
   const params={};
   for(const id in PARAMS) params[id]=PARAMS[id].def;
@@ -510,7 +768,7 @@ function defaultState(){
     postBypass:{feedback:false, kaleido:true, glitch:true},
     strobeOn:false, beatSync:false, bpm:120, blackout:false,
     macros:Array.from({length:8},(_,i)=>({label:'M'+(i+1), val:0.5})),
-    midi:[], pluginCode:PLUGIN_DEFAULT
+    midi:[], pluginCode:PLUGIN_DEFAULT, mods:defaultMods()
   };
 }
 let S = defaultState();
@@ -527,11 +785,15 @@ const saveState = debounce(()=>{
   }catch(e){/* storage full / private mode — keep going */}
 },400);
 
-/* Effective value: base + macro contribution (scaled by depth), clamped. */
+/* Effective value: base + macro contribution (scaled by depth) + modulator
+   offsets, clamped. MOD_OFF is rebuilt every frame by evalModulators(). */
+const MOD_OFF={};
 function eff(id){
   let v = (S.params[id]!==undefined) ? S.params[id] : PARAMS[id].def;
   const a = S.assigns[id];
   if(a && a.m>=0 && a.m<8) v += S.macros[a.m].val * (a.d||0);
+  const mo = MOD_OFF[id];
+  if(mo) v += mo;
   return clamp(v,0,1);
 }
 /* Control registry: every MIDI-learnable control registers here. */
@@ -561,6 +823,58 @@ function setMacro(i, v01, fromEl){
 }
 /* MIDI learn arming state */
 let learnArmed=false, pendingCtrl=null;
+
+/* ---- modulator evaluation (v1.2) ---- */
+function sampleCurve(pts,ph,smooth){
+  const n=pts.length;
+  if(n<2) return 0.5;
+  let j=0;
+  for(let k=0;k<n;k++){ if(pts[k][0]<=ph) j=k; }
+  const p0=pts[j], p1=pts[(j+1)%n];
+  let x0=p0[0], x1=p1[0];
+  if(x1<=x0) x1+=1;
+  let f=(ph-x0)/Math.max(x1-x0,1e-6);
+  f=clamp(f,0,1);
+  if(smooth) f=0.5-0.5*Math.cos(f*Math.PI);
+  return p0[1]+(p1[1]-p0[1])*f;
+}
+function modValue(i,m,t){
+  const L=MOD_LETTERS[m], cfg=S.mods[i][m];
+  const pre='L'+i+'.clM'+L+'_';
+  const rate=eff(pre+'Rate'), phase=eff(pre+'Phase');
+  let ph;
+  if(cfg.sync==='free'){
+    ph=(t*(0.02+rate*7.98)+phase)%1;
+  }else if(cfg.sync==='audio'){
+    const b=cfg.bus==='mid'?midSm:(cfg.bus==='high'?highSm:bassSm);
+    ph=(b+phase)%1;
+  }else{
+    const divs=[0.5,1,2,4,8,16], bp=divs[Math.min(5,Math.round(rate*5))];
+    ph=((t*S.bpm/60)/bp+phase)%1;
+  }
+  if(ph<0) ph+=1;
+  let v=sampleCurve(cfg.pts,ph,cfg.smooth);
+  if(eff(pre+'Bip')>0.5) v=v*2-1;
+  return v;
+}
+/* Rebuild MOD_OFF once per frame, before any renderLayer call. */
+function evalModulators(t){
+  for(const k in MOD_OFF) delete MOD_OFF[k];
+  for(let i=0;i<4;i++){
+    for(let m=0;m<6;m++){
+      const L=MOD_LETTERS[m], cfg=S.mods[i][m];
+      if(!cfg.targets.length) continue;
+      const d=eff('L'+i+'.clM'+L+'_Depth');
+      if(d<=0.001) continue;
+      const v=modValue(i,m,t);
+      if(v===0) continue;
+      for(const tg of cfg.targets){
+        if(!PARAMS[tg.id]) continue;
+        MOD_OFF[tg.id]=(MOD_OFF[tg.id]||0)+v*d*tg.depth;
+      }
+    }
+  }
+}
 </script>
 <script>
 'use strict';
@@ -861,7 +1175,7 @@ let gl=null, floatOK=false, quadBuf=null;
 let lastGlslErr='';
 const PROG = {};
 let RW=1280, RH=720;
-let layerT=[], compT=null, fbT=[], postT=[];
+let layerT=[], compT=null, fbT=[], postT=[], bloomT=[];
 let fbRead=0;
 
 function compileShader(type, src){
@@ -908,6 +1222,11 @@ function initQuad(){
 }
 function drawQuad(prog){
   gl.useProgram(prog);
+  quadDraw();
+}
+/* draw the fullscreen quad with the current program; caller must have set
+   program, textures and uniforms BEFORE calling (v1.2: fixed draw-before-bind) */
+function quadDraw(){
   gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -945,6 +1264,7 @@ function buildTargets(){
   compT=makeTarget(RW,RH);
   fbT=[makeTarget(RW,RH),makeTarget(RW,RH)];
   postT=[makeTarget(RW,RH),makeTarget(RW,RH)];
+  bloomT=[makeTarget(RW>>1,RH>>1),makeTarget(RW>>1,RH>>1)]; /* v1.2 bloom chain */
   fbRead=0;
   const all=[...layerT,compT,...fbT,...postT];
   if(all.some(t=>!t.ok)) showErr('A render target is framebuffer-incomplete — visuals may be broken.');
@@ -965,7 +1285,10 @@ function compileAll(){
     ['kaleido', SRC_KALEIDO],
     ['glitch',  SRC_GLITCH],
     ['grade',   SRC_GRADE],
-    ['copy',    SRC_COPY]
+    ['copy',    SRC_COPY],
+    ['bloombp', SRC_BLOOMBP],
+    ['bloomblur',SRC_BLOOMBLUR],
+    ['bloomadd',SRC_BLOOMADD]
   ];
   for(const [name,fs] of jobs){
     const pr = makeProgram(VERT, fs);
@@ -976,6 +1299,11 @@ function compileAll(){
     const pr = makeProgram(CL_VERT_SRC, CL_FRAG_SRC);
     if(!pr){ showErr('Shader "cloner" failed: '+lastGlslErr); return false; }
     PROG.cloner=pr;
+  }
+  { /* Cloner ground plane (v1.2) */
+    const pr = makeProgram(CL_GROUND_VERT, CL_GROUND_FRAG);
+    if(!pr){ showErr('Shader "clground" failed: '+lastGlslErr); return false; }
+    PROG.clground=pr;
   }
   return true;
 }
@@ -1091,11 +1419,218 @@ function clEdges(idx){
   }
   return new Uint32Array(e);
 }
-let CLGEO=null;
+let CLGEO=null, CLGND=null;
+/* ---- v1.2 mesh builders: hella primitives ---- */
+function clBuildTorus(){
+  const R=0.68,r=0.26,segT=56,segR=20,pos=[],nor=[],idx=[];
+  for(let i=0;i<=segT;i++){const u=i/segT*Math.PI*2,cu=Math.cos(u),su=Math.sin(u);
+    for(let j=0;j<=segR;j++){const v=j/segR*Math.PI*2,cv=Math.cos(v),sv=Math.sin(v);
+      pos.push((R+r*cv)*cu,(R+r*cv)*su,r*sv); nor.push(cv*cu,cv*su,sv);}}
+  for(let i=0;i<segT;i++)for(let j=0;j<segR;j++){
+    const a=i*(segR+1)+j,b=a+segR+1; idx.push(a,b,a+1,b,b+1,a+1);}
+  return {pos:new Float32Array(pos),nor:new Float32Array(nor),idx:new Uint32Array(idx)};
+}
+function clBuildCone(){
+  const R=0.8,H=1.6,seg=28,pos=[],nor=[],idx=[];
+  pos.push(0,H/2,0); nor.push(0,1,0);
+  const sl=Math.hypot(R,H),nx=R/sl,ny=H/sl;
+  for(let i=0;i<=seg;i++){const a=i/seg*Math.PI*2;
+    pos.push(R*Math.cos(a),-H/2,R*Math.sin(a)); nor.push(nx*Math.cos(a),ny,nx*Math.sin(a));}
+  for(let i=0;i<seg;i++) idx.push(0,1+i+1,1+i);
+  const bc=pos.length/3; pos.push(0,-H/2,0); nor.push(0,-1,0);
+  const br=pos.length/3;
+  for(let i=0;i<=seg;i++){const a=i/seg*Math.PI*2;
+    pos.push(R*Math.cos(a),-H/2,R*Math.sin(a)); nor.push(0,-1,0);}
+  for(let i=0;i<seg;i++) idx.push(bc,br+i,br+i+1);
+  return {pos:new Float32Array(pos),nor:new Float32Array(nor),idx:new Uint32Array(idx)};
+}
+function clBuildCylinder(){
+  const R=0.7,H=1.5,seg=28,pos=[],nor=[],idx=[];
+  for(let i=0;i<=seg;i++){const a=i/seg*Math.PI*2,c=Math.cos(a),s=Math.sin(a);
+    pos.push(R*c,H/2,R*s); nor.push(c,0,s);}
+  for(let i=0;i<=seg;i++){const a=i/seg*Math.PI*2,c=Math.cos(a),s=Math.sin(a);
+    pos.push(R*c,-H/2,R*s); nor.push(c,0,s);}
+  for(let i=0;i<seg;i++){const a=i,b=i+1,c2=seg+1+i,d=seg+1+i+1;idx.push(a,b,c2,b,d,c2);}
+  const tc=pos.length/3; pos.push(0,H/2,0); nor.push(0,1,0);
+  const tr=pos.length/3;
+  for(let i=0;i<=seg;i++){const a=i/seg*Math.PI*2;pos.push(R*Math.cos(a),H/2,R*Math.sin(a));nor.push(0,1,0);}
+  for(let i=0;i<seg;i++)idx.push(tc,tr+i+1,tr+i);
+  const bc=pos.length/3; pos.push(0,-H/2,0); nor.push(0,-1,0);
+  const br=pos.length/3;
+  for(let i=0;i<=seg;i++){const a=i/seg*Math.PI*2;pos.push(R*Math.cos(a),-H/2,R*Math.sin(a));nor.push(0,-1,0);}
+  for(let i=0;i<seg;i++)idx.push(bc,br+i,br+i+1);
+  return {pos:new Float32Array(pos),nor:new Float32Array(nor),idx:new Uint32Array(idx)};
+}
+function clBuildCapsule(){
+  const R=0.5,CL=0.7,seg=24,prof=[],nr=10;
+  for(let i=0;i<=nr;i++){const a=-Math.PI/2+i/nr*Math.PI/2;
+    prof.push([R*Math.cos(a),-CL/2+R*Math.sin(a),Math.cos(a),Math.sin(a)]);}
+  for(let i=1;i<=nr;i++){const a=i/nr*Math.PI/2;
+    prof.push([R*Math.cos(a),CL/2+R*Math.sin(a),Math.cos(a),Math.sin(a)]);}
+  const pos=[],nor=[],idx=[],rows=prof.length;
+  for(let i=0;i<rows;i++)for(let j=0;j<=seg;j++){
+    const a=j/seg*Math.PI*2,pr=prof[i];
+    pos.push(pr[0]*Math.cos(a),pr[1],pr[0]*Math.sin(a));
+    nor.push(pr[2]*Math.cos(a),pr[3],pr[2]*Math.sin(a));}
+  for(let i=0;i<rows-1;i++)for(let j=0;j<seg;j++){
+    const a=i*(seg+1)+j,b=a+seg+1;idx.push(a,b,a+1,b,b+1,a+1);}
+  return {pos:new Float32Array(pos),nor:new Float32Array(nor),idx:new Uint32Array(idx)};
+}
+function clBuildHelix(){
+  const turns=3.2,HR=0.55,HH=1.5,tr=0.11,segT=170,segR=10;
+  const pos=[],nor=[],idx=[];
+  const cu=u=>{const a=u/(Math.PI*2);return [HR*Math.cos(u),HH*(a/turns-0.5),HR*Math.sin(u)];};
+  for(let i=0;i<=segT;i++){
+    const u=i/segT*Math.PI*2*turns;
+    const c=cu(u),c2=cu(u+0.01);
+    let T=[c2[0]-c[0],c2[1]-c[1],c2[2]-c[2]];
+    const tl=Math.hypot(T[0],T[1],T[2])||1; T=[T[0]/tl,T[1]/tl,T[2]/tl];
+    const ref=Math.abs(T[1])>0.9?[1,0,0]:[0,1,0];
+    let N=[T[1]*ref[2]-T[2]*ref[1],T[2]*ref[0]-T[0]*ref[2],T[0]*ref[1]-T[1]*ref[0]];
+    const nl=Math.hypot(N[0],N[1],N[2])||1; N=[N[0]/nl,N[1]/nl,N[2]/nl];
+    const B=[T[1]*N[2]-T[2]*N[1],T[2]*N[0]-T[0]*N[2],T[0]*N[1]-T[1]*N[0]];
+    for(let j=0;j<=segR;j++){
+      const a=j/segR*Math.PI*2,nx=Math.cos(a),ny=Math.sin(a);
+      const ox=N[0]*nx+B[0]*ny,oy=N[1]*nx+B[1]*ny,oz=N[2]*nx+B[2]*ny;
+      pos.push(c[0]+tr*ox,c[1]+tr*oy,c[2]+tr*oz); nor.push(ox,oy,oz);
+    }
+  }
+  for(let i=0;i<segT;i++)for(let j=0;j<segR;j++){
+    const a=i*(segR+1)+j,b=a+segR+1;idx.push(a,b,a+1,b,b+1,a+1);}
+  return {pos:new Float32Array(pos),nor:new Float32Array(nor),idx:new Uint32Array(idx)};
+}
+function clBuildStar(){
+  const pts=[];
+  for(let i=0;i<10;i++){const a=i/10*Math.PI*2-Math.PI/2,r=i%2?0.42:0.95;
+    pts.push([r*Math.cos(a),r*Math.sin(a)]);}
+  const D=0.32,pos=[],nor=[],idx=[],n=pts.length;
+  for(let i=0;i<n;i++){pos.push(pts[i][0],pts[i][1],D/2);nor.push(0,0,1);}
+  for(let i=0;i<n-2;i++)idx.push(0,i+1,i+2);
+  const b0=pos.length/3;
+  for(let i=0;i<n;i++){pos.push(pts[i][0],pts[i][1],-D/2);nor.push(0,0,-1);}
+  for(let i=0;i<n-2;i++)idx.push(b0,b0+i+2,b0+i+1);
+  for(let i=0;i<n;i++){
+    const j=(i+1)%n,q=pos.length/3;
+    const x0=pts[i][0],y0=pts[i][1],x1=pts[j][0],y1=pts[j][1];
+    let ex=x1-x0,ey=y1-y0;const l=Math.hypot(ex,ey)||1;ex/=l;ey/=l;
+    pos.push(x0,y0,D/2,x1,y1,D/2,x1,y1,-D/2,x0,y0,-D/2);
+    for(let k=0;k<4;k++)nor.push(ey,-ex,0);
+    idx.push(q,q+2,q+1,q,q+3,q+2);
+  }
+  return {pos:new Float32Array(pos),nor:new Float32Array(nor),idx:new Uint32Array(idx)};
+}
+/* faceted gem helper: non-indexed triangle with guaranteed-outward normal */
+function clFacet(pos,nor,a,b,c){
+  const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],w=[c[0]-a[0],c[1]-a[1],c[2]-a[2]];
+  let n=[u[1]*w[2]-u[2]*w[1],u[2]*w[0]-u[0]*w[2],u[0]*w[1]-u[1]*w[0]];
+  const l=Math.hypot(n[0],n[1],n[2])||1;n=[n[0]/l,n[1]/l,n[2]/l];
+  const cx=(a[0]+b[0]+c[0])/3,cy=(a[1]+b[1]+c[1])/3,cz=(a[2]+b[2]+c[2])/3;
+  let P=[a,b,c];
+  if(n[0]*cx+n[1]*cy+n[2]*cz<0){P=[a,c,b];n=[-n[0],-n[1],-n[2]];}
+  for(const p of P){pos.push(p[0],p[1],p[2]);nor.push(n[0],n[1],n[2]);}
+}
+function clFinishFacets(pos,nor){
+  const idx=new Uint32Array(pos.length/3);
+  for(let i=0;i<idx.length;i++)idx[i]=i;
+  return {pos:new Float32Array(pos),nor:new Float32Array(nor),idx:idx};
+}
+function clBuildGem(){
+  const pos=[],nor=[],N=8,gird=[],tab=[];
+  for(let i=0;i<N;i++){const a=i/N*Math.PI*2;
+    gird.push([0.85*Math.cos(a),0,0.85*Math.sin(a)]);
+    tab.push([0.38*Math.cos(a),0.42,0.38*Math.sin(a)]);}
+  const culet=[0,-0.95,0];
+  for(let i=0;i<N;i++){const j=(i+1)%N;
+    clFacet(pos,nor,tab[i],tab[j],gird[j]); clFacet(pos,nor,tab[i],gird[j],gird[i]);
+    clFacet(pos,nor,gird[i],gird[j],culet);}
+  for(let i=1;i<N-1;i++)clFacet(pos,nor,tab[0],tab[i],tab[i+1]);
+  return clFinishFacets(pos,nor);
+}
+function clBuildDiamond(){
+  const pos=[],nor=[],N=8;
+  const ring=(r,y)=>{const p=[];for(let i=0;i<N;i++){const a=i/N*Math.PI*2;
+    p.push([r*Math.cos(a),y,r*Math.sin(a)]);}return p;};
+  const table=ring(0.42,0.40),upper=ring(0.62,0.22),girdle=ring(0.85,0.0),
+        lower=ring(0.50,-0.45),culet=[0,-1.0,0];
+  for(let i=0;i<N;i++){const j=(i+1)%N;
+    clFacet(pos,nor,table[i],table[j],upper[j]); clFacet(pos,nor,table[i],upper[j],upper[i]);
+    clFacet(pos,nor,upper[i],upper[j],girdle[j]); clFacet(pos,nor,upper[i],girdle[j],girdle[i]);
+    clFacet(pos,nor,girdle[i],girdle[j],lower[j]); clFacet(pos,nor,girdle[i],lower[j],lower[i]);
+    clFacet(pos,nor,lower[i],lower[j],culet);}
+  for(let i=1;i<N-1;i++)clFacet(pos,nor,table[0],table[i],table[i+1]);
+  return clFinishFacets(pos,nor);
+}
+function computeVertexNormals(pos,idx){
+  const n=new Float32Array(pos.length);
+  for(let i=0;i<idx.length;i+=3){
+    const a=idx[i]*3,b=idx[i+1]*3,c=idx[i+2]*3;
+    const ux=pos[b]-pos[a],uy=pos[b+1]-pos[a+1],uz=pos[b+2]-pos[a+2];
+    const wx=pos[c]-pos[a],wy=pos[c+1]-pos[a+1],wz=pos[c+2]-pos[a+2];
+    const nx=uy*wz-uz*wy,ny=uz*wx-ux*wz,nz=ux*wy-uy*wx;
+    n[a]+=nx;n[a+1]+=ny;n[a+2]+=nz;n[b]+=nx;n[b+1]+=ny;n[b+2]+=nz;
+    n[c]+=nx;n[c+1]+=ny;n[c+2]+=nz;
+  }
+  for(let i=0;i<n.length;i+=3){
+    const l=Math.hypot(n[i],n[i+1],n[i+2])||1;n[i]/=l;n[i+1]/=l;n[i+2]/=l;}
+  return n;
+}
+/* ---- procedural flower (v1.2): parametric petals + bud + stem.
+   Petals are built at the open pose; the BLOOM param rotates them in the
+   vertex shader via the a_flw attribute (pivot.xyz, azimuth; -1 = rigid). ---- */
+function clBuildFlower(o){
+  const pos=[],idx=[],flw=[];
+  const nPet=o.pet,nu=7,nv=4,a0=1.396;
+  const pushV=(x,y,z,fx,fy,fz,fw)=>{pos.push(x,y,z);flw.push(fx,fy,fz,fw);return pos.length/3-1;};
+  for(let k=0;k<nPet;k++){
+    const az=k/nPet*Math.PI*2,dx=Math.cos(az),dz=Math.sin(az);
+    const sx=-Math.sin(az),sz=Math.cos(az);
+    const piv=[dx*0.07,0.10,dz*0.07];
+    const base=pos.length/3;
+    let px=0,py=0;
+    for(let iu=0;iu<=nu;iu++){
+      const s=iu/nu;
+      const ang=a0+o.curl*1.6*Math.pow(s,1.5);
+      if(iu>0){const ds=o.len/nu;px+=Math.sin(ang)*ds;py+=Math.cos(ang)*ds;}
+      const wprof=o.wid*Math.sin(Math.PI*Math.pow(s,0.75))*(1-0.25*s);
+      for(let iv=0;iv<=nv;iv++){
+        const ww=-1+2*iv/nv,edge=ww*ww;
+        const lift=edge*wprof*0.45;
+        pushV(piv[0]+dx*px+sx*ww*wprof, piv[1]+py+lift*0.4, piv[2]+dz*px+sz*ww*wprof,
+              piv[0],piv[1],piv[2],az);
+      }
+    }
+    for(let iu=0;iu<nu;iu++)for(let iv=0;iv<nv;iv++){
+      const a=base+iu*(nv+1)+iv,b=a+nv+1;
+      idx.push(a,a+1,b, b,a+1,b+1);
+    }
+  }
+  const bud=clBuildIcosa(),bo=pos.length/3,bs=o.bud;
+  for(let i=0;i<bud.pos.length;i+=3)
+    pushV(bud.pos[i]*bs*0.35,0.10+bud.pos[i+1]*bs*0.35,bud.pos[i+2]*bs*0.35,0,0,0,-1);
+  for(let i=0;i<bud.idx.length;i++)idx.push(bo+bud.idx[i]);
+  if(o.stem>0.5){
+    const sg=20,sr=0.035,sh=1.35,so=pos.length/3;
+    for(let i=0;i<=4;i++){const y=0.05-i/4*sh;
+      for(let j=0;j<=sg;j++){const a=j/sg*Math.PI*2;
+        pushV(sr*Math.cos(a),y,sr*Math.sin(a),0,0,0,-1);}}
+    for(let i=0;i<4;i++)for(let j=0;j<sg;j++){
+      const a=so+i*(sg+1)+j,b=a+sg+1;idx.push(a,b,a+1,b,b+1,a+1);}
+  }
+  const nor=computeVertexNormals(pos,idx);
+  return {pos:new Float32Array(pos),nor:nor,idx:new Uint32Array(idx),flw:new Float32Array(flw)};
+}
+function clBuildQuad(){
+  return {pos:new Float32Array([-0.5,-0.5,0, 0.5,-0.5,0, 0.5,0.5,0, -0.5,0.5,0]),
+          nor:new Float32Array([0,0,1, 0,0,1, 0,0,1, 0,0,1]),
+          idx:new Uint32Array([0,1,2,0,2,3])};
+}
 function ensureClonerGL(){
   if(CLGEO||!gl) return;
   CLGEO=[];
-  for(const g of [clBuildIcosa(),clBuildKnot(),clBuildBox(),clBuildTetra()]){
+  for(const g of [clBuildIcosa(),clBuildKnot(),clBuildBox(),clBuildTetra(),
+                  clBuildTorus(),clBuildCone(),clBuildCylinder(),clBuildCapsule(),
+                  clBuildHelix(),clBuildStar(),clBuildGem(),clBuildDiamond(),
+                  clBuildQuad()]){
     const o={};
     o.pos=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,o.pos);
     gl.bufferData(gl.ARRAY_BUFFER,g.pos,gl.STATIC_DRAW);
@@ -1109,6 +1644,14 @@ function ensureClonerGL(){
     o.n=g.idx.length; o.ne=ed.length;
     CLGEO.push(o);
   }
+  /* ground plane quad (v1.2): big XZ quad, y offset via uniform */
+  {
+    const s=24;
+    CLGND={pos:gl.createBuffer()};
+    gl.bindBuffer(gl.ARRAY_BUFFER,CLGND.pos);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(
+      [-s,0,-s, s,0,-s, s,0,s, -s,0,-s, s,0,s, -s,0,s]),gl.STATIC_DRAW);
+  }
   gl.bindBuffer(gl.ARRAY_BUFFER,null);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,null);
 }
@@ -1119,8 +1662,10 @@ layout(location=0) in vec3 a_pos;
 layout(location=1) in vec3 a_nor;
 layout(location=2) in vec3 a_inst;
 layout(location=3) in float a_rnd;
+layout(location=4) in vec4 a_flw;
 uniform mat4 u_vp;
 uniform vec3 u_camPos;
+uniform vec3 u_camR,u_camU;
 uniform float u_time,u_audioBass,u_audioMid,u_audioHigh,u_beat,u_hue;
 uniform float u_pOn,u_pPosOn,u_pRotOn,u_pSclOn,u_pStr;
 uniform vec3 u_pPos,u_pRot,u_pScl;
@@ -1134,10 +1679,16 @@ uniform int u_sndSrc;
 uniform float u_sndGain,u_sndLift;
 uniform float u_dOn,u_dMax;
 uniform float u_hueR,u_sat,u_instScale;
+uniform float u_flower,u_bloomAng;
+uniform float u_particle;
+uniform float u_ptLife,u_ptSpd,u_ptTurb,u_ptSize,u_ptDrag,u_ptColA,u_ptColB,u_ptBurst;
 out vec3 v_col;
 out vec3 v_nor;
 flat out vec3 v_norF;
 out vec3 v_world;
+out vec2 v_uv;
+out float v_alpha;
+out float v_part;
 vec3 hsv(vec3 c){
   vec3 rgb=clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0,0.0,1.0);
   return c.z*mix(vec3(1.0),rgb,c.y);
@@ -1172,6 +1723,45 @@ mat3 euler(vec3 r){
               cx*sy*cz+sx*sz,cx*sy*sz-sx*cz,cx*cy);
 }
 void main(){
+  v_uv=a_pos.xy+0.5;
+  v_alpha=1.0;
+  v_part=0.0;
+  /* ---- particle path: camera-facing quads, stateless vertex-shader sim ---- */
+  if(u_particle>0.5){
+    float r1=a_rnd;
+    float r2=h31(vec3(a_rnd*13.73,7.17,3.31));
+    float r3=h31(vec3(a_rnd*7.91,1.73,9.47));
+    float life=fract(u_time/max(u_ptLife,0.01)+r1);
+    float age=life*u_ptLife;
+    float th=r2*6.28318;
+    float ph=acos(clamp(r3*2.0-1.0,-1.0,1.0));
+    vec3 dir=vec3(sin(ph)*cos(th),cos(ph),sin(ph)*sin(th));
+    float burst=1.0+u_ptBurst*(0.5*u_beat+0.5*u_audioBass);
+    float spd=u_ptSpd*(0.25+0.75*r2)*burst;
+    float dr=max(u_ptDrag,0.05);
+    vec3 pp=a_inst+dir*spd*(1.0-exp(-dr*age))/dr;
+    pp+=(vn3(pp*0.55+vec3(0.0,u_time*0.32,0.0))-0.5)*u_ptTurb;
+    float sz=u_ptSize*(0.25+0.75*sin(3.14159*life));
+    vec3 world=pp+(u_camR*a_pos.x+u_camU*a_pos.y)*sz;
+    v_world=world;
+    v_nor=vec3(0.0,0.0,1.0);
+    v_norF=v_nor;
+    v_col=mix(hsv(vec3(u_ptColA,0.85,1.0)),hsv(vec3(u_ptColB,0.85,1.0)),life);
+    v_alpha=(1.0-life)*(1.0-life);
+    v_part=1.0;
+    gl_Position=u_vp*vec4(world,1.0);
+    return;
+  }
+  vec3 bp=a_pos,bn=a_nor;
+  /* ---- flower bloom: rotate petal verts around petal base (Rodrigues) ---- */
+  if(u_flower>0.5 && a_flw.w>-0.5){
+    vec3 rel=bp-a_flw.xyz;
+    vec3 ax=vec3(-sin(a_flw.w),0.0,cos(a_flw.w));
+    float ang=1.396-u_bloomAng;
+    float ca=cos(ang),sa=sin(ang);
+    bp=a_flw.xyz+rel*ca+cross(ax,rel)*sa+ax*dot(ax,rel)*(1.0-ca);
+    bn=bn*ca+cross(ax,bn)*sa+ax*dot(ax,bn)*(1.0-ca);
+  }
   /* Delay = per-instance time lag on the Plain effector target */
   float tl=u_time-a_rnd*u_dMax*u_dOn;
   float f=falloff(a_inst,tl)*u_pOn*u_pStr;
@@ -1198,9 +1788,9 @@ void main(){
   off.y+=bus*u_sndLift*u_sndOn;
   /* compose instance transform */
   mat3 R=euler(rot);
-  vec3 p=R*(a_pos*u_instScale*scl);
+  vec3 p=R*(bp*u_instScale*scl);
   vec3 world=a_inst+off+p;
-  vec3 N=R*a_nor;
+  vec3 N=R*bn;
   v_world=world;
   v_nor=N;
   v_norF=N;
@@ -1215,23 +1805,168 @@ in vec3 v_col;
 in vec3 v_nor;
 flat in vec3 v_norF;
 in vec3 v_world;
+in vec2 v_uv;
+in float v_alpha;
+in float v_part;
 uniform vec3 u_camPos;
 uniform float u_keyI,u_rimI,u_amb,u_fogOn,u_fogD,u_wire;
 uniform int u_flat;
+uniform int u_matMode;
+uniform float u_metal,u_rough,u_ior,u_disp,u_film,u_iri,u_absH,u_absD,u_envI,u_aces,u_exp;
+uniform float u_particle;
+vec3 hsv(vec3 c){
+  vec3 rgb=clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0,0.0,1.0);
+  return c.z*mix(vec3(1.0),rgb,c.y);
+}
+/* procedural studio IBL: gradient + key/rim softboxes + horizon glow */
+vec3 envSample(vec3 d){
+  d=normalize(d);
+  float y=d.y*0.5+0.5;
+  vec3 col=mix(vec3(0.015,0.020,0.045),vec3(0.090,0.110,0.170),y);
+  vec3 k1=normalize(vec3(0.5,0.8,0.6));
+  vec3 k2=normalize(vec3(-0.7,0.35,-0.45));
+  col+=vec3(1.15,1.05,0.95)*pow(max(dot(d,k1),0.0),20.0)*2.6;
+  col+=vec3(0.55,0.75,1.15)*pow(max(dot(d,k2),0.0),48.0)*1.8;
+  col+=vec3(0.30,0.10,0.38)*exp(-abs(d.y)*5.0)*0.7;
+  return col;
+}
+vec3 specEnv(vec3 R,float rough,float envI){
+  vec3 es=envSample(R);
+  vec3 avg=vec3(0.10,0.11,0.16);
+  return mix(es,avg,clamp(rough*1.25,0.0,1.0))*envI;
+}
+vec3 aces(vec3 x){
+  return clamp(x*(2.51*x+0.03)/(x*(2.43*x+0.59)+0.14),0.0,1.0);
+}
 void main(){
+  /* ---- particle sprite path ---- */
+  if(u_particle>0.5){
+    float d=length(v_uv-0.5)*2.0;
+    float a=smoothstep(1.0,0.12,d)*v_alpha;
+    vec3 col=v_col*(0.55+0.65*v_alpha);
+    if(u_aces>0.5) col=aces(col*u_exp);
+    O=vec4(col*a,a);
+    return;
+  }
   vec3 N=normalize(u_flat==1?v_norF:v_nor);
   vec3 V=normalize(u_camPos-v_world);
+  float ndv=max(dot(N,V),0.0);
+  vec3 base=v_col;
+  float met=u_metal;
+  float f0r=pow((u_ior-1.0)/(u_ior+1.0),2.0);
+  vec3 F0=mix(vec3(max(f0r,0.02)),base,met);
   vec3 Ld=normalize(vec3(0.45,0.75,0.55));
   float dif=max(dot(N,Ld),0.0)*u_keyI;
-  float rim=pow(1.0-max(dot(N,V),0.0),2.5)*u_rimI;
-  vec3 col=v_col*(u_amb+dif)+vec3(0.55,0.75,1.0)*rim*0.6;
+  vec3 col=base*(1.0-met)*(u_amb+dif);
+  /* specular IBL; Spectral mode splits 3 wavelength bands (cheap dispersion) */
+  vec3 R=reflect(-V,N);
+  vec3 specC;
+  if(u_matMode==1){
+    vec3 T=normalize(cross(N,abs(N.y)>0.94?vec3(1.,0.,0.):vec3(0.,1.,0.)));
+    float dp=u_disp*0.6;
+    vec3 eR=specEnv(normalize(R+T*dp),u_rough,u_envI);
+    vec3 eG=specEnv(R,u_rough,u_envI);
+    vec3 eB=specEnv(normalize(R-T*dp),u_rough,u_envI);
+    specC=vec3(eR.r,eG.g,eB.b);
+  } else {
+    specC=specEnv(R,u_rough,u_envI);
+  }
+  vec3 F=F0+(1.0-F0)*pow(1.0-ndv,5.0);
+  col+=specC*F;
+  /* rim light (v1.1 flavor) */
+  float rim=pow(1.0-ndv,2.5)*u_rimI;
+  col+=vec3(0.55,0.75,1.0)*rim*0.35;
+  /* thin-film iridescence: view-angle interference sheen */
+  if(u_iri>0.001){
+    vec3 film=0.5+0.5*cos(6.28318*(u_film*vec3(0.92,1.24,1.62)/(0.22+0.78*ndv)+vec3(0.0,0.33,0.67)));
+    col+=(film-0.5)*u_iri*(0.25+0.75*(1.0-ndv))*2.0;
+  }
+  /* absorption tint */
+  if(u_absD>0.001){
+    vec3 ac=hsv(vec3(u_absH,0.85,1.0));
+    col*=mix(vec3(1.0),ac,clamp(u_absD,0.0,1.0)*0.55);
+  }
   if(u_wire>0.5) col=mix(col,vec3(1.0),0.8);
   float fd=length(u_camPos-v_world);
   float f=1.0-exp(-fd*fd*u_fogD*u_fogD);
   col=mix(col,vec3(0.0),f*u_fogOn);
+  col = u_aces>0.5 ? aces(col*u_exp) : col;
   O=vec4(col,1.0);
 }
 `;
+
+/* ---- bloom shaders (v1.2): thresholded half-res mip-chain on the cloner layer ---- */
+const SRC_BLOOMBP=`#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_thresh;
+void main(){
+  vec3 c=texture(u_tex,v_uv).rgb;
+  O=vec4(max(c-u_thresh,0.0),1.0);
+}`;
+const SRC_BLOOMBLUR=`#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform vec2 u_texel;
+void main(){
+  vec3 c=texture(u_tex,v_uv).rgb*0.2270270;
+  vec2 o1=u_texel*1.3846158,o2=u_texel*3.2307692;
+  c+=(texture(u_tex,v_uv+o1).rgb+texture(u_tex,v_uv-o1).rgb)*0.3162162;
+  c+=(texture(u_tex,v_uv+o2).rgb+texture(u_tex,v_uv-o2).rgb)*0.0702703;
+  O=vec4(c,1.0);
+}`;
+const SRC_BLOOMADD=`#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_strength;
+void main(){
+  O=vec4(texture(u_tex,v_uv).rgb*u_strength,1.0);
+}`;
+/* ---- ground plane shader (v1.2): soft shadow + animated caustic shimmer ---- */
+const CL_GROUND_VERT=`#version 300 es
+layout(location=0) in vec3 a_pos;
+uniform mat4 u_vp;
+uniform float u_gndY;
+out vec3 v_w;
+void main(){
+  vec3 w=vec3(a_pos.x,u_gndY,a_pos.z);
+  v_w=w;
+  gl_Position=u_vp*vec4(w,1.0);
+}`;
+const CL_GROUND_FRAG=`#version 300 es
+precision highp float;
+out vec4 O;
+in vec3 v_w;
+uniform float u_time;
+float h31(vec3 p){
+  p=fract(p*0.3183099+vec3(0.11,0.17,0.13));
+  p*=19.19;
+  return fract(p.x*p.y*p.z*(p.x+p.y+p.z));
+}
+float vn3(vec3 p){
+  vec3 i=floor(p),f=fract(p);
+  f=f*f*(3.0-2.0*f);
+  float a=h31(i),b=h31(i+vec3(1.,0.,0.)),c=h31(i+vec3(0.,1.,0.)),d=h31(i+vec3(1.,1.,0.));
+  float e=h31(i+vec3(0.,0.,1.)),g=h31(i+vec3(1.,0.,1.)),h=h31(i+vec3(0.,1.,1.)),k=h31(i+vec3(1.,1.,1.));
+  return mix(mix(mix(a,b,f.x),mix(c,d,f.x),f.y),mix(mix(e,g,f.x),mix(h,k,f.x),f.y),f.z);
+}
+void main(){
+  float r=length(v_w.xz);
+  float shadow=exp(-r*r/14.0)*0.6;
+  float c1=vn3(vec3(v_w.xz*1.4,u_time*0.45));
+  float c2=vn3(vec3(v_w.xz*1.4+7.3,-u_time*0.32));
+  float ca=pow(clamp(c1*c2*4.2,0.0,1.0),3.0);
+  float fade=exp(-r*r/220.0);
+  vec3 col=vec3(0.30,0.62,0.85)*ca*0.55*(1.0-shadow)*fade;
+  col+=vec3(0.02,0.03,0.06)*(1.0-shadow)*fade;
+  O=vec4(col,1.0);
+}`;
 
 /* ---- tiny mat4 helpers (column-major) ---- */
 function m4persp(fovy,asp,n,f){
@@ -1272,9 +2007,24 @@ function clv(i,n){
   return PARAMS[id].map(eff(id));
 }
 function rebuildClonerInstances(i){
-  const mode=clv(i,'Mode'), positions=[];
+  const mode=clv(i,'Mode'), meshIdx=clv(i,'Mesh'), positions=[];
   const push=(x,y,z)=>positions.push(x,y,z);
-  if(mode===0){
+  if(meshIdx===13){
+    /* ---- particles: emission shape replaces the cloner layout ---- */
+    const n=clv(i,'PtN'), shape=clv(i,'PtShape');
+    let pseed=Math.floor(clv(i,'Seed')*1000)+i*131+7;
+    const rnd=()=>{pseed=(pseed*16807)%2147483647;return (pseed-1)/2147483646;};
+    for(let k=0;k<n;k++){
+      if(shape===0) push((rnd()*2-1)*2.2,(rnd()*2-1)*2.2,(rnd()*2-1)*2.2);
+      else if(shape===1){
+        const th=rnd()*6.28318,ph=Math.acos(clamp(rnd()*2-1,-1,1)),r=2.2*Math.cbrt(rnd());
+        push(r*Math.sin(ph)*Math.cos(th),r*Math.cos(ph),r*Math.sin(ph)*Math.sin(th));
+      }else{
+        const a=rnd()*6.28318,r=2.6*Math.sqrt(rnd());
+        push(r*Math.cos(a),(rnd()*2-1)*0.3,r*Math.sin(a));
+      }
+    }
+  }else if(mode===0){
     const nx=clv(i,'CntX'),ny=clv(i,'CntY'),nz=clv(i,'CntZ');
     const sx=clv(i,'SpX'),sy=clv(i,'SpY'),sz=clv(i,'SpZ');
     for(let ix=0;ix<nx;ix++)for(let iy=0;iy<ny;iy++)for(let iz=0;iz<nz;iz++)
@@ -1308,6 +2058,65 @@ function rebuildClonerInstances(i){
   clonerDirty[i]=false;
 }
 
+/* ---- per-layer flower geometry (v1.2): rebuilt when quantized flower params change ---- */
+const clFlowerDat=[null,null,null,null];
+function flowerKey(i){
+  const q=v=>Math.round(v*64);
+  return [clv(i,'FPet'),q(clv(i,'FLen')),q(clv(i,'FWid')),q(clv(i,'FCurl')),
+          q(clv(i,'FBud')),clv(i,'FStem')>0.5?1:0].join(':');
+}
+function buildFlowerGeo(i){
+  const key=flowerKey(i);
+  let d=clFlowerDat[i];
+  if(d&&d.key===key) return d;
+  const g=clBuildFlower({pet:clv(i,'FPet'),len:clv(i,'FLen'),wid:clv(i,'FWid'),
+                         curl:clv(i,'FCurl'),bud:clv(i,'FBud'),
+                         stem:clv(i,'FStem')>0.5?1:0});
+  if(!d){
+    d={}; clFlowerDat[i]=d;
+    d.pos=gl.createBuffer(); d.nor=gl.createBuffer();
+    d.idx=gl.createBuffer(); d.flw=gl.createBuffer();
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,d.pos); gl.bufferData(gl.ARRAY_BUFFER,g.pos,gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,d.nor); gl.bufferData(gl.ARRAY_BUFFER,g.nor,gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,d.flw); gl.bufferData(gl.ARRAY_BUFFER,g.flw,gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,d.idx); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,g.idx,gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,null); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,null);
+  d.n=g.idx.length; d.key=key;
+  return d;
+}
+
+/* ---- cloner bloom pass (v1.2): bright-pass -> 2x blur -> additive back onto the layer ---- */
+function renderClonerBloom(i,T){
+  const th=clv(i,'BlmT'), st=clv(i,'BlmS');
+  if(!(bloomT[0]&&bloomT[0].ok)) return;
+  let P=PROG.bloombp;
+  gl.useProgram(P); setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_thresh'),th);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,bloomT[0].fb);
+  gl.viewport(0,0,bloomT[0].w,bloomT[0].h);
+  quadDraw();
+  P=PROG.bloomblur;
+  gl.useProgram(P);
+  for(let k=0;k<2;k++){
+    const src=bloomT[k%2], dst=bloomT[1-k%2];
+    setTex(P,'u_tex',0,src.tex);
+    gl.uniform2f(U(P,'u_texel'),1/src.w,1/src.h);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,dst.fb);
+    gl.viewport(0,0,dst.w,dst.h);
+    quadDraw();
+  }
+  P=PROG.bloomadd;
+  gl.useProgram(P); setTex(P,'u_tex',0,bloomT[0].tex);
+  gl.uniform1f(U(P,'u_strength'),st);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
+  gl.viewport(0,0,T.w,T.h);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE);
+  quadDraw();
+  gl.disable(gl.BLEND);
+  gl.bindTexture(gl.TEXTURE_2D,null);
+}
+
 /* ---- the cloner render pass ---- */
 function renderCloner(i,t,T){
   gl.clearColor(0,0,0,1);
@@ -1328,7 +2137,32 @@ function renderCloner(i,t,T){
   const elv=(clv(i,'El')-0.5)*2.6, dist=clv(i,'Dist');
   const eye=[dist*Math.cos(elv)*Math.cos(az),dist*Math.sin(elv),dist*Math.cos(elv)*Math.sin(az)];
   const vp=m4mul(m4persp(0.785,T.w/T.h,0.1,120),m4look(eye,[0,0,0],[0,1,0]));
-  const g=CLGEO[clv(i,'Mesh')];
+  /* camera basis for particle billboarding: right = fwd x up, up2 = right x fwd */
+  const fw=[-eye[0],-eye[1],-eye[2]], fl=Math.hypot(fw[0],fw[1],fw[2])||1;
+  fw[0]/=fl; fw[1]/=fl; fw[2]/=fl;
+  let cr=[fw[1]*0-fw[2]*1, fw[2]*0-fw[0]*0, fw[0]*1-fw[1]*0];
+  const rl=Math.hypot(cr[0],cr[1],cr[2])||1; cr=[cr[0]/rl,cr[1]/rl,cr[2]/rl];
+  const cu=[cr[1]*fw[2]-cr[2]*fw[1], cr[2]*fw[0]-cr[0]*fw[2], cr[0]*fw[1]-cr[1]*fw[0]];
+  const meshIdx=clv(i,'Mesh');
+  const isFlower=meshIdx===12, isParticle=meshIdx===13;
+  let g;
+  if(isFlower){ const fg=buildFlowerGeo(i); g={pos:fg.pos,nor:fg.nor,idx:fg.idx,n:fg.n,flw:fg.flw}; }
+  else if(isParticle){ g=CLGEO[12]; } /* quad billboard */
+  else g=CLGEO[meshIdx];
+  /* ground plane first (v1.2), so instances depth-test over it */
+  if(clv(i,'Ground')>0.5 && PROG.clground && CLGND){
+    const G=PROG.clground;
+    gl.useProgram(G);
+    gl.bindBuffer(gl.ARRAY_BUFFER,CLGND.pos);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
+    gl.uniformMatrix4fv(U(G,'u_vp'),false,vp);
+    gl.uniform1f(U(G,'u_gndY'),-2.4);
+    gl.uniform1f(U(G,'u_time'),ct);
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+    gl.disableVertexAttribArray(0);
+    gl.bindBuffer(gl.ARRAY_BUFFER,null);
+  }
   gl.useProgram(P);
   gl.bindBuffer(gl.ARRAY_BUFFER,g.pos);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(0,0);
@@ -1338,6 +2172,12 @@ function renderCloner(i,t,T){
   gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2,3,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(2,1);
   gl.bindBuffer(gl.ARRAY_BUFFER,clInstRnd[i]);
   gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3,1,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(3,1);
+  if(isFlower){
+    gl.bindBuffer(gl.ARRAY_BUFFER,g.flw);
+    gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4,4,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(4,0);
+  }else{
+    gl.disableVertexAttribArray(4);
+  }
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,g.idx);
   const F=(n,v)=>gl.uniform1f(U(P,n),v);
   const V3=(n,x,y,z)=>gl.uniform3f(U(P,n),x,y,z);
@@ -1368,16 +2208,33 @@ function renderCloner(i,t,T){
   gl.uniform1i(U(P,'u_flat'),clv(i,'Flat')>0.5?1:0);
   F('u_fogOn',clv(i,'Fog')); F('u_fogD',clv(i,'FogD'));
   F('u_keyI',clv(i,'Key')); F('u_rimI',clv(i,'Rim')); F('u_amb',clv(i,'Amb'));
+  /* v1.2 spectral materials */
+  gl.uniform1i(U(P,'u_matMode'),clv(i,'Mat'));
+  F('u_metal',clv(i,'Metal')); F('u_rough',clv(i,'Rough')); F('u_ior',clv(i,'IOR'));
+  F('u_disp',clv(i,'Disp')); F('u_film',clv(i,'Film')); F('u_iri',clv(i,'Iri'));
+  F('u_absH',clv(i,'AbsH')); F('u_absD',clv(i,'AbsD')); F('u_envI',clv(i,'Env'));
+  F('u_aces',clv(i,'ACES')); F('u_exp',clv(i,'Exp'));
+  F('u_flower',isFlower?1:0);
+  F('u_bloomAng',0.14+clv(i,'FBloom')*1.26);
+  F('u_particle',isParticle?1:0);
+  V3('u_camR',cr[0],cr[1],cr[2]); V3('u_camU',cu[0],cu[1],cu[2]);
+  F('u_ptLife',clv(i,'PtLife')); F('u_ptSpd',clv(i,'PtSpd')); F('u_ptTurb',clv(i,'PtTurb'));
+  F('u_ptSize',clv(i,'PtSize')); F('u_ptDrag',clv(i,'PtDrag'));
+  F('u_ptColA',clv(i,'PtColA')); F('u_ptColB',clv(i,'PtColB')); F('u_ptBurst',clv(i,'PtBurst'));
   F('u_wire',0);
   gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+  if(isParticle){ gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE); gl.depthMask(false); }
   gl.drawElementsInstanced(gl.TRIANGLES,g.n,gl.UNSIGNED_INT,0,clInstCount[i]);
-  if(clv(i,'Wire')>0.5){
+  if(isParticle){ gl.disable(gl.BLEND); gl.depthMask(true); }
+  if(clv(i,'Wire')>0.5 && !isFlower && !isParticle && g.edge){
     F('u_wire',1);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,g.edge);
     gl.drawElementsInstanced(gl.LINES,g.ne,gl.UNSIGNED_INT,0,clInstCount[i]);
   }
   gl.disable(gl.DEPTH_TEST);
-  for(let a=0;a<4;a++){ gl.vertexAttribDivisor(a,0); gl.disableVertexAttribArray(a); }
+  /* v1.2 bloom on the cloner layer */
+  if(clv(i,'Bloom')>0.5) renderClonerBloom(i,T);
+  for(let a=0;a<5;a++){ gl.vertexAttribDivisor(a,0); gl.disableVertexAttribArray(a); }
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,null);
   gl.bindBuffer(gl.ARRAY_BUFFER,null);
 }
@@ -1413,7 +2270,7 @@ function renderLayer(i,t){
   const aud = eff('L'+i+'.audio')*eff('P.aamt');
   let sp = PARAMS['L'+i+'.speed'].map(eff('L'+i+'.speed'));
   if(S.beatSync) sp=snapBeat(sp);
-  drawQuad(prog);
+  gl.useProgram(prog);
   gl.uniform1f(U(prog,'u_time'),t);
   gl.uniform2f(U(prog,'u_res'),T.w,T.h);
   gl.uniform1f(U(prog,'u_speed'),sp);
@@ -1424,12 +2281,13 @@ function renderLayer(i,t){
   gl.uniform1f(U(prog,'u_beat'),beatPulse);
   gl.uniform1f(U(prog,'u_param1'),eff('L'+i+'.p1'));
   gl.uniform1f(U(prog,'u_param2'),eff('L'+i+'.p2'));
+  quadDraw();
 }
 function renderCombine(){
   const P=PROG.combine;
   gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
   gl.viewport(0,0,compT.w,compT.h);
-  drawQuad(P);
+  gl.useProgram(P);
   for(let i=0;i<4;i++) setTex(P,'u_l'+i,i,layerT[i].tex);
   const op=[],bl=[],en=[];
   for(let i=0;i<4;i++){
@@ -1440,12 +2298,13 @@ function renderCombine(){
   gl.uniform4fv(U(P,'u_op'),op);
   gl.uniform4fv(U(P,'u_blend'),bl);
   gl.uniform4fv(U(P,'u_en'),en);
+  quadDraw();
 }
 function renderFeedback(){
   const P=PROG.feedback, W=fbT[1-fbRead];
   gl.bindFramebuffer(gl.FRAMEBUFFER,W.fb);
   gl.viewport(0,0,W.w,W.h);
-  drawQuad(P);
+  gl.useProgram(P);
   setTex(P,'u_cur',0,compT.tex);
   setTex(P,'u_prev',1,fbT[fbRead].tex);
   gl.uniform1f(U(P,'u_trails'),PARAMS['P.trails'].map(eff('P.trails')));
@@ -1455,34 +2314,37 @@ function renderFeedback(){
   gl.uniform1f(U(P,'u_hue'),   PARAMS['P.fbhue'].map(eff('P.fbhue')));
   gl.uniform1f(U(P,'u_sat'),   PARAMS['P.fbsat'].map(eff('P.fbsat')));
   gl.uniform1f(U(P,'u_bypass'),S.postBypass.feedback?1:0);
+  quadDraw();
   fbRead=1-fbRead;
 }
 function renderKaleido(){
   const P=PROG.kaleido;
   gl.bindFramebuffer(gl.FRAMEBUFFER,postT[0].fb);
   gl.viewport(0,0,RW,RH);
-  drawQuad(P);
+  gl.useProgram(P);
   setTex(P,'u_tex',0,fbT[fbRead].tex);
   gl.uniform1f(U(P,'u_seg'),PARAMS['P.kseg'].map(eff('P.kseg')));
   gl.uniform1f(U(P,'u_ang'),PARAMS['P.kang'].map(eff('P.kang')));
   gl.uniform1f(U(P,'u_aspect'),RW/RH);
   gl.uniform1f(U(P,'u_bypass'),S.postBypass.kaleido?1:0);
+  quadDraw();
 }
 function renderGlitch(t){
   const P=PROG.glitch;
   gl.bindFramebuffer(gl.FRAMEBUFFER,postT[1].fb);
   gl.viewport(0,0,RW,RH);
-  drawQuad(P);
+  gl.useProgram(P);
   setTex(P,'u_tex',0,postT[0].tex);
   gl.uniform1f(U(P,'u_amt'),PARAMS['P.gamt'].map(eff('P.gamt')));
   gl.uniform1f(U(P,'u_time'),t);
   gl.uniform1f(U(P,'u_bypass'),S.postBypass.glitch?1:0);
+  quadDraw();
 }
 function renderGrade(t){
   const P=PROG.grade;
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   gl.viewport(0,0,canvas.width,canvas.height);
-  drawQuad(P);
+  gl.useProgram(P);
   setTex(P,'u_tex',0,postT[1].tex);
   gl.uniform1f(U(P,'u_bri'),PARAMS['P.bri'].map(eff('P.bri')));
   gl.uniform1f(U(P,'u_con'),PARAMS['P.con'].map(eff('P.con')));
@@ -1491,6 +2353,7 @@ function renderGrade(t){
   gl.uniform1f(U(P,'u_grain'),PARAMS['P.grain'].map(eff('P.grain')));
   gl.uniform1f(U(P,'u_time'),t);
   gl.uniform1f(U(P,'u_master'),PARAMS['P.master'].map(eff('P.master'))*(S.blackout?0:1));
+  quadDraw();
   gl.uniform1f(U(P,'u_strobeOn'),S.strobeOn?1:0);
   gl.uniform1f(U(P,'u_strobeRate'),PARAMS['P.srate'].map(eff('P.srate')));
   gl.uniform1f(U(P,'u_strobeAmt'),PARAMS['P.samt'].map(eff('P.samt')));
@@ -1850,8 +2713,14 @@ function showModeSub(i,v){
   if(r) r.style.display=v===1?'':'none';
   if(l) l.style.display=v===2?'':'none';
 }
+/* v1.2: mesh indices 12=Flower, 13=Particles */
+function showMeshSub(i,v){
+  const f=$('clmeshF'+i), p=$('clmeshP'+i);
+  if(f) f.style.display=v===12?'':'none';
+  if(p) p.style.display=v===13?'':'none';
+}
 const CL_LAYOUT_IDS=['Mode','CntX','CntY','CntZ','SpX','SpY','SpZ','RCnt','Rad','Arc',
-                     'Plane','LCnt','StpX','StpY','StpZ','Seed','Mesh'];
+                     'Plane','LCnt','StpX','StpY','StpZ','Seed','Mesh','FPet','PtN','PtShape'];
 /* Pre-register every cloner param in the MIDI-learn registry for all 4 layers,
    even when that layer's cloner UI isn't built (UI only builds for layers
    with src == Cloner 3D). Bound CCs then work regardless of visible UI;
@@ -1878,6 +2747,8 @@ for(let _hi=0;_hi<4;_hi++){
   });
   const _mid=_pre+'Mode';
   (PARAM_HOOKS[_mid]=PARAM_HOOKS[_mid]||[]).push(()=>{ showModeSub(_hi,discVal(_mid)); });
+  const _me=_pre+'Mesh';
+  (PARAM_HOOKS[_me]=PARAM_HOOKS[_me]||[]).push(()=>{ showMeshSub(_hi,discVal(_me)); });
 }
 function buildClonerUI(body,i){
   const pre='L'+i+'.cl';
@@ -1902,12 +2773,41 @@ function buildClonerUI(body,i){
   showModeSub(i,discVal(pre+'Mode'));
   /* ---- mesh ---- */
   const gMe=cgrp(box,'Mesh',false);
-  discreteRow(gMe,pre+'Mesh','Mesh',CL_MESHES,()=>{ clonerDirty[i]=true; });
+  discreteRow(gMe,pre+'Mesh','Mesh',CL_MESHES,()=>{ clonerDirty[i]=true; showMeshSub(i,discVal(pre+'Mesh')); });
   toggleRow(gMe,pre+'Flat','Flat shade');
   toggleRow(gMe,pre+'Wire','Wireframe');
   paramRow(gMe,pre+'IScl','Inst scale');
   paramRow(gMe,pre+'HueR','Hue range');
   paramRow(gMe,pre+'Sat','Saturation');
+  /* v1.2 flower subgroup (mesh idx 12) */
+  const subF=el('div'); subF.id='clmeshF'+i; gMe.appendChild(subF);
+  const fG=cgrp(subF,'Flower',true);
+  paramRow(fG,pre+'FPet','Petals'); paramRow(fG,pre+'FLen','Petal len');
+  paramRow(fG,pre+'FWid','Petal wid'); paramRow(fG,pre+'FCurl','Petal curl');
+  paramRow(fG,pre+'FBloom','Bloom open'); paramRow(fG,pre+'FBud','Bud size');
+  toggleRow(fG,pre+'FStem','Stem');
+  /* v1.2 particle subgroup (mesh idx 13) */
+  const subP=el('div'); subP.id='clmeshP'+i; gMe.appendChild(subP);
+  const pG=cgrp(subP,'Particles',true);
+  paramRow(pG,pre+'PtN','Count');
+  discreteRow(pG,pre+'PtShape','Emit shape',['Box','Sphere','Disc'],()=>{ clonerDirty[i]=true; });
+  paramRow(pG,pre+'PtSpd','Velocity'); paramRow(pG,pre+'PtTurb','Turbulence');
+  paramRow(pG,pre+'PtLife','Life'); paramRow(pG,pre+'PtSize','Size');
+  paramRow(pG,pre+'PtDrag','Drag'); paramRow(pG,pre+'PtBurst','Audio burst');
+  paramRow(pG,pre+'PtColA','Color A'); paramRow(pG,pre+'PtColB','Color B');
+  showMeshSub(i,discVal(pre+'Mesh'));
+  /* ---- spectral materials (v1.2) ---- */
+  const gMt=cgrp(box,'Materials',true);
+  discreteRow(gMt,pre+'Mat','Material',['Standard','Spectral']);
+  paramRow(gMt,pre+'Metal','Metallic'); paramRow(gMt,pre+'Rough','Roughness');
+  paramRow(gMt,pre+'IOR','IOR'); paramRow(gMt,pre+'Disp','Dispersion');
+  paramRow(gMt,pre+'Film','Film thick'); paramRow(gMt,pre+'Iri','Iridescence');
+  paramRow(gMt,pre+'AbsH','Absorb hue'); paramRow(gMt,pre+'AbsD','Absorb dens');
+  paramRow(gMt,pre+'Env','Env refl');
+  toggleRow(gMt,pre+'ACES','ACES'); paramRow(gMt,pre+'Exp','Exposure');
+  toggleRow(gMt,pre+'Bloom','Bloom'); paramRow(gMt,pre+'BlmT','Bloom thr');
+  paramRow(gMt,pre+'BlmS','Bloom str');
+  toggleRow(gMt,pre+'Ground','Ground');
   /* ---- effectors ---- */
   const gE=cgrp(box,'Effectors',true);
   const eP=cgrp(gE,'Plain',true);
@@ -1953,6 +2853,8 @@ function buildClonerUI(body,i){
   toggleRow(gC,pre+'Orb','Auto orbit');
   paramRow(gC,pre+'Az','Azimuth'); paramRow(gC,pre+'El','Elevation');
   paramRow(gC,pre+'Dist','Distance');
+  /* ---- shaper modulators A-F (v1.2) ---- */
+  buildModulatorsUI(box,i);
   /* layout-affecting params are covered by the global PARAM_HOOKS registered
      above (instance rebuild + subgroup toggles on ANY setParam source) */
   body.appendChild(box);
@@ -2095,7 +2997,8 @@ function snapshot(){
   return JSON.parse(JSON.stringify({
     params:S.params, assigns:S.assigns, layers:S.layers,
     postBypass:S.postBypass, strobeOn:S.strobeOn, beatSync:S.beatSync,
-    bpm:S.bpm, macros:S.macros, res:S.res, pluginCode:S.pluginCode, midi:S.midi
+    bpm:S.bpm, macros:S.macros, res:S.res, pluginCode:S.pluginCode, midi:S.midi,
+    mods:S.mods
   }));
 }
 function applySnapshot(snap){
@@ -2108,6 +3011,7 @@ function applySnapshot(snap){
   S.macros=(snap.macros||d.macros).map((m,i)=>({label:(m&&m.label)||('M'+(i+1)), val:clamp(+((m&&m.val)||0),0,1)}));
   while(S.macros.length<8) S.macros.push({label:'M'+(S.macros.length+1), val:0.5});
   S.midi=Array.isArray(snap.midi)?snap.midi:[];
+  S.mods=sanitizeMods(snap.mods);
   if(typeof snap.pluginCode==='string' && snap.pluginCode!==S.pluginCode){
     S.pluginCode=snap.pluginCode; $('plugcode').value=S.pluginCode; compilePlugin(true);
   }
@@ -2252,6 +3156,7 @@ function loop(){
   let pulse=0;
   if(S.bpm>0){ const ph=(t*S.bpm/60)%1; pulse=Math.pow(1-ph,3); }
   beatPulse=Math.max(pulse,audioBeat);
+  evalModulators(t);
   for(let i=0;i<4;i++) renderLayer(i,t);
   renderCombine();
   renderFeedback();

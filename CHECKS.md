@@ -279,3 +279,45 @@ phone GPU frame rates (SwiftShader did 1-3fps; his phone is ground truth).
 Note: mobile.html carries a verbatim copy of the v1.1 engine — the parallel
 v1.2 spectral-renderer work on holomapper.html will need a port pass to reach
 mobile.html (accepted tech debt, flagged for the parent).
+
+## v1.2 — Spectral renderer + ShaperBox modulators + mesh library (2026-10-07)
+
+### What was built (holomapper.html only)
+**Spectral renderer (Octane look via honest approximations):**
+- ACES filmic tone mapping on cloner layer output (toggle + exposure).
+- "Spectral" material mode: 3-band dispersion (per-band IOR perturbation of env reflections) + dispersion strength.
+- Thin-film iridescence: view-angle hue shift + film thickness param.
+- Material params: metallic, roughness, IOR, absorption color/density, env intensity — all `L{i}.cl*` params, MIDI/macro/preset/modulator-routable.
+- Procedural analytic-studio IBL (key/rim/fill gradients + 2 bright strips), no HDR files.
+- Half-res mip-chain bloom (bright-pass → 2× blur → additive) on the cloner layer.
+- Ground plane toggle (default off): soft blob shadows + animated caustic shimmer.
+
+**Mesh library (14 total):** icosahedron, torus knot, box, tetrahedron, torus, cone, cylinder, capsule, helix tube, extruded 5-point star, cut gem, diamond, procedural flower, GPU particles. All work with flat/smooth shading, wireframe, per-instance color, one instanced draw call.
+
+**Flowers:** parametric petals (3–16), length/width/curl, bud, stem; bloom open/close ("the money param") done shader-side via Rodrigues rotation on petal pivots.
+
+**Particles:** camera-facing quads, box/sphere/disc emission, stateless vertex-shader sim (seed attributes, no transform feedback), velocity + curl turbulence, life loop, color-over-life, drag, audio burst; one instanced draw call.
+
+**Modulators A–F per layer:** drawable curve editor (click-add, drag-move, dblclick-delete, smoothing, sine/tri/saw/sqr/random presets, beat grid), BPM sync (1/8–4 bars from tap-tempo), free Hz, audio-follow (bass/mid/high), phase offset, bipolar toggle, up to 4 routings each to `L{i}.cl*` params with depth. Depth/rate MIDI-learnable + macro-assignable; curves persist in presets.
+
+### Bugs found & fixed during verification
+1. **ensureClonerGL body duplicated** by an edit (stray `}`) — `node --check` caught it.
+2. **Mesh param map baked at n=4** — `clDiscMap(4)` couldn't reach meshes 4–13; fixed to `clDiscMap(14)`.
+3. **Bloom blacked the layer (real bug, fixed):** `renderCombine`/`renderFeedback`/`renderKaleido`/`renderGlitch`/`renderGrade`/`renderLayer` all called `drawQuad(P)` BEFORE `setTex`/uniforms — a 1-frame stale-bind lag that worked until bloom rebound texture unit 0, making combine sample the bloom texture instead of the layer. Fixed all 6 sites to bind-then-draw via new `quadDraw()` helper.
+4. **Particles crashed** (`CLGEO[13]` undefined) — particle mode now uses the quad mesh at `CLGEO[12]`.
+5. **sanitizeMods dropped rate/phase/bip** — added to the sanitized mod object (engine reads these from params via `eff()`, so params remain source of truth).
+
+### Verification results
+- `node --check` on all 18 script blocks: PASS.
+- GLSL: all 15 programs compile (cloner, clground, bloombp/blur/add included); zero console errors across all runs.
+- Screenshots (in `checks/`): `v12_gem_spectral.png` (faceted gems, spectral material), `v12_metal_bloom.png` (metallic icosahedrons + bloom), `v12_flowers.png` (flower field, half bloom), `v12_particles.png` (1465 sprites, sphere emission + bloom), `v12_ground.png` (caustics + blob shadows), `v12_curve_editor.png` (drawable curve UI), `v12_mod_a.png` / `v12_mod_b.png` (modulator driving Plain Pos Y — grid visibly moves between frames).
+- Handler audit: all 60 new params present in both PARAMS and CTRLS (0 missing).
+- Preset round-trip: params + full curve point arrays + sync/targets restore exactly.
+- Macro smoke test: M1 → `L0.clMA_Depth` modulates `eff()` correctly (0.2 → 1.0).
+- Perf: instances remain ONE `drawElementsInstanced` per layer; bloom adds 4 small fullscreen passes; ground adds 1. SwiftShader ~1–3fps (his GPU is ground truth).
+
+### Known limits / honest framing
+- Not real spectral path tracing: dispersion is 3 discrete bands perturbing reflection vectors; iridescence is an analytic thin-film approx; IBL is procedural, not captured.
+- Test screenshots are dim/small under SwiftShader — real-GPU look is his to judge.
+- Modulator curve edits don't live-redraw the canvas until mouseup (draw() called on drag; fine).
+- `mobile.html` still carries the v1.1 engine — v1.2 needs a port pass (accepted tech debt).
