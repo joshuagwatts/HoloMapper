@@ -672,3 +672,14 @@ node graph.
 - Known limit (stated in UI + here): float uniforms only — vec uniforms are parked, not half-built.
 
 Try first: drag any Shadertoy .txt onto the app — it lands in SOURCES and fires on L1 instantly; click its clip NAME to watch it in the preview monitor, then drag its uniform knobs in the Clip tab.
+
+## Tab toggles deck <-> node view (2026-10-08, checks/tab_check.mjs)
+- Gesture: click clip (name or box) + Tab -> node view lands on that clip's layer graph; Tab again -> deck. Ableton-style, same window (unlike Resolume Wire).
+- Dive resolution: selected clip > fired clip on selected layer > plain layer graph. Empty selected slot falls through to fired/layer.
+- Breadcrumb: `Clip L2 · C4 (Flow Field) — Node Graph` + crumb hint `Tab: back to deck`; nebar updated to `ESC / Tab: deck`; back button title `(ESC / Tab)`.
+- Source node in follow mode shows dive clip's source (`Source · Flow Field`) via neDive context, cleared on closeNodes; explicit src nodes unaffected.
+- Guards: Tab not hijacked in input/textarea/select/contentEditable (existing deck guard + neKey typing guard); neKey is capture-phase so node-view Tab never reaches deck handler.
+- Kept: N / double-click layer name / Nodes button (plain layer dive, no clip context), ESC exit.
+- Verification: 16/16 (name-click dive, fired-clip dive, no-clip layer dive, ESC, text-input guard incl. focus actually moving presetName->btnSavePreset, N preserved, Tab x4 stability, zero page errors). node --check + acorn clean on all 19 blocks.
+- Screenshot: checks/tab_dive_crumb.png.
+- Known limits: dive does not change live output (editor overlay only); Tab on a focused button is hijacked by design (Ableton-style).

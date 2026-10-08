@@ -4278,6 +4278,7 @@ function wireStatic(){
     else if(k>='1'&&k<='4') selectLayer(parseInt(k,10)-1);
     else if(k==='b'||k==='B') toggleBypass(S.selLayer);
     else if(k==='n'||k==='N'){ if(typeof openNodes==='function') openNodes(S.selLayer); }
+    else if(k==='Tab'){ e.preventDefault(); if(typeof toggleNodesTab==='function') toggleNodesTab(); }
     else if(k==='t'||k==='T') tapTempo();
     else if(k===' '){ e.preventDefault(); toggleBlackout(); }
     else if(k==='?') toggleHelp();
@@ -4695,6 +4696,7 @@ function evalGraph(i,t,srcOv,outT){
 
 /* ---------- editor UI ---------- */
 let neOpen=false, neLayer=0;
+let neDive=null;            /* {i,c,src} when dived into a clip via Tab; null = plain layer dive */
 let nePan={x:60,y:60}, neZoom=1;
 let neSel=null;            /* {kind:'node',nid} | {kind:'wire',wi} */
 let neDragWire=null;       /* {fromId,fromPort, x2,y2} | {toId,toPort, x2,y2} (reverse) */
@@ -4708,8 +4710,8 @@ function buildNodeEd(){
   if($('nodeed')) return;
   const root=el('div',''); root.id='nodeed'; root.style.display='none';
   root.innerHTML=
-   '<div id="nehead"><button id="neBack" class="nbtn" title="Back to deck (ESC)">&#8592; Deck</button>'+
-   '<span id="neTitle"></span><span class="ncrumb">Layer graph &rarr; Compositor &rarr; Master FX</span>'+
+   '<div id="nehead"><button id="neBack" class="nbtn" title="Back to deck (ESC / Tab)">&#8592; Deck</button>'+
+   '<span id="neTitle"></span><span class="ncrumb">Layer graph &rarr; Compositor &rarr; Master FX &middot; Tab: back to deck</span>'+
    '<span class="sp"></span>'+
    '<button id="neAdd" class="nbtn" title="Add node (double-click canvas)">+ Node</button>'+
    '<button id="neZout" class="nbtn" title="Zoom out">&minus;</button>'+
@@ -4718,7 +4720,7 @@ function buildNodeEd(){
    '<div id="nemain"><div id="necanvas"><svg id="newires"></svg><div id="neworld"></div>'+
    '<div id="nepal" style="display:none"></div></div>'+
    '<div id="neprops"></div></div>'+
-   '<div id="nebar">drag background: pan &middot; wheel: zoom &middot; double-click: add node &middot; drag port &rarr; port: connect &middot; click wire: select &middot; Del: delete &middot; Ctrl+D: duplicate &middot; ESC: deck</div>';
+   '<div id="nebar">drag background: pan &middot; wheel: zoom &middot; double-click: add node &middot; drag port &rarr; port: connect &middot; click wire: select &middot; Del: delete &middot; Ctrl+D: duplicate &middot; ESC / Tab: deck</div>';
   document.body.appendChild(root);
   $('neBack').addEventListener('click',closeNodes);
   $('neAdd').addEventListener('click',(e)=>{ openPalette(neCanvasCenter()); e.stopPropagation(); });
@@ -4737,14 +4739,17 @@ function neCanvasCenter(){
   const r=$('necanvas').getBoundingClientRect();
   return {x:r.width/2, y:r.height/2};
 }
-function openNodes(i){
+function openNodes(i,dive){
   buildNodeEd();
   neView[neLayer]={x:nePan.x,y:nePan.y,z:neZoom};
   neLayer=i;
+  neDive=(dive&&dive.src!==null&&dive.src!==undefined)?{i:i,c:dive.c,src:dive.src}:null;
   const v=neView[i]; nePan={x:v.x,y:v.y}; neZoom=v.z;
   neSel=null; neDragWire=null; closePalette();
   $('nodeed').style.display='flex'; neOpen=true;
-  $('neTitle').textContent='Layer '+LAYER_NAMES[i]+' \u2014 Node Graph';
+  $('neTitle').textContent=neDive?
+    ('Clip '+LAYER_NAMES[i]+' \u00B7 C'+(neDive.c+1)+' ('+srcName(neDive.src)+') \u2014 Node Graph'):
+    ('Layer '+LAYER_NAMES[i]+' \u2014 Node Graph');
   drawNodes(); drawWires(); applyNeTransform(); renderNodeProps(null);
   if(neAfTimer) clearInterval(neAfTimer);
   neAfTimer=setInterval(neAfTick,250);
@@ -4752,10 +4757,33 @@ function openNodes(i){
 function closeNodes(){
   if(!neOpen) return;
   neView[neLayer]={x:nePan.x,y:nePan.y,z:neZoom};
-  neOpen=false; neSel=null; neDragWire=null;
+  neOpen=false; neSel=null; neDragWire=null; neDive=null;
   $('nodeed').style.display='none';
   closePalette();
   if(neAfTimer){ clearInterval(neAfTimer); neAfTimer=null; }
+}
+/* ----- Tab dive-in (Ableton-style deck <-> nodes toggle) -----
+   Click a clip, hit Tab -> node view lands on that clip's layer graph.
+   Tab again -> back to deck. Same window, instant swap.
+   Resolution: selected clip > fired clip on selected layer > plain layer graph. */
+function resolveDiveTarget(){
+  const li=(typeof S.selLayer==='number')?S.selLayer:0;
+  const sel=S.sel;
+  if(sel&&sel.kind==='clip'&&typeof sel.i==='number'&&typeof sel.c==='number'){
+    const src=S.clips&&S.clips[sel.i]?S.clips[sel.i][sel.c]:undefined;
+    if(src!==null&&src!==undefined) return {i:sel.i, dive:{c:sel.c, src:src}};
+  }
+  const fk=S.fired[li];
+  if(fk!==null&&fk!==undefined){
+    const src=S.clips&&S.clips[li]?S.clips[li][fk]:undefined;
+    if(src!==null&&src!==undefined) return {i:li, dive:{c:fk, src:src}};
+  }
+  return {i:li, dive:null};
+}
+function toggleNodesTab(){
+  if(neOpen){ closeNodes(); return; }
+  const t=resolveDiveTarget();
+  openNodes(t.i, t.dive);
 }
 function applyNeTransform(){
   $('neworld').style.transform='translate('+nePan.x+'px,'+nePan.y+'px) scale('+neZoom+')';
@@ -4791,7 +4819,8 @@ function nodeTitle(i,nd){
   const def=NTYPES[nd.type];
   if(nd.type==='src'){
     const sv=Math.round(eff(nodeParamId(i,nd.id,'src'))*srcCount());
-    return sv===0?('Source \u00B7 '+srcName(S.layers[i].src)):('Source \u00B7 '+srcName(sv-1));
+    const followSrc=(neDive&&neDive.src!==null&&neDive.src!==undefined)?neDive.src:S.layers[i].src;
+    return sv===0?('Source \u00B7 '+srcName(followSrc)):('Source \u00B7 '+srcName(sv-1));
   }
   if(nd.type==='lfo') return 'LFO '+MOD_LETTERS[nd.mod];
   return def.label;
@@ -5062,6 +5091,7 @@ function neKey(e){
   const typing=t&&(t.matches&& (t.matches('input,textarea,select')||t.isContentEditable));
   if(e.key==='Escape'){ e.stopPropagation(); e.preventDefault(); closeNodes(); return; }
   if(typing) return;
+  if(e.key==='Tab'){ e.preventDefault(); e.stopPropagation(); closeNodes(); return; }
   if(e.key==='n'||e.key==='N'){ e.stopPropagation(); return; }
   if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); e.stopPropagation(); neDeleteSel(); }
   else if((e.key==='d'||e.key==='D')&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); e.stopPropagation(); neDuplicateSel(); }
