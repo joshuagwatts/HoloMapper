@@ -363,3 +363,54 @@ Verification (all actually run):
   deck_fired.png (fired Cloner clip highlighted, props in sync),
   deck_perform.png (perform mode: full-bleed canvas + M1-M8/MASTER bar).
 - Handler audit: no dangling $('...') ids; every new control wired.
+
+## Mobile v3 — compact deck + v1.2 engine port (2026-10-08, ~00:25 CDT)
+
+What changed in mobile.html (only file touched):
+- UI rebuilt as a compact deck mirroring holomapper.html: single-row scrollable
+  topbar (brand, master mini, Tap+BPM, Sync, MIDI learn, presets, res select,
+  PERFORM, output-mode), 4 layer strips each with L-tab/S/B/clear, opacity
+  mini-slider, blend select, and a row of 8 fireable clip slots (clip rows
+  scroll horizontally under 640px), bottom macro bar with 8 slim sliders +
+  BLACKOUT, props as a right slide-over (tap any layer strip to open),
+  Deck/FX/Map tabs in a 37dvh panel. Same palette/type as desktop.
+- Engine ported from holomapper.html v1.2 verbatim: spectral cloner renderer
+  (ACES, dispersion, iridescence, IBL, bloom, ground plane), 14 meshes +
+  flowers + particles, 6 ShaperBox modulators/layer (S.mods), clip-state
+  system (S.clips, S.fired, L{i}.src param). Mapping block carried from mobile
+  v2 with renderGradeTex rewritten to the v1.2 quadDraw ordering. Overlays
+  (mapWrap/handles/mapcv) moved inside #stage so they track the canvas.
+- Kept big: clip slots (62px), corner handles (56px), transport/output buttons
+  (52px) — these are the thumb targets. Everything else compact.
+
+Verification (all actually run):
+- node --check on all 15 script blocks: pass. Zero errbanner on load.
+- CDP mobile-emulation (390x844 @2x, 1024x1366 @2x): deck renders 4 strips /
+  32 clips with fired highlights; props slide-over opens on layer tap with the
+  full param stack (Spectral material, Flower mesh, Modulators A-F + 6 curve
+  canvases); FX tab shows post-FX chain/master/plugin/audio/MIDI; Map tab
+  shows surfaces, corners/mask/test-pattern seg, pins instructions; output
+  mode goes fullscreen with pins toggle + exit; 1024px view reads as the
+  desktop's sibling.
+- Functional: clip click fires source through the param system (src 4->0,
+  S.params['L0.src']=0); cycling all 14 meshes + flower + particles produced
+  zero GL errors; modulator A routed to L0.op moved eff(0.2)->0.54->1.0 over
+  time; corner drag in output+pins mode moved corner A [0,0]->[0.103,0];
+  preset snapshot->mutate->applySnapshot restored L0.op=0.33, clips, and map
+  surfaces.
+- Bugs found by testing and fixed: (1) wireHandles()/wireMask() were not
+  called in the v3 shell — corner drag silently did nothing. (2) Desktop CSS
+  had flex-wrap:wrap on #topbar — it stacked into 3 rows; forced nowrap so it
+  is one scrollable row. (3) .ptab{display:flex} overrode the hidden attribute
+  — Deck and Map panes stacked; added .ptab[hidden]{display:none}.
+- Screenshots (checks/): v3_deck_390.png, v3_props_390.png, v3_fx_390.png,
+  v3_map_390.png, v3_outpins_390.png, v3_deck_1024.png, v3_cloner_390.png.
+
+Known limits:
+- 1 fps in headless SwiftShader is the software renderer, not the engine —
+  real GPU is ground truth for look/perf.
+- Clip assign on mobile is via long-press (contextmenu) since there is no
+  right-click; desktop keyboard shortcuts (1-4, B, M, Esc-exit-props) are
+  wired but touch has no keyboard.
+- Screenshots verify layout, not the spectral look — needs his eyes on the
+  live Pages URL in Chrome.
