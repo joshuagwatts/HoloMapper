@@ -224,6 +224,78 @@ body.perform #performbar{display:block}
 ::-webkit-scrollbar-track{background:transparent}
 .hint{color:var(--dim);font-size:11px;margin:6px 0}
 .krow{display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap}
+
+/* ================= NODE GRAPH EDITOR ("dive-in") ================= */
+#nodeed{position:fixed;inset:0;z-index:55;background:#07080c;display:flex;flex-direction:column;
+  font-family:inherit;color:var(--txt);}
+#nehead{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--panel);
+  border-bottom:1px solid var(--line);}
+#neTitle{font-weight:700;font-size:14px;}
+.ncrumb{font-size:11px;color:var(--dim);letter-spacing:.04em;}
+#nehead .sp{flex:1;}
+.nbtn{background:#1a2130;border:1px solid var(--line);color:var(--txt);border-radius:6px;
+  padding:5px 12px;cursor:pointer;font-size:12px;}
+.nbtn:hover{border-color:var(--acc2);}
+.nbtn.wide{width:100%;margin-top:6px;}
+#nemain{flex:1;display:flex;min-height:0;}
+#necanvas{flex:1;position:relative;overflow:hidden;cursor:grab;
+  background:
+    radial-gradient(circle at 50% 40%, #0b0e15 0%, #07080c 75%);}
+#necanvas:active{cursor:grabbing;}
+#necanvas::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background-image:
+    linear-gradient(rgba(139,92,246,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139,92,246,.07) 1px, transparent 1px);
+  background-size:28px 28px;}
+#neworld{position:absolute;left:0;top:0;transform-origin:0 0;}
+#newires{position:absolute;left:0;top:0;pointer-events:none;}
+#newires .wire{fill:none;stroke:#7c6cf0;stroke-width:2.5;pointer-events:none;filter:drop-shadow(0 0 4px rgba(139,92,246,.6));}
+#newires .wire.sel{stroke:#22d3ee;filter:drop-shadow(0 0 6px rgba(34,211,238,.8));}
+#newires .wirehit{fill:none;stroke:rgba(0,0,0,0);stroke-width:12;pointer-events:stroke;cursor:pointer;}
+#newires .wiretmp{fill:none;stroke:#22d3ee;stroke-width:2.5;stroke-dasharray:7 5;pointer-events:none;}
+.nnode{position:absolute;background:#12151d;border:1px solid #2a3345;border-radius:8px;
+  box-shadow:0 4px 18px rgba(0,0,0,.55);user-select:none;}
+.nnode.sel{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2),0 4px 18px rgba(0,0,0,.55);}
+.nhead{display:flex;align-items:center;gap:6px;padding:6px 8px;cursor:move;border-radius:8px 8px 0 0;
+  border-bottom:2px solid var(--nc,#8b5cf6);background:#171b25;font-size:12px;font-weight:600;}
+.nhead .nt{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.nhead .nx{cursor:pointer;color:var(--dim);font-size:14px;line-height:1;padding:0 2px;}
+.nhead .nx:hover{color:var(--bad);}
+.nlfo{display:block;margin:6px;border:1px solid var(--line);border-radius:4px;background:#0a0c11;}
+.nsub{font-size:10px;color:var(--dim);padding:0 8px 6px;}
+.naf{padding:8px 8px 2px;}
+.nafb{height:5px;background:#0a0c11;border-radius:3px;margin-bottom:5px;overflow:hidden;}
+.nafb i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#22d3ee,#a78bfa);border-radius:3px;}
+.nports{position:absolute;inset:0;pointer-events:none;}
+.nport{position:absolute;width:14px;height:14px;border-radius:50%;pointer-events:auto;cursor:crosshair;
+  background:#0a0c11;border:2px solid #7c6cf0;transform:translateY(-50%);}
+.nport.in{left:-8px;}
+.nport.out{right:-8px;border-color:#22d3ee;}
+.nport:hover{box-shadow:0 0 8px currentColor;}
+.nplab{position:absolute;font-size:9px;color:var(--dim);transform:translateY(-50%);white-space:nowrap;pointer-events:none;}
+.nplab.in{left:10px;}
+.nplab.out{right:10px;}
+#neprops{width:300px;flex:none;background:var(--panel);border-left:1px solid var(--line);
+  overflow-y:auto;padding:10px;}
+.nept{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
+.nepname{font-size:13px;font-weight:700;margin:8px 0 6px;color:var(--acc2);}
+.nepgrp .prow{margin-bottom:8px;}
+#nepal{position:absolute;width:220px;max-height:70%;overflow-y:auto;background:#161b26;
+  border:1px solid var(--acc);border-radius:8px;z-index:5;box-shadow:0 8px 30px rgba(0,0,0,.6);}
+.nepalt{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;
+  font-weight:700;font-size:12px;border-bottom:1px solid var(--line);}
+.nepalt .nx{cursor:pointer;color:var(--dim);}
+.nepalt .nx:hover{color:var(--bad);}
+.nepalg{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;
+  padding:8px 10px 4px;}
+.nepalb{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;
+  border:none;color:var(--txt);padding:7px 10px;cursor:pointer;font-size:12px;}
+.nepalb:hover{background:#1e2432;}
+.ndot{width:9px;height:9px;border-radius:50%;flex:none;}
+#nebar{padding:6px 12px;font-size:11px;color:var(--dim);background:var(--panel);
+  border-top:1px solid var(--line);}
+.modcv.nodecv{width:100%;height:110px;}
+
 </style>
 </head>
 <body>
@@ -233,6 +305,7 @@ body.perform #performbar{display:block}
     <span class="brand">&#9670; HoloMapper</span><span class="vtag">v1</span>
     <button id="btnHideL" title="Toggle layer deck">&#10218; Deck</button>
     <button id="btnHideR" title="Toggle properties panel">Props &#10219;</button>
+    <button id="btnNodes" title="Open node graph for selected layer (N)">Nodes</button>
     <span class="tgrp"><span class="tlab">Master</span><input type="range" id="masterSl" min="0" max="1" step="0.001" value="1" data-ctrl="P.master" title="Master output — click while MIDI Learn is armed to map"></span>
     <span class="sep"></span>
     <button id="btnTap" title="Tap tempo (Space)">Tap</button>
@@ -334,6 +407,8 @@ body.perform #performbar{display:block}
     <tr><td class="k">P / ESC</td><td>Enter / exit PERFORM mode</td></tr>
     <tr><td class="k">M</td><td>Arm / disarm MIDI learn</td></tr>
     <tr><td class="k">1 &ndash; 4</td><td>Select layer</td></tr>
+    <tr><td class="k">N / double-click layer</td><td>Open layer node graph</td></tr>
+    <tr><td class="k">ESC (in graph)</td><td>Back to deck</td></tr>
     <tr><td class="k">B</td><td>Bypass selected layer</td></tr>
     <tr><td class="k">Space</td><td>Tap tempo</td></tr>
     <tr><td class="k">?</td><td>This help</td></tr>
@@ -821,7 +896,7 @@ function defaultState(){
   const params={};
   for(const id in PARAMS) params[id]=PARAMS[id].def;
   return {
-    v:1, res:'1280x720', selLayer:0, sel:{kind:'layer', i:0},
+    v:1, res:'1280x720', selLayer:0, sel:{kind:'layer', i:0}, graphs:null,
     layers:[
       {src:0, blend:0, bypass:false, solo:false},
       {src:2, blend:2, bypass:false, solo:false},
@@ -1319,7 +1394,7 @@ function makeTarget(w,h,depth){
   }
   const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  return {tex:tex, fb:fb, w:w, h:h, ok:ok};
+  return {tex:tex, fb:fb, w:w, h:h, ok:ok, rb:(typeof rb!=='undefined'?rb:null)};
 }
 function buildTargets(){
   const wh = S.res.split('x').map(Number);
@@ -1333,6 +1408,7 @@ function buildTargets(){
   fbRead=0;
   const all=[...layerT,compT,...fbT,...postT];
   if(all.some(t=>!t.ok)) showErr('A render target is framebuffer-incomplete — visuals may be broken.');
+  if(typeof clearNodeTargets==='function') clearNodeTargets(); /* v1.3: node scratch rebuilt lazily */
 }
 function initGL(){
   gl = canvas.getContext('webgl2',{antialias:false, alpha:false, powerPreference:'high-performance'});
@@ -2321,16 +2397,18 @@ function layerEnabled(i){
   const anySolo=S.layers.some(l=>l.solo);
   return !L.bypass && (!anySolo || L.solo);
 }
-function renderLayer(i,t){
-  const T=layerT[i];
+/* v1.3 node graph: renderLayerInto renders a layer source into any target.
+   srcOv overrides the layer's fired source (used by Source nodes). */
+function renderLayerInto(i,t,T,srcOv){
   gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
   gl.viewport(0,0,T.w,T.h);
-  if(S.layers[i].src===4){ renderCloner(i,t,T); return; }
+  const sidx=(srcOv===undefined)?S.layers[i].src:srcOv;
+  if(sidx===4){ renderCloner(i,t,T); return; }
   gl.clearColor(0,0,0,1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   if(!layerEnabled(i)) return;
   const L=S.layers[i];
-  const prog=PROG[SRC_KEYS[L.src]];
+  const prog=PROG[SRC_KEYS[sidx]];
   if(!prog) return;
   const aud = eff('L'+i+'.audio')*eff('P.aamt');
   let sp = PARAMS['L'+i+'.speed'].map(eff('L'+i+'.speed'));
@@ -2347,6 +2425,22 @@ function renderLayer(i,t){
   gl.uniform1f(U(prog,'u_param1'),eff('L'+i+'.p1'));
   gl.uniform1f(U(prog,'u_param2'),eff('L'+i+'.p2'));
   quadDraw();
+}
+/* v1.3: graph dispatch. Default graph (Source->Output) is pixel-identical to
+   the fixed pipeline; any eval failure falls back to the fixed path. */
+function renderLayer(i,t){
+  if(useGraph(i)){
+    const T=layerT[i];
+    gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
+    gl.viewport(0,0,T.w,T.h);
+    gl.clearColor(0,0,0,1);
+    gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    if(layerEnabled(i)){
+      try{ evalGraph(i,t); return; }
+      catch(err){ console.error('HoloMapper: node graph eval failed, fixed fallback',err); }
+    } else return;
+  }
+  renderLayerInto(i,t,layerT[i]);
 }
 function renderCombine(){
   const P=PROG.combine;
@@ -3183,7 +3277,7 @@ function snapshot(){
     clips:S.clips, fired:S.fired,
     postBypass:S.postBypass, strobeOn:S.strobeOn, beatSync:S.beatSync,
     bpm:S.bpm, macros:S.macros, res:S.res, pluginCode:S.pluginCode, midi:S.midi,
-    mods:S.mods
+    mods:S.mods, graphs:S.graphs
   }));
 }
 function applySnapshot(snap){
@@ -3208,11 +3302,13 @@ function applySnapshot(snap){
   while(S.macros.length<8) S.macros.push({label:'M'+(S.macros.length+1), val:0.5});
   S.midi=Array.isArray(snap.midi)?snap.midi:[];
   S.mods=sanitizeMods(snap.mods);
+  S.graphs=sanitizeGraphs(snap.graphs); ensureAllGraphs(); /* v1.3: node graphs */
   if(typeof snap.pluginCode==='string' && snap.pluginCode!==S.pluginCode){
     S.pluginCode=snap.pluginCode; $('plugcode').value=S.pluginCode; compilePlugin(true);
   }
   if(snap.res && snap.res!==S.res){ S.res=snap.res; $('resSel').value=S.res; buildTargets(); }
   buildDeck(); buildProps(); buildPostFx(); buildMaster(); buildDashboard(); buildPerform();
+  if(typeof neOpen!=='undefined'&&neOpen){ drawNodes(); drawWires(); renderNodeProps(null); }
   renderMidiList(); syncTopToggles();
   $('bpm').textContent=S.bpm;
   saveState();
@@ -3345,6 +3441,7 @@ function wireStatic(){
     else if(k==='m'||k==='M') setLearn(!learnArmed);
     else if(k>='1'&&k<='4') selectLayer(parseInt(k,10)-1);
     else if(k==='b'||k==='B') toggleBypass(S.selLayer);
+    else if(k==='n'||k==='N'){ if(typeof openNodes==='function') openNodes(S.selLayer); }
     else if(k===' '){ e.preventDefault(); tapTempo(); }
     else if(k==='?') toggleHelp();
     else if(k==='Escape'){
@@ -3353,6 +3450,891 @@ function wireStatic(){
     }
   });
 }
+</script>
+<script>
+'use strict';
+/* ================= NODE GRAPH — "dive-in" (TouchDesigner-style) =================
+   Per-layer texture graphs. The deck stays the performance surface; double-
+   clicking a layer header (or the Nodes button) dives into that layer's graph.
+   Graphs are REAL: topological eval renders each node to its own texture;
+   the terminal Output node feeds the compositor (layerT[i]).
+   Layer graph -> Compositor -> Master FX.
+   Scope: texture routing now; value wires later. Modulators (A-F) appear as
+   nodes whose drawable editors open from the node (visual integration). */
+
+/* ---------- node type registry ---------- */
+const NPORT_TEX={label:'tex'};
+const NTYPES={
+  src:{label:'Source',group:'Sources',color:'#a78bfa',outs:[NPORT_TEX],
+    params:[
+      {k:'src',label:'Source',kind:'discrete',def:0,
+       opts:['Layer Input','Tunnel','Flow Field','Nebula','Plugin','Cloner 3D']},
+    ]},
+  feedback:{label:'Feedback',group:'FX',color:'#f59e0b',ins:[NPORT_TEX],outs:[NPORT_TEX],
+    params:[
+      {k:'trails',label:'Trails',def:0.55},
+      {k:'zoom',label:'Zoom',def:1/3,map:v=>0.9+v*0.3,fmt:v=>(0.9+v*0.3).toFixed(3)+'x'},
+      {k:'rot',label:'Rotate',def:0.5,map:v=>(v-0.5)*0.12,fmt:v=>((v-0.5)*0.12*57.3).toFixed(1)+'\u00B0'},
+      {k:'offx',label:'Off X',def:0.5,map:v=>(v-0.5)*0.15,fmt:v=>((v-0.5)*0.15).toFixed(3)},
+      {k:'offy',label:'Off Y',def:0.5,map:v=>(v-0.5)*0.15,fmt:v=>((v-0.5)*0.15).toFixed(3)},
+      {k:'hue',label:'Hue Shift',def:0.5,map:v=>(v-0.5)*3.0,fmt:v=>Math.round((v-0.5)*172)+'\u00B0'},
+      {k:'sat',label:'Saturate',def:0.5,map:v=>v*2,fmt:v=>(v*2).toFixed(2)+'x'},
+    ]},
+  kaleido:{label:'Kaleidoscope',group:'FX',color:'#f59e0b',ins:[NPORT_TEX],outs:[NPORT_TEX],
+    params:[
+      {k:'seg',label:'Segments',def:0.4,map:v=>Math.round(2+v*10),fmt:v=>String(Math.round(2+v*10))},
+      {k:'ang',label:'Angle',def:0,map:v=>v*6.2832,fmt:v=>Math.round(v*360)+'\u00B0'},
+    ]},
+  glitch:{label:'Glitch',group:'FX',color:'#f59e0b',ins:[NPORT_TEX],outs:[NPORT_TEX],
+    params:[{k:'amt',label:'Amount',def:0.35}]},
+  grade:{label:'Grade',group:'FX',color:'#f59e0b',ins:[NPORT_TEX],outs:[NPORT_TEX],
+    params:[
+      {k:'bri',label:'Brightness',def:0.5,map:v=>0.2+v*1.6,fmt:v=>(0.2+v*1.6).toFixed(2)},
+      {k:'con',label:'Contrast',def:0.5,map:v=>v*2,fmt:v=>(v*2).toFixed(2)},
+      {k:'sat',label:'Saturation',def:0.5,map:v=>v*2,fmt:v=>(v*2).toFixed(2)},
+      {k:'vig',label:'Vignette',def:0.28,map:v=>v*0.9,fmt:v=>Math.round(v*90)+'%'},
+      {k:'grain',label:'Grain',def:0.2,map:v=>v*0.25,fmt:v=>Math.round(v*25)+'%'},
+    ]},
+  bloom:{label:'Bloom',group:'FX',color:'#f59e0b',ins:[NPORT_TEX],outs:[NPORT_TEX],
+    params:[
+      {k:'thr',label:'Threshold',def:0.55,map:v=>v*2.5,fmt:v=>(v*2.5).toFixed(2)},
+      {k:'str',label:'Strength',def:0.4,map:v=>v*3,fmt:v=>(v*3).toFixed(2)},
+    ]},
+  xform:{label:'Transform',group:'FX',color:'#f59e0b',ins:[NPORT_TEX],outs:[NPORT_TEX],
+    params:[
+      {k:'scale',label:'Scale',def:0.5,map:v=>0.25+v*3.75,fmt:v=>(0.25+v*3.75).toFixed(2)+'x'},
+      {k:'rot',label:'Rotate',def:0.5,map:v=>(v-0.5)*360,fmt:v=>Math.round((v-0.5)*360)+'\u00B0'},
+      {k:'tx',label:'Move X',def:0.5,map:v=>(v-0.5)*2,fmt:v=>((v-0.5)*2).toFixed(2)},
+      {k:'ty',label:'Move Y',def:0.5,map:v=>(v-0.5)*2,fmt:v=>((v-0.5)*2).toFixed(2)},
+    ]},
+  blend:{label:'Blend',group:'Utility',color:'#38bdf8',ins:[{label:'A'},{label:'B'}],outs:[NPORT_TEX],
+    params:[
+      {k:'mode',label:'Mode',kind:'discrete',def:0,opts:BLENDS},
+      {k:'op',label:'Opacity',def:1},
+    ]},
+  output:{label:'Output',group:'Utility',color:'#34d399',ins:[NPORT_TEX],outs:[],locked:true},
+  lfo:{label:'LFO',group:'Modulation',color:'#5eead4',ins:[],outs:[],locked:true,isMod:true},
+  audiof:{label:'Audio Follow',group:'Modulation',color:'#5eead4',ins:[],outs:[],locked:true,isMod:true},
+};
+const N_GROUPS=['Sources','FX','Modulation','Utility'];
+
+/* ---------- graph state ---------- */
+function nodeParamId(i,nid,k){ return 'L'+i+'.N'+nid+'.'+k; }
+function regNodeParam(i,nid,pd){
+  const id=nodeParamId(i,nid,pd.k);
+  if(!PARAMS[id]){
+    defParam(id, LAYER_NAMES[i]+' '+pd.label, pd.def, pd.map, pd.fmt);
+    if(pd.kind) PARAMS[id].kind=pd.kind; /* discrete/toggle marker */
+  }
+  if(S.params[id]===undefined) S.params[id]=PARAMS[id].def;
+  return id;
+}
+function unregNodeParams(i,nid,nd){
+  const def=NTYPES[nd.type]; if(!def||!def.params) return;
+  for(const pd of def.params){
+    const id=nodeParamId(i,nid,pd.k);
+    delete PARAMS[id]; delete S.params[id]; delete CTRLS[id];
+    delete SYNC_FN[id]; delete S.assigns[id];
+  }
+}
+function defaultGraph(i){
+  const g={seq:9,rev:0,nodes:[],wires:[]};
+  g.nodes.push({id:0,type:'src',x:90,y:170,p:{src:0}});
+  g.nodes.push({id:1,type:'output',x:470,y:170,p:{},locked:true});
+  for(let m=0;m<6;m++) g.nodes.push({id:2+m,type:'lfo',x:90+m*150,y:440,p:{},mod:m,locked:true});
+  g.nodes.push({id:8,type:'audiof',x:90+6*150,y:440,p:{},locked:true});
+  g.wires.push({f:{n:0,p:0},t:{n:1,p:0}});
+  return g;
+}
+function validGraph(g){
+  if(!g||!Array.isArray(g.nodes)||!Array.isArray(g.wires)||typeof g.seq!=='number') return null;
+  const ids=new Set();
+  for(const n of g.nodes){
+    if(!n||typeof n.id!=='number'||!NTYPES[n.type]||typeof n.x!=='number'||typeof n.y!=='number') return null;
+    if(ids.has(n.id)) return null; ids.add(n.id);
+    if(!n.p||typeof n.p!=='object') n.p={};
+  }
+  g.wires=g.wires.filter(w=>w&&w.f&&w.t&&ids.has(w.f.n)&&ids.has(w.t.n)&&w.f.n!==w.t.n);
+  if(typeof g.rev!=='number') g.rev=0;
+  return g;
+}
+/* repair: ensure exactly one output, the 6 LFOs and audio-follow exist */
+function repairGraph(i,g){
+  if(!g.nodes.some(n=>n.type==='output'))
+    g.nodes.push({id:g.seq++,type:'output',x:470,y:170,p:{},locked:true});
+  for(let m=0;m<6;m++)
+    if(!g.nodes.some(n=>n.type==='lfo'&&n.mod===m))
+      g.nodes.push({id:g.seq++,type:'lfo',x:90+m*150,y:440,p:{},mod:m,locked:true});
+  if(!g.nodes.some(n=>n.type==='audiof'))
+    g.nodes.push({id:g.seq++,type:'audiof',x:990,y:440,p:{},locked:true});
+  return g;
+}
+function ensureAllGraphs(){
+  if(!Array.isArray(S.graphs)||S.graphs.length!==4) S.graphs=[null,null,null,null];
+  for(let i=0;i<4;i++){
+    let g=validGraph(S.graphs[i]);
+    if(!g) g=defaultGraph(i);
+    g=repairGraph(i,g);
+    S.graphs[i]=g;
+    for(const n of g.nodes){
+      const def=NTYPES[n.type];
+      if(def&&def.params) for(const pd of def.params) regNodeParam(i,n.id,pd);
+    }
+    invalidateGraph(i);
+  }
+}
+function sanitizeGraphs(sg){
+  if(!Array.isArray(sg)||sg.length!==4) return [null,null,null,null];
+  return sg.map(g=>validGraph(g));
+}
+
+/* ---------- node texture runtime (never serialized) ---------- */
+const NTG={};   /* "i.nid" -> makeTarget */
+let NRUN={};    /* "i.nid" -> {fb:[t0,t1], fbRead, bl:[b0,b1]} for stateful nodes */
+function delTarget(T){
+  if(!T) return;
+  try{ gl.deleteTexture(T.tex); }catch(e){}
+  try{ gl.deleteFramebuffer(T.fb); }catch(e){}
+  try{ if(T.rb) gl.deleteRenderbuffer(T.rb); }catch(e){}
+}
+function nodeTarget(i,nid){
+  const k=i+'.'+nid;
+  let T=NTG[k];
+  if(!T||T.w!==RW||T.h!==RH||!T.ok){ if(T) delTarget(T); T=NTG[k]=makeTarget(RW,RH,true); }
+  return T;
+}
+function nodeRun(i,nid){
+  const k=i+'.'+nid;
+  let R=NRUN[k];
+  if(!R||R.w!==RW||R.h!==RH){
+    if(R){ delTarget(R.fb[0]); delTarget(R.fb[1]); delTarget(R.bl[0]); delTarget(R.bl[1]); }
+    R=NRUN[k]={fb:[makeTarget(RW,RH),makeTarget(RW,RH)],fbRead:0,
+               bl:[makeTarget(RW>>1,RH>>1),makeTarget(RW>>1,RH>>1)],w:RW,h:RH};
+  }
+  return R;
+}
+function clearNodeTargets(){
+  for(const k in NTG) delTarget(NTG[k]);
+  for(const k in NTG) delete NTG[k];
+  NRUN={};
+}
+/* node-only shaders */
+const SRC_XFORM=`#version 300 es
+precision highp float;
+out vec4 O; in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_scale,u_rot,u_tx,u_ty,u_aspect;
+void main(){
+  vec2 uv=v_uv-0.5; uv.x*=u_aspect;
+  float c=cos(u_rot),s=sin(u_rot);
+  uv=mat2(c,-s,s,c)*uv;
+  uv=uv/max(u_scale,0.05);
+  uv.x/=u_aspect;
+  uv+=vec2(u_tx,u_ty)+0.5;
+  vec3 col=(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0)?vec3(0.0):texture(u_tex,uv).rgb;
+  O=vec4(col,1.0);
+}`;
+const SRC_COPYEXACT=`#version 300 es
+precision highp float;
+out vec4 O;
+uniform sampler2D u_tex;
+void main(){ O=vec4(texelFetch(u_tex,ivec2(gl_FragCoord.xy),0).rgb,1.0); }`;
+const SRC_BLEND2=`#version 300 es
+precision highp float;
+out vec4 O; in vec2 v_uv;
+uniform sampler2D u_a,u_b; uniform int u_mode; uniform float u_op;
+vec3 applyBlend(vec3 d,vec3 s,int m){
+  if(m==1) return d+s;
+  if(m==2) return 1.0-(1.0-d)*(1.0-s);
+  if(m==3) return d*s;
+  if(m==4){
+    vec3 a=2.0*d*s;
+    vec3 b=1.0-2.0*(1.0-d)*(1.0-s);
+    return mix(a,b,step(vec3(0.5),d));
+  }
+  if(m==5) return abs(d-s);
+  return s;
+}
+void main(){
+  vec3 a=texture(u_a,v_uv).rgb;
+  vec3 b=texture(u_b,v_uv).rgb;
+  O=vec4(mix(a,applyBlend(a,b,u_mode),u_op),1.0);
+}`;
+let nodeProgsReady=false;
+function ensureNodeProgs(){
+  if(nodeProgsReady) return true;
+  const jobs=[['xform',SRC_XFORM],['blend2',SRC_BLEND2],['copyexact',SRC_COPYEXACT]];
+  for(const [name,fs] of jobs){
+    const pr=makeProgram(VERT,fs);
+    if(!pr){ showErr('Shader "'+name+'" failed: '+lastGlslErr); return false; }
+    PROG[name]=pr;
+  }
+  nodeProgsReady=true;
+  return true;
+}
+function clearTex(T){
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+  gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+}
+function neff(i,nid,k){
+  const id=nodeParamId(i,nid,k), P=PARAMS[id];
+  return P.map(eff(id));
+}
+/* per-node texture renderers. ins: portIndex->texture. T: this node's target. */
+function renderNodeTex(i,nd,t,ins,T){
+  const idp='L'+i+'.N'+nd.id+'.';
+  const noIn=()=>{ clearTex(T); };
+  switch(nd.type){
+    case 'src':{
+      const sv=Math.round(eff(idp+'src')*5);
+      renderLayerInto(i,t,T, sv===0?undefined:sv-1);
+      break;
+    }
+    case 'feedback':{
+      const inTex=ins[0]; if(!inTex){ noIn(); break; }
+      const R=nodeRun(i,nd.id), P=PROG.feedback, W=R.fb[1-R.fbRead];
+      gl.bindFramebuffer(gl.FRAMEBUFFER,W.fb); gl.viewport(0,0,W.w,W.h);
+      gl.useProgram(P);
+      setTex(P,'u_cur',0,inTex); setTex(P,'u_prev',1,R.fb[R.fbRead].tex);
+      gl.uniform1f(U(P,'u_trails'),neff(i,nd.id,'trails'));
+      gl.uniform1f(U(P,'u_zoom'),  neff(i,nd.id,'zoom'));
+      gl.uniform1f(U(P,'u_rot'),   neff(i,nd.id,'rot'));
+      gl.uniform2f(U(P,'u_off'),   neff(i,nd.id,'offx'),neff(i,nd.id,'offy'));
+      gl.uniform1f(U(P,'u_hue'),   neff(i,nd.id,'hue'));
+      gl.uniform1f(U(P,'u_sat'),   neff(i,nd.id,'sat'));
+      gl.uniform1f(U(P,'u_bypass'),0);
+      quadDraw(); R.fbRead=1-R.fbRead;
+      /* copy current result to this node's target */
+      { const Pc=PROG.copy; gl.useProgram(Pc); setTex(Pc,'u_tex',0,W.tex);
+        gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h); quadDraw(); }
+      break;
+    }
+    case 'kaleido':{
+      const inTex=ins[0]; if(!inTex){ noIn(); break; }
+      const P=PROG.kaleido;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+      gl.useProgram(P); setTex(P,'u_tex',0,inTex);
+      gl.uniform1f(U(P,'u_seg'),neff(i,nd.id,'seg'));
+      gl.uniform1f(U(P,'u_ang'),neff(i,nd.id,'ang'));
+      gl.uniform1f(U(P,'u_aspect'),RW/RH);
+      gl.uniform1f(U(P,'u_bypass'),0);
+      quadDraw(); break;
+    }
+    case 'glitch':{
+      const inTex=ins[0]; if(!inTex){ noIn(); break; }
+      const P=PROG.glitch;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+      gl.useProgram(P); setTex(P,'u_tex',0,inTex);
+      gl.uniform1f(U(P,'u_amt'),neff(i,nd.id,'amt'));
+      gl.uniform1f(U(P,'u_time'),t);
+      gl.uniform1f(U(P,'u_bypass'),0);
+      quadDraw(); break;
+    }
+    case 'grade':{
+      const inTex=ins[0]; if(!inTex){ noIn(); break; }
+      const P=PROG.grade;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+      gl.useProgram(P); setTex(P,'u_tex',0,inTex);
+      gl.uniform1f(U(P,'u_bri'),neff(i,nd.id,'bri'));
+      gl.uniform1f(U(P,'u_con'),neff(i,nd.id,'con'));
+      gl.uniform1f(U(P,'u_sat2'),neff(i,nd.id,'sat'));
+      gl.uniform1f(U(P,'u_vig'),neff(i,nd.id,'vig'));
+      gl.uniform1f(U(P,'u_grain'),neff(i,nd.id,'grain'));
+      gl.uniform1f(U(P,'u_time'),t);
+      gl.uniform1f(U(P,'u_master'),1);
+      gl.uniform1f(U(P,'u_strobeOn'),0);
+      gl.uniform1f(U(P,'u_strobeRate'),0);
+      gl.uniform1f(U(P,'u_strobeAmt'),0);
+      quadDraw(); break;
+    }
+    case 'bloom':{
+      const inTex=ins[0]; if(!inTex){ noIn(); break; }
+      const R=nodeRun(i,nd.id);
+      const thr=neff(i,nd.id,'thr'), str=neff(i,nd.id,'str');
+      let P=PROG.copy; gl.useProgram(P); setTex(P,'u_tex',0,inTex);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h); quadDraw();
+      P=PROG.bloombp; gl.useProgram(P); setTex(P,'u_tex',0,inTex);
+      gl.uniform1f(U(P,'u_thresh'),thr);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,R.bl[0].fb); gl.viewport(0,0,R.bl[0].w,R.bl[0].h); quadDraw();
+      P=PROG.bloomblur; gl.useProgram(P);
+      for(let k=0;k<2;k++){
+        const s2=R.bl[k%2], d2=R.bl[1-k%2];
+        setTex(P,'u_tex',0,s2.tex);
+        gl.uniform2f(U(P,'u_texel'),1/s2.w,1/s2.h);
+        gl.bindFramebuffer(gl.FRAMEBUFFER,d2.fb); gl.viewport(0,0,d2.w,d2.h); quadDraw();
+      }
+      P=PROG.bloomadd; gl.useProgram(P); setTex(P,'u_tex',0,R.bl[0].tex);
+      gl.uniform1f(U(P,'u_strength'),str);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE); quadDraw(); gl.disable(gl.BLEND);
+      break;
+    }
+    case 'xform':{
+      const inTex=ins[0]; if(!inTex){ noIn(); break; }
+      const P=PROG.xform;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+      gl.useProgram(P); setTex(P,'u_tex',0,inTex);
+      gl.uniform1f(U(P,'u_scale'),neff(i,nd.id,'scale'));
+      gl.uniform1f(U(P,'u_rot'),neff(i,nd.id,'rot'));
+      gl.uniform1f(U(P,'u_tx'),neff(i,nd.id,'tx'));
+      gl.uniform1f(U(P,'u_ty'),neff(i,nd.id,'ty'));
+      gl.uniform1f(U(P,'u_aspect'),RW/RH);
+      quadDraw(); break;
+    }
+    case 'blend':{
+      const a=ins[0], b=ins[1];
+      if(!a&&!b){ noIn(); break; }
+      const P=PROG.blend2;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+      gl.useProgram(P);
+      setTex(P,'u_a',0,a||b); setTex(P,'u_b',1,b||a);
+      const m=Math.round(eff(idp+'mode')*5);
+      gl.uniform1i(U(P,'u_mode'),m);
+      gl.uniform1f(U(P,'u_op'),eff(idp+'op'));
+      quadDraw(); break;
+    }
+    default: noIn();
+  }
+}
+function renderOutputNode(i,nd,t,wiresByT,texOf){
+  const T=layerT[i];
+  clearTex(T);
+  const w=(wiresByT[nd.id]||[])[0];
+  if(!w) return;
+  const src=texOf[w.f.n]; if(!src) return;
+  const P=PROG.copyexact;
+  gl.useProgram(P); setTex(P,'u_tex',0,src);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+  quadDraw();
+}
+/* ---------- evaluation ---------- */
+function useGraph(i){
+  const g=S.graphs&&S.graphs[i];
+  return !!(g&&g.nodes&&g.nodes.length&&g.nodes.some(n=>n.type==='output'));
+}
+const graphOrder=[null,null,null,null], graphOrderKey=['','','',''];
+function invalidateGraph(i){ graphOrder[i]=null; }
+function topoOrder(g){
+  const indeg={}, adj={}, byId={};
+  for(const n of g.nodes){ indeg[n.id]=0; adj[n.id]=[]; byId[n.id]=n; }
+  for(const w of g.wires){
+    if(byId[w.f.n]===undefined||byId[w.t.n]===undefined) continue;
+    adj[w.f.n].push(w.t.n); indeg[w.t.n]++;
+  }
+  const q=g.nodes.filter(n=>indeg[n.id]===0).map(n=>n.id);
+  const order=[];
+  while(q.length){
+    const id=q.shift(); order.push(id);
+    for(const m of adj[id]) if(--indeg[m]===0) q.push(m);
+  }
+  return order.length===g.nodes.length?order:null;
+}
+function graphKey(i){
+  const g=S.graphs[i];
+  return g.nodes.length+':'+g.wires.length+':'+(g.rev||0);
+}
+function touchGraph(i){ const g=S.graphs[i]; g.rev=(g.rev||0)+1; invalidateGraph(i); }
+function evalGraph(i,t){
+  if(!ensureNodeProgs()) throw new Error('node shaders failed');
+  const g=S.graphs[i];
+  const key=graphKey(i);
+  let order=graphOrder[i];
+  if(!order||graphOrderKey[i]!==key){ order=topoOrder(g); graphOrder[i]=order; graphOrderKey[i]=key; }
+  if(!order) throw new Error('node graph has a cycle');
+  const texOf={}, wiresByT={};
+  for(const w of g.wires) (wiresByT[w.t.n]=wiresByT[w.t.n]||[]).push(w);
+  const byId={}; for(const n of g.nodes) byId[n.id]=n;
+  for(const nid of order){
+    const nd=byId[nid]; if(!nd) continue;
+    if(nd.type==='lfo'||nd.type==='audiof') continue;
+    if(nd.type==='output'){ renderOutputNode(i,nd,t,wiresByT,texOf); continue; }
+    const T=nodeTarget(i,nd.id);
+    const ins={};
+    for(const w of (wiresByT[nd.id]||[])) ins[w.t.p]=texOf[w.f.n];
+    renderNodeTex(i,nd,t,ins,T);
+    texOf[nd.id]=T.tex;
+  }
+}
+
+/* ---------- editor UI ---------- */
+let neOpen=false, neLayer=0;
+let nePan={x:60,y:60}, neZoom=1;
+let neSel=null;            /* {kind:'node',nid} | {kind:'wire',wi} */
+let neDragWire=null;       /* {fromId,fromPort, x2,y2} | {toId,toPort, x2,y2} (reverse) */
+let nePanning=null, neNodeDrag=null;
+const neView=[{x:60,y:60,z:1},{x:60,y:60,z:1},{x:60,y:60,z:1},{x:60,y:60,z:1}];
+let neAfTimer=null;
+
+function neNode(i,nid){ return S.graphs[i].nodes.find(n=>n.id===nid); }
+
+function buildNodeEd(){
+  if($('nodeed')) return;
+  const root=el('div',''); root.id='nodeed'; root.style.display='none';
+  root.innerHTML=
+   '<div id="nehead"><button id="neBack" class="nbtn" title="Back to deck (ESC)">&#8592; Deck</button>'+
+   '<span id="neTitle"></span><span class="ncrumb">Layer graph &rarr; Compositor &rarr; Master FX</span>'+
+   '<span class="sp"></span>'+
+   '<button id="neAdd" class="nbtn" title="Add node (double-click canvas)">+ Node</button>'+
+   '<button id="neZout" class="nbtn" title="Zoom out">&minus;</button>'+
+   '<button id="neZin" class="nbtn" title="Zoom in">+</button>'+
+   '<button id="neFit" class="nbtn" title="Fit graph">Fit</button></div>'+
+   '<div id="nemain"><div id="necanvas"><svg id="newires"></svg><div id="neworld"></div>'+
+   '<div id="nepal" style="display:none"></div></div>'+
+   '<div id="neprops"></div></div>'+
+   '<div id="nebar">drag background: pan &middot; wheel: zoom &middot; double-click: add node &middot; drag port &rarr; port: connect &middot; click wire: select &middot; Del: delete &middot; Ctrl+D: duplicate &middot; ESC: deck</div>';
+  document.body.appendChild(root);
+  $('neBack').addEventListener('click',closeNodes);
+  $('neAdd').addEventListener('click',(e)=>{ openPalette(neCanvasCenter()); e.stopPropagation(); });
+  $('neZin').addEventListener('click',()=>neZoomAt(neCanvasCenter().x,neCanvasCenter().y,1.25));
+  $('neZout').addEventListener('click',()=>neZoomAt(neCanvasCenter().x,neCanvasCenter().y,1/1.25));
+  $('neFit').addEventListener('click',neFit);
+  const cv=$('necanvas');
+  cv.addEventListener('pointerdown',neCanvasDown);
+  cv.addEventListener('wheel',neWheel,{passive:false});
+  cv.addEventListener('dblclick',neCanvasDbl);
+  document.addEventListener('pointermove',nePointerMove);
+  document.addEventListener('pointerup',nePointerUp);
+  document.addEventListener('keydown',neKey,true);
+}
+function neCanvasCenter(){
+  const r=$('necanvas').getBoundingClientRect();
+  return {x:r.width/2, y:r.height/2};
+}
+function openNodes(i){
+  buildNodeEd();
+  neView[neLayer]={x:nePan.x,y:nePan.y,z:neZoom};
+  neLayer=i;
+  const v=neView[i]; nePan={x:v.x,y:v.y}; neZoom=v.z;
+  neSel=null; neDragWire=null; closePalette();
+  $('nodeed').style.display='flex'; neOpen=true;
+  $('neTitle').textContent='Layer '+LAYER_NAMES[i]+' \u2014 Node Graph';
+  drawNodes(); drawWires(); applyNeTransform(); renderNodeProps(null);
+  if(neAfTimer) clearInterval(neAfTimer);
+  neAfTimer=setInterval(neAfTick,250);
+}
+function closeNodes(){
+  if(!neOpen) return;
+  neView[neLayer]={x:nePan.x,y:nePan.y,z:neZoom};
+  neOpen=false; neSel=null; neDragWire=null;
+  $('nodeed').style.display='none';
+  closePalette();
+  if(neAfTimer){ clearInterval(neAfTimer); neAfTimer=null; }
+}
+function applyNeTransform(){
+  $('neworld').style.transform='translate('+nePan.x+'px,'+nePan.y+'px) scale('+neZoom+')';
+  drawWires();
+}
+function neZoomAt(sx,sy,f){
+  const z2=clamp(neZoom*f,0.25,2.5);
+  const k=z2/neZoom;
+  nePan.x=sx-(sx-nePan.x)*k; nePan.y=sy-(sy-nePan.y)*k;
+  neZoom=z2; applyNeTransform();
+}
+function neWheel(e){
+  e.preventDefault();
+  const r=$('necanvas').getBoundingClientRect();
+  neZoomAt(e.clientX-r.left, e.clientY-r.top, e.deltaY<0?1.15:1/1.15);
+}
+function neFit(){
+  const g=S.graphs[neLayer];
+  if(!g.nodes.length) return;
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const n of g.nodes){ x0=Math.min(x0,n.x); y0=Math.min(y0,n.y); x1=Math.max(x1,n.x+170); y1=Math.max(y1,n.y+120); }
+  const r=$('necanvas').getBoundingClientRect();
+  const z=clamp(Math.min(r.width/(x1-x0+80), r.height/(y1-y0+80)),0.25,2.5);
+  neZoom=z;
+  nePan.x=r.width/2-(x0+x1)/2*z; nePan.y=r.height/2-(y0+y1)/2*z;
+  applyNeTransform();
+}
+function neScreenToWorld(sx,sy){ return {x:(sx-nePan.x)/neZoom, y:(sy-nePan.y)/neZoom}; }
+
+/* ----- node DOM ----- */
+const NE_W=168;
+function nodeTitle(i,nd){
+  const def=NTYPES[nd.type];
+  if(nd.type==='src'){
+    const sv=Math.round(eff(nodeParamId(i,nd.id,'src'))*5);
+    return sv===0?('Source \u00B7 '+LAYER_SRC[S.layers[i].src]):('Source \u00B7 '+LAYER_SRC[sv-1]);
+  }
+  if(nd.type==='lfo') return 'LFO '+MOD_LETTERS[nd.mod];
+  return def.label;
+}
+function drawNodes(){
+  const w=$('neworld'); w.innerHTML='';
+  const i=neLayer, g=S.graphs[i];
+  for(const nd of g.nodes){
+    const def=NTYPES[nd.type];
+    const d=el('div','nnode'+((neSel&&neSel.kind==='node'&&neSel.nid===nd.id)?' sel':''));
+    d.dataset.nid=nd.id;
+    d.style.left=nd.x+'px'; d.style.top=nd.y+'px'; d.style.width=NE_W+'px';
+    const locked=nd.locked||def.locked;
+    d.innerHTML='<div class="nhead" style="--nc:'+def.color+'"><span class="nt">'+
+      escapeHtml(nodeTitle(i,nd))+'</span>'+(locked?'':'<span class="nx" title="Delete node">\u00D7</span>')+'</div>';
+    const head=d.querySelector('.nhead');
+    if(nd.type==='lfo'){
+      const cv=document.createElement('canvas'); cv.className='nlfo'; cv.width=NE_W-12; cv.height=44;
+      d.appendChild(cv);
+      const sub=el('div','nsub','value routing: later'); d.appendChild(sub);
+    } else if(nd.type==='audiof'){
+      const bars=el('div','naf');
+      bars.innerHTML='<div class="nafb"><i></i></div><div class="nafb"><i></i></div><div class="nafb"><i></i></div>';
+      d.appendChild(bars);
+      d.appendChild(el('div','nsub','audio bus monitor'));
+    }
+    const ports=el('div','nports');
+    (def.ins||[]).forEach((p,pi)=>{
+      const pt=el('div','nport in'); pt.dataset.p=pi; pt.dataset.dir='in'; pt.title=p.label;
+      pt.style.top=(30+pi*24)+'px'; ports.appendChild(pt);
+      const lb=el('div','nplab in'); lb.textContent=p.label; lb.style.top=(24+pi*24)+'px'; ports.appendChild(lb);
+    });
+    (def.outs||[]).forEach((p,pi)=>{
+      const pt=el('div','nport out'); pt.dataset.p=pi; pt.dataset.dir='out'; pt.title=p.label;
+      pt.style.top=(30+pi*24)+'px'; ports.appendChild(pt);
+      const lb=el('div','nplab out'); lb.textContent=p.label; lb.style.top=(24+pi*24)+'px'; ports.appendChild(lb);
+    });
+    d.appendChild(ports);
+    const nPorts=Math.max((def.ins||[]).length,(def.outs||[]).length,1);
+    d.style.minHeight=(46+nPorts*24)+'px';
+    w.appendChild(d);
+    /* events */
+    const x=d.querySelector('.nx');
+    if(x) x.addEventListener('pointerdown',(e)=>{ e.stopPropagation(); deleteNode(i,nd.id); });
+    head.addEventListener('pointerdown',(e)=>{ neStartNodeDrag(e,i,nd,d); });
+    d.addEventListener('pointerdown',(e)=>{
+      if(e.target.closest('.nport')||e.target.closest('.nx')) return;
+      neSelect({kind:'node',nid:nd.id});
+    });
+    ports.querySelectorAll('.nport').forEach(pt=>{
+      pt.addEventListener('pointerdown',(e)=>{ e.stopPropagation(); e.preventDefault(); neStartWire(e,i,nd,pt); });
+    });
+    if(nd.type==='lfo'){
+      const cv=d.querySelector('.nlfo');
+      drawModCurve(cv,S.mods[i][nd.mod]);
+    }
+  }
+  neAfTick();
+}
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function neAfTick(){
+  if(!neOpen) return;
+  document.querySelectorAll('#neworld .nnode').forEach(d=>{
+    const nd=neNode(neLayer,+d.dataset.nid);
+    if(nd&&nd.type==='audiof'){
+      const bars=d.querySelectorAll('.nafb i');
+      if(bars[0]) bars[0].style.width=Math.round(clamp(bassSm,0,1)*100)+'%';
+      if(bars[1]) bars[1].style.width=Math.round(clamp(midSm,0,1)*100)+'%';
+      if(bars[2]) bars[2].style.width=Math.round(clamp(highSm,0,1)*100)+'%';
+    }
+  });
+}
+
+/* ----- wires ----- */
+function portScreenPos(nid,dir,p){
+  const cv=$('necanvas').getBoundingClientRect();
+  const pt=document.querySelector('#neworld .nnode[data-nid="'+nid+'"] .nport.'+dir+'[data-p="'+p+'"]');
+  if(!pt) return null;
+  const r=pt.getBoundingClientRect();
+  return {x:r.left-cv.left+r.width/2, y:r.top-cv.top+r.height/2};
+}
+function wirePath(x1,y1,x2,y2){
+  const dx=Math.max(40,Math.abs(x2-x1)*0.5);
+  return 'M '+x1+' '+y1+' C '+(x1+dx)+' '+y1+', '+(x2-dx)+' '+y2+', '+x2+' '+y2;
+}
+function drawWires(){
+  const svg=$('newires'); if(!svg) return;
+  const cv=$('necanvas').getBoundingClientRect();
+  svg.setAttribute('width',cv.width); svg.setAttribute('height',cv.height);
+  let s='';
+  const g=S.graphs[neLayer];
+  g.wires.forEach((w,wi)=>{
+    const a=portScreenPos(w.f.n,'out',w.f.p), b=portScreenPos(w.t.n,'in',w.t.p);
+    if(!a||!b) return;
+    const d=wirePath(a.x,a.y,b.x,b.y);
+    const sel=neSel&&neSel.kind==='wire'&&neSel.wi===wi;
+    s+='<path class="wirehit" data-wi="'+wi+'" d="'+d+'"/>';
+    s+='<path class="wire'+(sel?' sel':'')+'" data-wi="'+wi+'" d="'+d+'"/>';
+  });
+  if(neDragWire){
+    const dw=neDragWire;
+    const a=dw.dir==='out'?portScreenPos(dw.nid,'out',dw.port):{x:dw.x2,y:dw.y2};
+    const b=dw.dir==='out'?{x:dw.x2,y:dw.y2}:portScreenPos(dw.nid,'in',dw.port);
+    if(a&&b) s+='<path class="wiretmp" d="'+wirePath(a.x,a.y,b.x,b.y)+'"/>';
+  }
+  svg.innerHTML=s;
+  svg.querySelectorAll('.wirehit').forEach(p=>{
+    p.addEventListener('pointerdown',(e)=>{ e.stopPropagation(); neSelect({kind:'wire',wi:+p.dataset.wi}); });
+  });
+}
+/* ----- selection / mutation ----- */
+function neSelect(sel){
+  neSel=sel;
+  document.querySelectorAll('#neworld .nnode').forEach(d=>{
+    d.classList.toggle('sel',!!(sel&&sel.kind==='node'&&+d.dataset.nid===sel.nid));
+  });
+  drawWires();
+  renderNodeProps(sel&&sel.kind==='node'?neNode(neLayer,sel.nid):null);
+}
+function wouldCycle(g,fromId,toId){
+  const adj={};
+  for(const w of g.wires) (adj[w.f.n]=adj[w.f.n]||[]).push(w.t.n);
+  const seen=new Set([toId]), st=[toId];
+  while(st.length){
+    const c=st.pop();
+    if(c===fromId) return true;
+    for(const m of (adj[c]||[])) if(!seen.has(m)){ seen.add(m); st.push(m); }
+  }
+  return false;
+}
+function addWire(i,fromId,fromPort,toId,toPort){
+  const g=S.graphs[i];
+  const fn=neNode(i,fromId), tn=neNode(i,toId);
+  if(!fn||!tn||fromId===toId) return 'bad';
+  const fd=NTYPES[fn.type], td=NTYPES[tn.type];
+  if(!(fd.outs&&fd.outs[fromPort])||!(td.ins&&td.ins[toPort])) return 'bad';
+  if(wouldCycle(g,fromId,toId)) return 'cycle';
+  /* one wire per input port: replace existing */
+  g.wires=g.wires.filter(w=>!(w.t.n===toId&&w.t.p===toPort));
+  g.wires.push({f:{n:fromId,p:fromPort},t:{n:toId,p:toPort}});
+  touchGraph(i); saveState(); drawWires();
+  return 'ok';
+}
+function addNode(i,type,wx,wy){
+  const g=S.graphs[i], def=NTYPES[type];
+  if(!def) return null;
+  if(type==='output'&&g.nodes.some(n=>n.type==='output')) return null;
+  const nid=g.seq++;
+  const nd={id:nid,type,x:Math.round(wx-84),y:Math.round(wy-20),p:{}};
+  if(def.params) for(const pd of def.params){ nd.p[pd.k]=pd.def; regNodeParam(i,nid,pd); }
+  g.nodes.push(nd);
+  touchGraph(i); saveState();
+  drawNodes(); drawWires();
+  neSelect({kind:'node',nid});
+  return nd;
+}
+function deleteNode(i,nid){
+  const g=S.graphs[i];
+  const nd=neNode(i,nid);
+  if(!nd||nd.locked||NTYPES[nd.type].locked) return;
+  g.nodes=g.nodes.filter(n=>n.id!==nid);
+  g.wires=g.wires.filter(w=>w.f.n!==nid&&w.t.n!==nid);
+  unregNodeParams(i,nid,nd);
+  delTarget(NTG[i+'.'+nid]); delete NTG[i+'.'+nid];
+  { const R=NRUN[i+'.'+nid]; if(R){ delTarget(R.fb[0]); delTarget(R.fb[1]); delTarget(R.bl[0]); delTarget(R.bl[1]); delete NRUN[i+'.'+nid]; } }
+  if(neSel&&neSel.kind==='node'&&neSel.nid===nid) neSel=null;
+  touchGraph(i); saveState();
+  drawNodes(); drawWires(); renderNodeProps(null);
+}
+function neDeleteSel(){
+  if(!neSel) return;
+  if(neSel.kind==='wire'){
+    const g=S.graphs[neLayer];
+    g.wires.splice(neSel.wi,1); neSel=null;
+    touchGraph(neLayer); saveState(); drawWires(); return;
+  }
+  if(neSel.kind==='node') deleteNode(neLayer,neSel.nid);
+}
+function neDuplicateSel(){
+  if(!neSel||neSel.kind!=='node') return;
+  const i=neLayer, src=neNode(i,neSel.nid);
+  if(!src) return;
+  const def=NTYPES[src.type];
+  if(def.locked||src.locked) return;
+  const nd=addNode(i,src.type,src.x+84+30,src.y+20+30);
+  if(!nd) return;
+  for(const k of Object.keys(src.p||{})){
+    const id=nodeParamId(i,nd.id,k);
+    const v=src.p[k]!==undefined?src.p[k]:(S.params[nodeParamId(i,src.id,k)]||0);
+    if(S.params[id]!==undefined){ setParam(id,v); nd.p[k]=v; }
+  }
+  drawNodes();
+}
+/* ----- pointer interactions ----- */
+function neCanvasDown(e){
+  if(e.target.closest('.nnode')||e.target.closest('.nport')||e.target.closest('#nepal')||e.target.closest('.wirehit')) return;
+  closePalette();
+  if(e.button===1||e.button===0){
+    nePanning={sx:e.clientX,sy:e.clientY,px:nePan.x,py:nePan.y};
+    e.preventDefault();
+  }
+  if(e.target===$('necanvas')||e.target===$('neworld')||e.target===$('newires')) neSelect(null);
+}
+function neStartNodeDrag(e,i,nd,d){
+  if(e.button!==0) return;
+  e.stopPropagation(); e.preventDefault();
+  neSelect({kind:'node',nid:nd.id});
+  const sx=e.clientX, sy=e.clientY, ox=nd.x, oy=nd.y;
+  neNodeDrag={sx,sy,ox,oy,nd,d,moved:false};
+}
+function neStartWire(e,i,nd,pt){
+  const dir=pt.dataset.dir, port=+pt.dataset.p;
+  const r=$('necanvas').getBoundingClientRect();
+  neDragWire={dir,nid:nd.id,port,x2:e.clientX-r.left,y2:e.clientY-r.top};
+  drawWires();
+}
+function nePointerMove(e){
+  if(nePanning){
+    nePan.x=nePanning.px+(e.clientX-nePanning.sx);
+    nePan.y=nePanning.py+(e.clientY-nePanning.sy);
+    applyNeTransform();
+    return;
+  }
+  if(neNodeDrag){
+    const d=neNodeDrag;
+    const dx=(e.clientX-d.sx)/neZoom, dy=(e.clientY-d.sy)/neZoom;
+    if(Math.abs(e.clientX-d.sx)+Math.abs(e.clientY-d.sy)>3) d.moved=true;
+    d.nd.x=Math.round(d.ox+dx); d.nd.y=Math.round(d.oy+dy);
+    d.d.style.left=d.nd.x+'px'; d.d.style.top=d.nd.y+'px';
+    drawWires();
+    return;
+  }
+  if(neDragWire){
+    const r=$('necanvas').getBoundingClientRect();
+    neDragWire.x2=e.clientX-r.left; neDragWire.y2=e.clientY-r.top;
+    drawWires();
+  }
+}
+function nePointerUp(e){
+  if(nePanning){ nePanning=null; saveState(); return; }
+  if(neNodeDrag){
+    const d=neNodeDrag; neNodeDrag=null;
+    if(d.moved) saveState();
+    return;
+  }
+  if(neDragWire){
+    const dw=neDragWire; neDragWire=null; drawWires();
+    const pt=e.target&&e.target.closest?e.target.closest('.nport'):null;
+    if(pt){
+      const nd2=e.target.closest('.nnode');
+      const nid2=+nd2.dataset.nid, dir2=pt.dataset.dir, port2=+pt.dataset.p;
+      let res='bad';
+      if(dw.dir==='out'&&dir2==='in') res=addWire(neLayer,dw.nid,dw.port,nid2,port2);
+      else if(dw.dir==='in'&&dir2==='out') res=addWire(neLayer,nid2,port2,dw.nid,dw.port);
+      if(res==='cycle'){ showErr('No cycles allowed in a layer graph.'); setTimeout(()=>$('errbanner').classList.remove('show'),2200); }
+      else if(res==='bad'){ showErr('Connect an output port \u2192 an input port.'); setTimeout(()=>$('errbanner').classList.remove('show'),2200); }
+    }
+  }
+}
+function neCanvasDbl(e){
+  if(e.target.closest('.nnode')||e.target.closest('#nepal')) return;
+  const r=$('necanvas').getBoundingClientRect();
+  openPalette({x:e.clientX-r.left, y:e.clientY-r.top});
+}
+function neKey(e){
+  if(!neOpen) return;
+  const t=e.target;
+  const typing=t&&(t.matches&& (t.matches('input,textarea,select')||t.isContentEditable));
+  if(e.key==='Escape'){ e.stopPropagation(); e.preventDefault(); closeNodes(); return; }
+  if(typing) return;
+  if(e.key==='n'||e.key==='N'){ e.stopPropagation(); return; }
+  if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); e.stopPropagation(); neDeleteSel(); }
+  else if((e.key==='d'||e.key==='D')&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); e.stopPropagation(); neDuplicateSel(); }
+}
+/* ----- palette ----- */
+function openPalette(at){
+  const pal=$('nepal');
+  pal.style.display='block';
+  pal.style.left=clamp(at.x,8,Math.max(8,$('necanvas').clientWidth-230))+'px';
+  pal.style.top=clamp(at.y,8,Math.max(8,$('necanvas').clientHeight-320))+'px';
+  pal.innerHTML='';
+  pal.appendChild(el('div','nepalt','Add node <span class="nx" id="nepalx">\u00D7</span>'));
+  const w=neScreenToWorld(at.x,at.y);
+  for(const grp of N_GROUPS){
+    const types=Object.keys(NTYPES).filter(t=>NTYPES[t].group===grp&&!NTYPES[t].locked);
+    if(!types.length) continue;
+    pal.appendChild(el('div','nepalg',grp));
+    for(const tp of types){
+      const def=NTYPES[tp];
+      const b=el('button','nepalb');
+      b.innerHTML='<span class="ndot" style="background:'+def.color+'"></span>'+escapeHtml(def.label);
+      b.addEventListener('click',()=>{ addNode(neLayer,tp,w.x+Math.random()*40,w.y+Math.random()*40); closePalette(); });
+      pal.appendChild(b);
+    }
+  }
+  $('nepalx').addEventListener('click',(e)=>{ e.stopPropagation(); closePalette(); });
+}
+function closePalette(){ const p=$('nepal'); if(p) p.style.display='none'; }
+
+/* ----- node properties (reuses the deck's param builders: MIDI-learnable + macro-assignable) ----- */
+function renderNodeProps(nd){
+  const host=$('neprops'); if(!host) return;
+  host.innerHTML='';
+  const i=neLayer;
+  host.appendChild(el('div','nept','Layer '+LAYER_NAMES[i]+' \u00B7 Node'));
+  if(!nd){ host.appendChild(mkHint('Select a node to edit its parameters. Every parameter is MIDI-learnable and macro-assignable, like the deck.')); return; }
+  const def=NTYPES[nd.type];
+  host.appendChild(el('div','nepname',escapeHtml(nodeTitle(i,nd))));
+  if(nd.type==='lfo'){ buildModulatorNodeEditor(host,i,nd.mod); return; }
+  if(nd.type==='audiof'){
+    host.appendChild(mkHint('Live levels from the audio bus (post Audio Amount). Value-wire routing of these signals is a later phase.'));
+    return;
+  }
+  const grp=el('div','nepgrp');
+  for(const pd of (def.params||[])){
+    const id=nodeParamId(i,nd.id,pd.k);
+    if(pd.kind==='discrete') discreteRow(grp,id,pd.label,pd.opts);
+    else if(pd.kind==='toggle') toggleRow(grp,id,pd.label);
+    else paramRow(grp,id,pd.label);
+  }
+  host.appendChild(grp);
+  if(nd.type==='src') host.appendChild(mkHint('"Layer Input" follows the deck: firing a clip on this layer changes what this node renders.'));
+}
+/* LFO node editor: the existing ShaperBox drawable editor, reused verbatim */
+function buildModulatorNodeEditor(host,i,m){
+  const L=MOD_LETTERS[m], cfg=S.mods[i][m], pre='L'+i+'.clM'+L+'_';
+  host.appendChild(el('div','nepname','Modulator '+L+' \u00B7 drawable curve'));
+  const cv=document.createElement('canvas');
+  cv.className='modcv nodecv'; cv.width=264; cv.height=110;
+  host.appendChild(cv);
+  drawModCurve(cv,cfg);
+  wireModCanvas(cv,i,m,()=>{ drawNodes(); });
+  const row=el('div','modrow');
+  const wsel=document.createElement('select'); wsel.className='dsel'; wsel.title='Waveform preset';
+  Object.keys(MOD_WAVES).forEach((w)=>wsel.appendChild(new Option(w,w)));
+  wsel.addEventListener('change',()=>setModWave(i,m,wsel.value));
+  row.appendChild(wsel);
+  const ssel=document.createElement('select'); ssel.className='dsel'; ssel.title='Sync mode';
+  ssel.appendChild(new Option('free','free')); ssel.appendChild(new Option('bpm','bpm')); ssel.appendChild(new Option('audio','audio'));
+  ssel.value=cfg.sync;
+  ssel.addEventListener('change',()=>{ cfg.sync=ssel.value; saveState(); });
+  row.appendChild(ssel);
+  host.appendChild(row);
+  paramRow(host,pre+'Rate','Rate');
+  paramRow(host,pre+'Depth','Depth');
+  paramRow(host,pre+'Phase','Phase');
+  toggleRow(host,pre+'Bip','Bipolar');
+  host.appendChild(el('div','nepname','Routes'));
+  const tg=el('div'); host.appendChild(tg);
+  const refresh=()=>{ tg.innerHTML=''; drawModTargets(tg,i,m,refresh); };
+  refresh();
+  const add=document.createElement('button'); add.className='nbtn wide'; add.textContent='+ Route to param';
+  add.addEventListener('click',()=>{
+    if(cfg.targets.length<4){
+      const opts=clonerParamOptions(i);
+      cfg.targets.push({id:opts[0].id,depth:0.5});
+      saveState(); refresh();
+    }
+  });
+  host.appendChild(add);
+  host.appendChild(mkHint('Value-wire routing in the graph is a later phase; routes above are the current system.'));
+}
+/* ----- dive-in wiring ----- */
+function neInit(){
+  ensureAllGraphs();
+  buildNodeEd();
+  const bn=$('btnNodes');
+  if(bn) bn.addEventListener('click',()=>openNodes(S.selLayer));
+  const deck=$('deck');
+  if(deck) deck.addEventListener('dblclick',(e)=>{
+    const st=e.target.closest?e.target.closest('.lstrip'):null;
+    if(!st||e.target.closest('input,select,.clip,.tbtn')) return;
+    const kids=[...deck.querySelectorAll('.lstrip')];
+    openNodes(Math.max(0,kids.indexOf(st)));
+  });
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',neInit);
+else neInit();
+/* ================= END NODE GRAPH ================= */
+
 </script>
 <script>
 'use strict';

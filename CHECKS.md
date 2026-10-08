@@ -488,3 +488,76 @@ Known limits:
 - PAUSE freezes the shared clock (full freeze-frame incl. modulators) — the
   honest equivalent of Resolume's transport pause.
 - Not pushed (per task). Files in place: mobile.html, research/, checks/.
+
+## Node graph editor ("dive-in") — v1.3 (2026-10-08)
+TouchDesigner-style per-layer node graphs in holomapper.html only. Texture
+routing now; value wires later. Scope: desktop-first, mobile plays graphs via
+presets.
+
+What was built:
+- 4 per-layer graphs (S.graphs[i] = {nodes, wires, seq, rev}). Default graph
+  per layer: Source("Layer Input") -> Output, plus 6 LFO nodes (A-F, tied to
+  the existing ShaperBox modulators) and 1 Audio Follow node (live bus
+  monitor). LFO/Audio/Output nodes are locked (can't delete).
+- 11 node types: Source (Layer Input/Tunnel/Flow Field/Nebula/Plugin/
+  Cloner 3D), Feedback (own ping-pong pair), Kaleidoscope, Glitch, Grade,
+  Bloom (node-local half-res chain), Transform, Blend (2 inputs, 6 modes),
+  Output, LFO x6, Audio Follow.
+- Evaluation: topological order per layer (cached, dirty-flagged via g.rev),
+  each node renders to its own RGBA16F target (lazy pool, disposed on res
+  change / node delete). Output node feeds the compositor (layerT[i]).
+  renderLayer() dispatches to evalGraph; any eval failure falls back to the
+  fixed pipeline (renderLayerInto).
+- Node params are REAL params (L{i}.N{nid}.{key}) registered in PARAMS ->
+  MIDI-learnable + macro-assignable via the existing paramRow/discreteRow/
+  toggleRow builders, in the editor's own right props panel.
+- Editor: fullscreen overlay, pan (drag bg), zoom (wheel to cursor, +/-/Fit),
+  subtle grid, palette (double-click canvas or + Node; 8 creatable types),
+  out->in and in->out wire drag, click wire to select, cycle rejection with
+  message, Delete/Ctrl+D/ESC, node drag. Dive in: double-click layer name in
+  deck, "Nodes" topbar button, or N key. ESC / <- Deck returns.
+- Persistence: graphs serialize in presets (snapshot/applySnapshot);
+  old presets (no graphs) get the default graph; graphs survive reload via
+  localStorage.
+
+Verification (headless Chromium + SwiftShader, /tmp/nodetest.mjs etc.):
+- node --check + acorn (ecmaVersion 2024): all 19 script blocks parse.
+- Pixel identity: default graph renders BIT-IDENTICALLY to the fixed
+  pipeline — 0 differing pixels of 921,600, for all 5 source types
+  (tunnel/flow/nebula/plugin/cloner). Output node uses a texelFetch copy
+  (PROG.copyexact) so no filtering epsilon.
+- Functional 12/12: default graphs on all layers; feedback insertion changes
+  pixels; cycle + self-wire rejected; delete re-evaluates; preset
+  save->mutate->load restores graph exactly; node params in PARAMS; deck
+  (fireClip/bypass) intact; zero page errors (only pre-existing favicon 404).
+- UI 9/9 with real mouse: N/ESC, dblclick layer name, dblclick canvas ->
+  palette, palette creates node, mouse wire-drag creates wire, Delete removes
+  wire, Ctrl+D duplicates, Back button exits.
+- Old preset (graphs deleted) -> default graph rebuilt with params.
+  Graph + param edits persist across page reload.
+- Screenshots (checks/): shot-graph-default.png (default graph + LFO rack),
+  shot-graph-fx.png (Source->Feedback->Bloom->Output), shot-lfo-props.png
+  (LFO A drawable curve editor open), shot-wire-drag.png (wire mid-drag),
+  shot-deck.png (deck unchanged, composition rendering).
+
+Bugs found & fixed during verification:
+- drawModCurve(cv,cfg) takes a canvas, not (ctx,W,H) — two call sites fixed.
+- MOD_WAVES is an object keyed by name, not an array — select fixed.
+- LFO editor referenced pre+'Bipolar'; real id is pre+'Bip'.
+- openNodes set display:block (collapsed flex layout) -> display:flex.
+- Nested <script> from assembly (fixed), topo cache stale on wire replace
+  (g.rev counter), node targets leaked on delete (now disposed).
+- Test-only: puppeteer 25 uses {count:2} for dblclick; favicon 404 is
+  pre-existing on both builds.
+
+Known limits:
+- No value wires yet: LFO/Audio nodes have no ports (says "value routing:
+  later" on the node). Modulator routes still use the existing target system.
+- FX nodes have no per-node bypass (delete/disconnect is the bypass).
+- One wire per input port (new wire replaces old) — TouchDesigner-style.
+- Output node with no input renders black.
+- mobile.html/remote.html/bridge.py untouched. Not pushed (per task).
+
+Try first: double-click a layer name (L1) -> drag Feedback between Source
+and Output -> select it -> push Trails. Then double-click LFO A and draw a
+curve.
