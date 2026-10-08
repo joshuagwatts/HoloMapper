@@ -1,0 +1,43 @@
+{
+  "author": "Holowatts",
+  "build": {
+    "appId": "com.holowatts.holomapper",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "app/**/*",
+      "package.json"
+    ],
+    "portable": {
+      "artifactName": "HoloMapper-${version}-portable.exe"
+    },
+    "productName": "HoloMapper",
+    "win": {
+      "target": [
+        {
+          "arch": [
+            "x64"
+          ],
+          "target": "portable"
+        }
+      ],
+      "signAndEditExecutable": false
+    }
+  },
+  "description": "HoloMapper \u2014 Resolume-style live VJ deck with TouchDesigner-style node graphs",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "license": "UNLICENSED",
+  "main": "main.js",
+  "name": "holomapper",
+  "productName": "HoloMapper",
+  "scripts": {
+    "dist": "electron-builder --win portable",
+    "start": "electron ."
+  },
+  "version": "1.0.0"
+}
