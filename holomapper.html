@@ -165,6 +165,29 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .clip.empty .cthumb{font-size:13px}
 .clip .fxdot{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;
   background:var(--play);box-shadow:0 0 4px rgba(45,212,191,.8)}
+/* ============ clip inspector (dedicated window, not a tab) ============
+   Right-side slide-over docked inside #lowerzone: overlays the browser/
+   props area, never the deck grid (deck lives above in #gridzone). Fixed
+   absolute positioning = zero layout reflow when it opens/closes. */
+#lowerzone{position:relative}
+#clipinsp{position:absolute;top:0;right:0;bottom:0;width:302px;background:var(--panel);
+  border-left:1px solid var(--line);z-index:60;display:flex;flex-direction:column;
+  transform:translateX(103%);transition:transform .18s ease;
+  box-shadow:-10px 0 28px rgba(0,0,0,.5)}
+#clipinsp.open{transform:none}
+.ci-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);flex:none}
+.ci-title{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--txt)}
+.ci-x{margin-left:auto;background:none;border:1px solid var(--line);color:var(--dim);border-radius:4px;
+  width:22px;height:22px;font-size:11px;cursor:pointer;line-height:1}
+.ci-x:hover{color:var(--txt);border-color:var(--sel)}
+.ci-body{overflow-y:auto;padding:10px;flex:1;min-height:0}
+.ci-badges{display:flex;gap:6px;margin:0 0 8px;flex-wrap:wrap}
+.ci-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:9px;border:1px solid var(--line);color:var(--dim)}
+.ci-badge.fired{background:#1d3a2c;color:#7de0b6;border-color:#2c5a44}
+.ci-badge.queued{background:#3d3120;color:#ffd88a;border-color:#6b5732}
+.ci-badge.sel{background:#232a3a;color:#9db8e8;border-color:#31405c}
+#clipinsp .phead{margin-bottom:2px}
+#clipinsp .cibtn{width:100%;padding:7px;font-weight:700}
 /* ============ transport ============ */
 #beatph{flex:none;cursor:default}
 #bpm{font-weight:800;font-size:14px;color:var(--txt);min-width:40px;font-variant-numeric:tabular-nums;text-align:center}
@@ -436,6 +459,7 @@ body.perform #performbar{display:block}
       <option value="960x540">960x540</option>
       <option value="1280x720" selected>1280x720</option>
       <option value="1920x1080">1920x1080</option>
+      <option value="auto">Auto</option>
     </select>
     <button id="btnHelp" title="Keyboard shortcuts (?)">?</button>
     <button id="btnPerform" title="Perform mode (P)">PERFORM</button>
@@ -512,6 +536,14 @@ body.perform #performbar{display:block}
         </div>
         <div class="btab on" id="btab-fx"></div>
         <div class="btab" id="btab-src"></div>
+      </div>
+      <!-- dedicated Clip inspector: separate window, not a tab -->
+      <div id="clipinsp" aria-label="Clip inspector">
+        <div class="ci-head">
+          <span class="ci-title">Clip</span>
+          <button class="ci-x" id="cix" title="Close (ESC)">✕</button>
+        </div>
+        <div class="ci-body" id="cibody"></div>
       </div>
     </section>
   </div>
@@ -1678,7 +1710,9 @@ function makeTarget(w,h,depth){
   return {tex:tex, fb:fb, w:w, h:h, ok:ok, rb:(typeof rb!=='undefined'?rb:null)};
 }
 function buildTargets(){
-  const wh = S.res.split('x').map(Number);
+  /* Auto resolution: S.res==='auto' tracks the adaptive autoRes instead */
+  const rstr=(S.res==='auto')?autoRes:S.res;
+  const wh = rstr.split('x').map(Number);
   RW=wh[0]; RH=wh[1];
   canvas.width=RW; canvas.height=RH;
   layerT=[makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true)];
@@ -2827,17 +2861,18 @@ function renderLayer(i,t){
   }
   renderLayerInto(i,t,layerT[i]);
 }
+const _cbOp=[0,0,0,0], _cbBl=[0,0,0,0], _cbEn=[0,0,0,0]; /* reused per frame: no allocs */
 function renderCombine(){
   const P=PROG.combine;
   gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
   gl.viewport(0,0,compT.w,compT.h);
   gl.useProgram(P);
   for(let i=0;i<4;i++) setTex(P,'u_l'+i,i,layerT[i].tex);
-  const op=[],bl=[],en=[];
+  const op=_cbOp,bl=_cbBl,en=_cbEn;
   for(let i=0;i<4;i++){
-    op.push(eff('L'+i+'.op'));
-    bl.push(S.layers[i].blend);
-    en.push(layerEnabled(i)?1:0);
+    op[i]=eff('L'+i+'.op');
+    bl[i]=S.layers[i].blend;
+    en[i]=layerEnabled(i)?1:0;
   }
   gl.uniform4fv(U(P,'u_op'),op);
   gl.uniform4fv(U(P,'u_blend'),bl);
@@ -2861,86 +2896,96 @@ function renderFeedback(){
   quadDraw();
   fbRead=1-fbRead;
 }
-function renderKaleido(){
+/* Post-chain stages: each takes the input texture and returns the output texture.
+   Bypassed stages are pure passthroughs in-shader, so skipping the draw is
+   pixel-identical and saves a fullscreen pass. (renderFeedback keeps its draw:
+   it owns temporal ping-pong state.) */
+function renderKaleido(inTex){
+  if(S.postBypass.kaleido) return inTex;
   const P=PROG.kaleido;
   gl.bindFramebuffer(gl.FRAMEBUFFER,postT[0].fb);
   gl.viewport(0,0,RW,RH);
   gl.useProgram(P);
-  setTex(P,'u_tex',0,fbT[fbRead].tex);
+  setTex(P,'u_tex',0,inTex);
   gl.uniform1f(U(P,'u_seg'),PARAMS['P.kseg'].map(eff('P.kseg')));
   gl.uniform1f(U(P,'u_ang'),PARAMS['P.kang'].map(eff('P.kang')));
   gl.uniform1f(U(P,'u_aspect'),RW/RH);
-  gl.uniform1f(U(P,'u_bypass'),S.postBypass.kaleido?1:0);
   quadDraw();
+  return postT[0].tex;
 }
-function renderGlitch(t){
+function renderGlitch(inTex,t){
+  if(S.postBypass.glitch) return inTex;
   const P=PROG.glitch;
   gl.bindFramebuffer(gl.FRAMEBUFFER,postT[1].fb);
   gl.viewport(0,0,RW,RH);
   gl.useProgram(P);
-  setTex(P,'u_tex',0,postT[0].tex);
+  setTex(P,'u_tex',0,inTex);
   gl.uniform1f(U(P,'u_amt'),PARAMS['P.gamt'].map(eff('P.gamt')));
   gl.uniform1f(U(P,'u_time'),t);
-  gl.uniform1f(U(P,'u_bypass'),S.postBypass.glitch?1:0);
   quadDraw();
+  return postT[1].tex;
 }
 /* content wave: Mirror -> Auto Mask -> Colorize -> Bloom, then Grade */
-function renderMirror(){
+function renderMirror(inTex){
+  if(S.postBypass.mirror) return inTex;
   const P=PROG.mirror;
   gl.bindFramebuffer(gl.FRAMEBUFFER,postT[2].fb);
   gl.viewport(0,0,RW,RH);
   gl.useProgram(P);
-  setTex(P,'u_tex',0,postT[1].tex);
+  setTex(P,'u_tex',0,inTex);
   gl.uniform1f(U(P,'u_mode'),PARAMS['P.mirmode'].map(eff('P.mirmode')));
   gl.uniform1f(U(P,'u_pos'),eff('P.mirpos'));
-  gl.uniform1f(U(P,'u_bypass'),S.postBypass.mirror?1:0);
   quadDraw();
+  return postT[2].tex;
 }
-function renderAutoMask(){
+function renderAutoMask(inTex){
+  if(S.postBypass.automask) return inTex;
   const P=PROG.automask;
   gl.bindFramebuffer(gl.FRAMEBUFFER,postT[3].fb);
   gl.viewport(0,0,RW,RH);
   gl.useProgram(P);
-  setTex(P,'u_tex',0,postT[2].tex);
+  setTex(P,'u_tex',0,inTex);
   gl.uniform1f(U(P,'u_mode'),PARAMS['P.ammode'].map(eff('P.ammode')));
   gl.uniform1f(U(P,'u_thr'),eff('P.amthr'));
   gl.uniform1f(U(P,'u_soft'),eff('P.amsoft'));
   gl.uniform1f(U(P,'u_keyhue'),eff('P.amkey'));
   gl.uniform1f(U(P,'u_inv'),eff('P.aminv')>=0.5?1:0);
-  gl.uniform1f(U(P,'u_bypass'),S.postBypass.automask?1:0);
   quadDraw();
+  return postT[3].tex;
 }
-function renderColorize(){
+function renderColorize(inTex){
+  if(S.postBypass.colorize) return inTex;
   const P=PROG.colorize;
   gl.bindFramebuffer(gl.FRAMEBUFFER,postT[4].fb);
   gl.viewport(0,0,RW,RH);
   gl.useProgram(P);
-  setTex(P,'u_tex',0,postT[3].tex);
+  setTex(P,'u_tex',0,inTex);
   gl.uniform1f(U(P,'u_pal'),PARAMS['P.czpal'].map(eff('P.czpal')));
   gl.uniform1f(U(P,'u_amt'),eff('P.czamt'));
   gl.uniform1f(U(P,'u_hueA'),eff('P.czhueA'));
   gl.uniform1f(U(P,'u_hueB'),eff('P.czhueB'));
-  gl.uniform1f(U(P,'u_bypass'),S.postBypass.colorize?1:0);
   quadDraw();
+  return postT[4].tex;
 }
-function renderBloomPost(){
+function renderBloomPost(inTex){
+  if(S.postBypass.bloompost) return inTex;
   const P=PROG.bloompost;
   gl.bindFramebuffer(gl.FRAMEBUFFER,postT[5].fb);
   gl.viewport(0,0,RW,RH);
   gl.useProgram(P);
-  setTex(P,'u_tex',0,postT[4].tex);
+  setTex(P,'u_tex',0,inTex);
   gl.uniform1f(U(P,'u_thr'),PARAMS['P.blthr'].map(eff('P.blthr')));
   gl.uniform1f(U(P,'u_str'),PARAMS['P.blstr'].map(eff('P.blstr')));
   gl.uniform2f(U(P,'u_texel'),1/RW,1/RH);
-  gl.uniform1f(U(P,'u_bypass'),S.postBypass.bloompost?1:0);
   quadDraw();
+  return postT[5].tex;
 }
-function renderGrade(t){
+function renderGrade(inTex,t){
   const P=PROG.grade;
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   gl.viewport(0,0,canvas.width,canvas.height);
   gl.useProgram(P);
-  setTex(P,'u_tex',0,postT[5].tex);
+  setTex(P,'u_tex',0,inTex);
   gl.uniform1f(U(P,'u_bri'),PARAMS['P.bri'].map(eff('P.bri')));
   gl.uniform1f(U(P,'u_con'),PARAMS['P.con'].map(eff('P.con')));
   gl.uniform1f(U(P,'u_sat2'),PARAMS['P.sat'].map(eff('P.sat')));
@@ -2948,10 +2993,10 @@ function renderGrade(t){
   gl.uniform1f(U(P,'u_grain'),PARAMS['P.grain'].map(eff('P.grain')));
   gl.uniform1f(U(P,'u_time'),t);
   gl.uniform1f(U(P,'u_master'),PARAMS['P.master'].map(eff('P.master'))*(S.blackout?0:1));
-  quadDraw();
   gl.uniform1f(U(P,'u_strobeOn'),S.strobeOn?1:0);
   gl.uniform1f(U(P,'u_strobeRate'),PARAMS['P.srate'].map(eff('P.srate')));
   gl.uniform1f(U(P,'u_strobeAmt'),PARAMS['P.samt'].map(eff('P.samt')));
+  quadDraw();
 }
 
 /* ================= AUDIO ENGINE ================= */
@@ -2993,22 +3038,23 @@ function stopAudio(){
   $('btnAudio').classList.remove('on');
   $('audiostat').textContent='audio off';
 }
+function audioBand(arr,n,sr,f0,f1){
+  let s=0,c=0;
+  for(let i=1;i<n;i++){
+    const f=i*sr/(2*n);
+    if(f>=f0 && f<f1){ s+=Math.max(arr[i],-90)+90; c++; }
+  }
+  return c ? (s/c)/90 : 0;
+}
 function pollAudio(){
   if(!audioOn || !analyser) return;
   analyser.getFloatFrequencyData(freqArr);
   const n=freqArr.length, sr=AC.sampleRate;
-  const band=(f0,f1)=>{
-    let s=0,c=0;
-    for(let i=1;i<n;i++){
-      const f=i*sr/(2*n);
-      if(f>=f0 && f<f1){ s+=Math.max(freqArr[i],-90)+90; c++; }
-    }
-    return c ? (s/c)/90 : 0;
-  };
-  const b=band(30,150), m=band(150,2000), h=band(2000,9000);
+  const b=audioBand(freqArr,n,sr,30,150), m=audioBand(freqArr,n,sr,150,2000), h=audioBand(freqArr,n,sr,2000,9000);
   bassSm+=(b-bassSm)*0.3; midSm+=(m-midSm)*0.3; highSm+=(h-highSm)*0.3;
   bassHist.push(bassSm); if(bassHist.length>24) bassHist.shift();
-  const avg=bassHist.reduce((a,x)=>a+x,0)/bassHist.length;
+  let bsum=0; for(let bi=0;bi<bassHist.length;bi++) bsum+=bassHist[bi];
+  const avg=bsum/bassHist.length;
   const now=performance.now()/1000;
   if(bassSm>avg*1.35+0.08 && now-lastBeatT>0.28){ audioBeat=1; lastBeatT=now; }
   audioBeat*=0.94;
@@ -3364,6 +3410,7 @@ function syncDeckSel(){
     t.classList.toggle('conn', S.firedCol===k);
   });
   updatePvLabel();
+  if(typeof updateClipInspectorState==='function') updateClipInspectorState();
 }
 function setPTab(name){
   document.querySelectorAll('#ptabbar button').forEach(b=>b.classList.toggle('on',b.dataset.ptab===name));
@@ -3411,6 +3458,8 @@ function buildDeck(){
     const i=di, L=S.layers[i];
     const st=el('div','lstrip'+((S.sel&&S.sel.kind==='layer'&&S.sel.i===i)?' sel':''));
     st.dataset.i=i;
+    /* clicking deck background (not a clip) dismisses the clip inspector */
+    st.addEventListener('click',(e)=>{ if(!e.target.closest('.clip')) closeClipInspector(); });
     const gut=el('div','lgut');
     const r1=el('div','lrow1');
     const nm=el('button','lname','L'+(i+1));
@@ -3445,10 +3494,10 @@ function buildDeck(){
       c.dataset.i=i; c.dataset.k=k;
       const th=el('div','cthumb',src===null||src===undefined?'+':srcName(src).split(' ')[0]);
       th.title=(src===null||src===undefined?'Empty slot \u2014 right-click to assign a source':'TRIGGER '+srcName(src)+' on '+LAYER_NAMES[i]+' (quantized: '+(S.snap||'bar')+')');
-      th.addEventListener('click',()=>{ fireClip(i,k); });
+      th.addEventListener('click',()=>{ fireClip(i,k); openClipInspector(i,k); });
       const cnm=el('div','cname',src===null||src===undefined?'empty':srcName(src));
       cnm.title='Select clip '+(k+1)+' without triggering';
-      cnm.addEventListener('click',(e)=>{ e.stopPropagation(); selectClip(i,k); });
+      cnm.addEventListener('click',(e)=>{ e.stopPropagation(); selectClip(i,k); openClipInspector(i,k); });
       c.appendChild(th); c.appendChild(cnm);
       c.setAttribute('data-ctrl','clip'+i+'.'+k);
       CTRLS['clip'+i+'.'+k]={set:((ii,kk)=>v=>{ if(v>=0.5) fireClip(ii,kk); })(i,k), label:'Fire '+LAYER_NAMES[i]+' clip '+(k+1)};
@@ -3458,6 +3507,7 @@ function buildDeck(){
     st.appendChild(grid);
     host.appendChild(st);
   }
+  if(typeof refreshClipInspector==='function') refreshClipInspector();
 }
 /* clip source-assign popup */
 function showClipMenu(x,y,i,k){
@@ -3571,6 +3621,73 @@ function buildProps(){
   paramRow(wrap,p+'p1','Param 1'); paramRow(wrap,p+'p2','Param 2');
   if(S.layers[i].src===4) buildClonerUI(wrap,i);
 }
+/* ================= CLIP INSPECTOR — dedicated window (not a tab) =================
+   Clicking a clip name (select) or clip box (fire) opens this right-side
+   slide-over. It reuses buildClipParamSection/paramRow so every control stays
+   MIDI-learnable and macro-assignable, exactly like the Clip tab. */
+const clipInsp={i:null,k:null};
+function openClipInspector(i,k){
+  clipInsp.i=i; clipInsp.k=k;
+  buildClipInspector();
+  $('clipinsp').classList.add('open');
+}
+function closeClipInspector(){
+  const p=$('clipinsp'); if(p) p.classList.remove('open');
+  clipInsp.i=null; clipInsp.k=null;
+}
+function refreshClipInspector(){ if(clipInsp.i!==null) buildClipInspector(); }
+function buildClipInspector(){
+  const host=$('cibody'); if(!host) return; host.innerHTML='';
+  const i=clipInsp.i, k=clipInsp.k;
+  if(i===null||k===null||!S.clips[i]) return;
+  const src=S.clips[i][k];
+  const h=el('div','phead');
+  h.appendChild(el('span','ptitle','CLIP '+LAYER_NAMES[i]+' \u00B7 C'+(k+1)));
+  host.appendChild(h);
+  const sub=el('div','dim',src===null||src===undefined?'Empty slot \u2014 assign a source below':srcName(src));
+  sub.style.margin='-2px 0 8px'; host.appendChild(sub);
+  const badges=el('div','ci-badges'); badges.id='cibadges'; host.appendChild(badges);
+  const swrap=el('div','psec');
+  swrap.appendChild(el('div','plab','Source'));
+  const se=document.createElement('select'); se.className='dsel';
+  se.appendChild(new Option('(empty)','-1'));
+  srcOptions().forEach((s,si)=>se.appendChild(new Option(s,si)));
+  se.value=String(src===null||src===undefined?-1:src);
+  se.title='Assign a source to this clip slot';
+  se.addEventListener('change',()=>{
+    const v=parseInt(se.value,10);
+    S.clips[i][k]=v<0?null:v; saveState(); buildDeck(); buildProps(); /* buildDeck() refreshes this inspector */
+  });
+  swrap.appendChild(se);
+  host.appendChild(swrap);
+  if(src!==null&&src!==undefined) buildClipParamSection(host,i,src);
+  else host.appendChild(mkHint('This slot is empty. Pick a source above, then Fire.'));
+  const tsec=el('div','psec');
+  tsec.appendChild(el('div','plab','Trigger'));
+  tsec.appendChild(el('div','dim','Quantize: '+(S.snap||'bar')+' \u2014 fires on the next boundary'));
+  const row=el('div','krow'); row.style.marginTop='6px';
+  const bf=el('button','cibtn','Fire clip'); bf.id='cifire';
+  bf.title='Fire this clip on '+LAYER_NAMES[i]+' (quantized to Beat Snap)';
+  bf.addEventListener('click',()=>{ fireClip(i,k); updateClipInspectorState(); });
+  row.appendChild(bf); tsec.appendChild(row);
+  host.appendChild(tsec);
+  updateClipInspectorState();
+}
+/* Lightweight state sync: badges only, never rebuilds (slider drags survive). */
+function updateClipInspectorState(){
+  const badges=$('cibadges'); if(!badges||clipInsp.i===null||!S.clips[clipInsp.i]) return;
+  const i=clipInsp.i, k=clipInsp.k;
+  badges.innerHTML='';
+  const fired=S.fired[i]===k, queued=pendingFires.some(p=>p.i===i&&p.k===k);
+  const sel=!!S.sel&&S.sel.kind==='clip'&&S.sel.i===i&&S.sel.c===k;
+  if(fired) badges.appendChild(el('span','ci-badge fired','FIRED'));
+  if(queued) badges.appendChild(el('span','ci-badge queued','QUEUED'));
+  if(sel) badges.appendChild(el('span','ci-badge sel','SELECTED'));
+  if(!fired&&!queued&&!sel) badges.appendChild(el('span','ci-badge','idle'));
+  const bf=$('cifire');
+  if(bf) bf.disabled=(S.clips[i][k]===null||S.clips[i][k]===undefined);
+}
+$('cix').addEventListener('click',()=>closeClipInspector());
 </script>
 <script>
 'use strict';
@@ -4003,6 +4120,8 @@ function makeTarget8(w,h){
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   return {tex:tex,fb:fb,w:w,h:h};
 }
+const _pvSavedFb={}; /* scratch for updatePreview's NRUN fbRead snapshot */
+let pvCtx=null;
 function updatePreview(t){
   const cv=$('pv'); if(!cv||!cv.getContext) return;
   const sel=S.sel;
@@ -4014,7 +4133,8 @@ function updatePreview(t){
   const i=Math.min(3,Math.max(0,sel.i|0));
   if(!pvT){ pvT=makeTarget8(480,270); pvRead=new Uint8Array(480*270*4); }
   if(useGraph(i)){
-    const savedFb={};
+    const savedFb=_pvSavedFb;
+    for(const k in savedFb) delete savedFb[k];
     for(const k in NRUN) if(k.indexOf(i+'.')===0&&NRUN[k].fbRead!==undefined) savedFb[k]=NRUN[k].fbRead;
     try{ evalGraph(i,t,src,pvT); }
     catch(err){ renderLayerInto(i,t,pvT,src,true); }
@@ -4036,7 +4156,8 @@ function updatePreview(t){
     d.set(pvRead.subarray(s,s+480*4),y*480*4);
   }
   og.putImageData(pvImg,0,0);
-  cv.getContext('2d').drawImage(pvOff,0,0,320,180);
+  if(!pvCtx) pvCtx=cv.getContext('2d');
+  pvCtx.drawImage(pvOff,0,0,320,180);
   if(!pvLive){ pvLive=true; updatePvLabel(); }
 }
 /* ---------- blackout ---------- */
@@ -4488,7 +4609,7 @@ function toggleFullscreen(){
   if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
   else document.documentElement.requestFullscreen().catch(()=>showErr('Fullscreen request was denied.'));
 }
-function togglePerform(){ document.body.classList.toggle('perform'); }
+function togglePerform(){ document.body.classList.toggle('perform'); if(typeof closeClipInspector==='function') closeClipInspector(); }
 function toggleHelp(force){
   const h=$('help');
   const show=(force!==undefined)?force:!h.classList.contains('show');
@@ -4623,7 +4744,8 @@ function wireStatic(){
     else if(k===' '){ e.preventDefault(); toggleBlackout(); }
     else if(k==='?') toggleHelp();
     else if(k==='Escape'){
-      if($('help').classList.contains('show')) toggleHelp(false);
+      if(typeof closeClipInspector==='function'&&clipInsp.i!==null&&!neOpen) closeClipInspector();
+      else if($('help').classList.contains('show')) toggleHelp(false);
       else if(document.body.classList.contains('perform')) togglePerform();
     }
   });
@@ -5046,7 +5168,12 @@ function useGraph(i){
   return !!(g&&g.nodes&&g.nodes.length&&g.nodes.some(n=>n.type==='output'));
 }
 const graphOrder=[null,null,null,null], graphOrderKey=['','','',''];
-function invalidateGraph(i){ graphOrder[i]=null; }
+function invalidateGraph(i){ graphOrder[i]=null; graphCache[i]=null; }
+/* per-layer scratch for evalGraph: wiresByT/byId rebuilt only when the graph
+   revision changes; texOf cleared (not reallocated) every frame */
+const graphCache=[null,null,null,null];
+const _texOf=[{},{},{},{}];
+const _ins={}; /* scratch input map for evalGraph: cleared per node */
 function topoOrder(g){
   const indeg={}, adj={}, byId={};
   for(const n of g.nodes){ indeg[n.id]=0; adj[n.id]=[]; byId[n.id]=n; }
@@ -5072,19 +5199,25 @@ function evalGraph(i,t,srcOv,outT){
   const g=S.graphs[i];
   const key=graphKey(i);
   let order=graphOrder[i];
-  if(!order||graphOrderKey[i]!==key){ order=topoOrder(g); graphOrder[i]=order; graphOrderKey[i]=key; }
+  let gc=graphCache[i];
+  if(!order||!gc||graphOrderKey[i]!==key){
+    order=topoOrder(g); graphOrder[i]=order; graphOrderKey[i]=key;
+    const wiresByT={}, byId={};
+    for(const w of g.wires) (wiresByT[w.t.n]=wiresByT[w.t.n]||[]).push(w);
+    for(const n of g.nodes) byId[n.id]=n;
+    gc=graphCache[i]={key,wiresByT,byId};
+  }
   if(!order) throw new Error('node graph has a cycle');
-  const texOf={}, wiresByT={};
-  for(const w of g.wires) (wiresByT[w.t.n]=wiresByT[w.t.n]||[]).push(w);
-  const byId={}; for(const n of g.nodes) byId[n.id]=n;
+  const texOf=_texOf[i], wiresByT=gc.wiresByT, byId=gc.byId;
+  for(const k in texOf) delete texOf[k];
   for(const nid of order){
     const nd=byId[nid]; if(!nd) continue;
     if(nd.type==='lfo'||nd.type==='audiof') continue;
     if(nd.type==='output'){ renderOutputNode(i,nd,t,wiresByT,texOf,outT); continue; }
     const T=nodeTarget(i,nd.id);
-    const ins={};
-    for(const w of (wiresByT[nd.id]||[])) ins[w.t.p]=texOf[w.f.n];
-    renderNodeTex(i,nd,t,ins,T,srcOv);
+    for(const k in _ins) delete _ins[k];
+    for(const w of (wiresByT[nd.id]||[])) _ins[w.t.p]=texOf[w.f.n];
+    renderNodeTex(i,nd,t,_ins,T,srcOv);
     texOf[nd.id]=T.tex;
   }
 }
@@ -5135,6 +5268,7 @@ function neCanvasCenter(){
   return {x:r.width/2, y:r.height/2};
 }
 function openNodes(i,dive){
+  if(typeof closeClipInspector==='function') closeClipInspector(); /* deck inspector has no meaning in node view */
   buildNodeEd();
   neView[neLayer]={x:nePan.x,y:nePan.y,z:neZoom};
   neLayer=i;
@@ -5619,11 +5753,25 @@ else neInit();
 <script>
 'use strict';
 /* ================= MAIN LOOP ================= */
-let tStart=performance.now()/1000, lastT=0, frames=0, fpsT=0;
+let tStart=performance.now()/1000, lastT=0, frames=0, fpsT=0, pvTick=0;
+/* adaptive resolution: only active when resSel is "Auto". Starts at 1280x720,
+   steps down when slow, back up when fast. Manual modes are untouched. */
+let autoRes='1280x720', emaDt=1/60, slowN=0, fastN=0;
+const AUTO_STEPS=['960x540','1280x720','1920x1080'];
+function autoResTick(fdt){
+  if(S.res!=='auto') return;
+  fdt=Math.min(Math.max(fdt,0),0.1); /* ignore tab-switch gaps */
+  emaDt=emaDt*0.95+fdt*0.05;
+  const si=AUTO_STEPS.indexOf(autoRes);
+  if(emaDt>0.026 && si>0){ if(++slowN>=90){ slowN=0; fastN=0; autoRes=AUTO_STEPS[si-1]; buildTargets(); } }
+  else if(emaDt<0.013 && si<AUTO_STEPS.length-1){ if(++fastN>=600){ fastN=0; slowN=0; autoRes=AUTO_STEPS[si+1]; buildTargets(); } }
+  else { slowN=0; fastN=0; }
+}
 function loop(){
   requestAnimationFrame(loop);
   const now=performance.now()/1000;
   const t=now-tStart;
+  autoResTick(now-lastT);
   lastT=now;
   if(shPrevT<0) shPrevT=t; shDt=t-shPrevT; shPrevT=t; shFrame++;
   pollAudio();
@@ -5638,14 +5786,20 @@ function loop(){
   for(let i=0;i<4;i++) renderLayer(i,t);
   renderCombine();
   renderFeedback();
-  renderKaleido();
-  renderGlitch(t);
-  renderMirror();
-  renderAutoMask();
-  renderColorize();
-  renderBloomPost();
-  renderGrade(t);
-  updatePreview(t); /* live clip preview: never touches output state */
+  /* post chain threads one texture through; bypassed stages are skipped
+     (pixel-identical passthrough) inside each stage function */
+  let pc=fbT[fbRead].tex;
+  pc=renderKaleido(pc);
+  pc=renderGlitch(pc,t);
+  pc=renderMirror(pc);
+  pc=renderAutoMask(pc);
+  pc=renderColorize(pc);
+  pc=renderBloomPost(pc);
+  renderGrade(pc,t);
+  /* live clip preview: throttled to every 3rd frame (the readPixels stall was
+     the dominant frame cost) and skipped while the node editor covers the deck.
+     Uses its own counter — `frames` resets every 0.5s for the fps meter. */
+  if(!neOpen && (pvTick=(pvTick+1)%3)===0) updatePreview(t);
   frames++;
   if(now-fpsT>0.5){
     $('fps').textContent=Math.round(frames/Math.max(now-fpsT,0.001))+' fps';
