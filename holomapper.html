@@ -268,6 +268,11 @@ body.perform #performbar{display:block}
   background:#2a1214;border:1px solid var(--bad);color:#ffd7d7;border-radius:var(--r);
   padding:8px 14px;max-width:82%;font-size:11px;white-space:pre-wrap}
 #errbanner.show{display:block}
+#toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(8px);z-index:60;
+  background:#101418;border:1px solid var(--acc);color:var(--txt);border-radius:var(--r);
+  padding:8px 14px;max-width:82%;font-size:11px;opacity:0;pointer-events:none;
+  transition:opacity .25s, transform .25s}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #ctxlost{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;z-index:70;
   align-items:center;justify-content:center;flex-direction:column;gap:14px}
 #ctxlost.show{display:flex}
@@ -567,6 +572,15 @@ function showErr(msg){
   b.textContent = 'HoloMapper: ' + msg;
   b.classList.add('show');
   console.error('[HoloMapper]', msg);
+}
+/* transient toast (auto-dismissing); errbanner stays for hard errors */
+let toastTimer=null;
+function toast(msg, ms){
+  let b=$('toast');
+  if(!b){ b=document.createElement('div'); b.id='toast'; document.body.appendChild(b); }
+  b.textContent=msg; b.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>b.classList.remove('show'), ms||3200);
 }
 /* ================= SHAPER MODULATORS — UI (v1.2) =================
    Drawable LFO curves (ShaperBox-style) driving cloner params. Depth/Rate/
@@ -955,6 +969,23 @@ defParam('P.aamt',  'Audio Amount', 0.8);
 defParam('P.srate', 'Strobe Rate',  1/3, v=>1+v*9,          v=>(1+v*9).toFixed(1)+'Hz');
 defParam('P.samt',  'Strobe Amt',   0.5, v=>v*0.85,         v=>Math.round(v*85)+'%');
 defParam('P.master','Master',       1,   v=>v,              v=>Math.round(v*100)+'%');
+/* ---- content wave: Mirror / Auto Mask / Colorize / Post Bloom ---- */
+defParam('P.mirmode','Mirror Mode',0, clDiscMap(3), clDiscFmt(['Horizontal','Vertical','Quadrant']));
+defParam('P.mirpos','Mirror Pos',0.5, v=>v, v=>Math.round(v*100)+'%');
+defParam('P.ammode','AM Mode',0, clDiscMap(2), clDiscFmt(['Luma','Chroma']));
+defParam('P.amthr','AM Threshold',0.5);
+defParam('P.amsoft','AM Softness',0.25);
+defParam('P.amkey','AM Key Hue',0.33, v=>v, v=>Math.round(v*360)+'\u00B0');
+defParam('P.aminv','AM Invert',0, v=>v, clTglFmt);
+defParam('P.czpal','CZ Palette',0, clDiscMap(5), clDiscFmt(['Ember','Ice','Acid','Ultra','Custom']));
+defParam('P.czamt','CZ Amount',0.8);
+defParam('P.czhueA','CZ Hue A',0.05, v=>v, v=>Math.round(v*360)+'\u00B0');
+defParam('P.czhueB','CZ Hue B',0.13, v=>v, v=>Math.round(v*360)+'\u00B0');
+defParam('P.blthr','Bloom Thr',0.55, v=>v*2.5, v=>(v*2.5).toFixed(2));
+defParam('P.blstr','Bloom Str',0.4, v=>v*3, v=>(v*3).toFixed(2));
+for(let i=0;i<4;i++) defParam('L'+i+'.camFlip',LAYER_NAMES[i]+' Cam Flip',1, v=>v, clTglFmt);
+/* discrete option counts for the new mode params */
+PARAMS['P.mirmode'].nopts=3; PARAMS['P.ammode'].nopts=2; PARAMS['P.czpal'].nopts=5;
 
 /* ================= STATE ================= */
 const LS_STATE='holomapper.state.v1', LS_MIDI='holomapper.midi.v1', LS_PRESETS='holomapper.presets.v1';
@@ -1021,7 +1052,7 @@ function defaultState(){
     decks:[{name:'SOURCES',clips:defaultClips()},{name:'HOLOWATTS',clips:defaultClips()}],
     deckIdx:0, autopilot:false,
     params:params, assigns:{},
-    postBypass:{feedback:false, kaleido:true, glitch:true},
+    postBypass:{feedback:false, kaleido:true, glitch:true, mirror:true, automask:true, colorize:true, bloompost:true},
     strobeOn:false, beatSync:false, bpm:120, blackout:false,
     macros:Array.from({length:8},(_,i)=>({label:'M'+(i+1), val:0.5})),
     midi:[], pluginCode:PLUGIN_DEFAULT, imports:[], mods:defaultMods()
@@ -1043,6 +1074,9 @@ try{
 /* v1.4: imported shaders are first-class sources (S.imports). Sanitize. */
 if(!Array.isArray(S.imports)) S.imports=[];
 S.imports=S.imports.filter(im=>im&&typeof im.name==='string'&&typeof im.code==='string');
+/* content wave: normalize postBypass for states saved before the new FX existed */
+if(!S.postBypass||typeof S.postBypass!=='object') S.postBypass={};
+for(const k of ['mirror','automask','colorize','bloompost']) if(S.postBypass[k]===undefined) S.postBypass[k]=true;
 const saveState = debounce(()=>{
   try{
     localStorage.setItem(LS_STATE, JSON.stringify(S));
@@ -1434,6 +1468,125 @@ in vec2 v_uv;
 uniform sampler2D u_tex;
 void main(){ O = vec4(texture(u_tex,v_uv).rgb,1.0); }
 `;
+
+/* ================= CONTENT WAVE — new FX shaders ================= */
+const SRC_MIRROR = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_mode;   /* 0 horizontal, 1 vertical, 2 quadrant */
+uniform float u_pos;    /* mirror position 0..1 */
+uniform float u_bypass;
+void main(){
+  if(u_bypass>0.5){ O = vec4(texture(u_tex,v_uv).rgb,1.0); return; }
+  vec2 uv = v_uv;
+  float m = floor(u_mode+0.5);
+  if(m<0.5 || m>1.5){
+    float d = abs(uv.x-u_pos);
+    uv.x = clamp(u_pos+d, 0.0, 1.0);
+  }
+  if(m>0.5){
+    float d = abs(uv.y-u_pos);
+    uv.y = clamp(u_pos+d, 0.0, 1.0);
+  }
+  O = vec4(texture(u_tex,uv).rgb,1.0);
+}
+`;
+const SRC_AUTOMASK = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_mode;   /* 0 luma key, 1 chroma key */
+uniform float u_thr;
+uniform float u_soft;
+uniform float u_keyhue; /* chroma key hue 0..1 */
+uniform float u_inv;
+uniform float u_bypass;
+vec3 hsv2rgb(vec3 c){
+  vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+  vec3 p = abs(fract(c.xxx+K.xyz)*6.0-K.www);
+  return c.z*mix(K.xxx, clamp(p-K.xxx,0.0,1.0), c.y);
+}
+void main(){
+  vec3 c = texture(u_tex,v_uv).rgb;
+  if(u_bypass>0.5){ O = vec4(c,1.0); return; }
+  float m;
+  if(u_mode<0.5){
+    float l = dot(c, vec3(0.299,0.587,0.114));
+    m = smoothstep(u_thr-u_soft, u_thr+u_soft, l);
+  } else {
+    vec3 key = hsv2rgb(vec3(u_keyhue, 0.85, 1.0));
+    float d = distance(c, key);
+    m = smoothstep(u_thr*1.5-u_soft, u_thr*1.5+u_soft, d);
+  }
+  if(u_inv>0.5) m = 1.0-m;
+  O = vec4(c*m, 1.0);
+}
+`;
+const SRC_COLORIZE = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_pal;   /* 0 Ember, 1 Ice, 2 Acid, 3 Ultra, 4 Custom */
+uniform float u_amt;
+uniform float u_hueA;
+uniform float u_hueB;
+uniform float u_bypass;
+vec3 hsv2rgb(vec3 c){
+  vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+  vec3 p = abs(fract(c.xxx+K.xyz)*6.0-K.www);
+  return c.z*mix(K.xxx, clamp(p-K.xxx,0.0,1.0), c.y);
+}
+void main(){
+  vec3 c = texture(u_tex,v_uv).rgb;
+  if(u_bypass>0.5){ O = vec4(c,1.0); return; }
+  float l = dot(c, vec3(0.299,0.587,0.114));
+  float p = floor(u_pal+0.5);
+  vec3 a, b;
+  if(p<0.5){ a=vec3(0.02,0.0,0.0); b=vec3(1.0,0.85,0.30); }
+  else if(p<1.5){ a=vec3(0.0,0.05,0.12); b=vec3(0.75,1.0,1.0); }
+  else if(p<2.5){ a=vec3(0.0,0.08,0.0); b=vec3(0.55,1.0,0.25); }
+  else if(p<3.5){ a=vec3(0.08,0.0,0.15); b=vec3(1.0,0.35,1.0); }
+  else { a=hsv2rgb(vec3(u_hueA,0.9,0.22)); b=hsv2rgb(vec3(u_hueB,0.85,1.0)); }
+  vec3 cz = mix(a, b, smoothstep(0.0,1.0,l));
+  O = vec4(mix(c, cz, clamp(u_amt,0.0,1.0)), 1.0);
+}
+`;
+const SRC_BLOOMPOST = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_thr;
+uniform float u_str;
+uniform vec2 u_texel;
+uniform float u_bypass;
+void main(){
+  vec3 base = texture(u_tex,v_uv).rgb;
+  if(u_bypass>0.5){ O = vec4(base,1.0); return; }
+  vec3 blur = vec3(0.0);
+  for(int x=-1;x<=1;x++) for(int y=-1;y<=1;y++)
+    blur += texture(u_tex, v_uv+vec2(float(x),float(y))*u_texel*2.0).rgb;
+  blur /= 9.0;
+  float bl = dot(blur, vec3(0.299,0.587,0.114));
+  float m = smoothstep(u_thr, u_thr+0.25, bl);
+  O = vec4(base + blur*m*u_str, 1.0);
+}
+`;
+const SRC_CAM = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_flip;
+void main(){
+  vec2 uv = vec2(mix(v_uv.x, 1.0-v_uv.x, u_flip), v_uv.y);
+  O = vec4(texture(u_tex,uv).rgb, 1.0);
+}
+`;
 </script>
 <script>
 'use strict';
@@ -1531,7 +1684,7 @@ function buildTargets(){
   layerT=[makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true)];
   compT=makeTarget(RW,RH);
   fbT=[makeTarget(RW,RH),makeTarget(RW,RH)];
-  postT=[makeTarget(RW,RH),makeTarget(RW,RH)];
+  postT=[makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH)];
   bloomT=[makeTarget(RW>>1,RH>>1),makeTarget(RW>>1,RH>>1)]; /* v1.2 bloom chain */
   fbRead=0;
   const all=[...layerT,compT,...fbT,...postT];
@@ -1554,6 +1707,11 @@ function compileAll(){
     ['kaleido', SRC_KALEIDO],
     ['glitch',  SRC_GLITCH],
     ['grade',   SRC_GRADE],
+    ['mirror',  SRC_MIRROR],
+    ['automask',SRC_AUTOMASK],
+    ['colorize',SRC_COLORIZE],
+    ['bloompost',SRC_BLOOMPOST],
+    ['cam',     SRC_CAM],
     ['copy',    SRC_COPY],
     ['bloombp', SRC_BLOOMBP],
     ['bloomblur',SRC_BLOOMBLUR],
@@ -2528,6 +2686,88 @@ function layerEnabled(i){
   const anySolo=S.layers.some(l=>l.solo);
   return !L.bypass && !L.ejected && (!anySolo || L.solo);
 }
+/* ================= WEBCAM SOURCE =================
+   getUserMedia -> hidden <video> -> per-frame texture upload. Permission is
+   requested the first time the Webcam source is selected/fired; denial shows
+   a toast and the layer renders a "NO CAMERA" slate (never black). Works in
+   Electron (file://) and in browsers over HTTPS/localhost. */
+let camVideo=null, camTex=null, camSlateTex=null, camStream=null;
+let camState='off', camLastT=-1, camReq=null; /* off|requesting|live|denied */
+async function ensureCamera(){
+  if(camState==='live') return true;
+  if(camState==='requesting') return camReq;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    camState='denied';
+    toast('Camera unavailable here — a browser needs HTTPS or localhost for getUserMedia (Electron is fine).');
+    return null;
+  }
+  camState='requesting';
+  camReq=(async()=>{
+    try{
+      camStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:'user'},audio:false});
+      camVideo=document.createElement('video');
+      camVideo.muted=true; camVideo.playsInline=true;
+      camVideo.srcObject=camStream;
+      await camVideo.play();
+      camTex=gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D,camTex);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      camState='live';
+      toast('Camera live');
+      return true;
+    }catch(err){
+      camState='denied';
+      toast('Camera access denied ('+((err&&err.name)||'error')+') — the Webcam source shows a slate until you allow it.');
+      return null;
+    }
+  })();
+  return camReq;
+}
+function pumpWebcam(){
+  if(camState!=='live'||!camVideo||!camTex) return;
+  if(camVideo.readyState<2||camVideo.currentTime===camLastT) return;
+  camLastT=camVideo.currentTime;
+  gl.bindTexture(gl.TEXTURE_2D,camTex);
+  try{ gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,camVideo); }
+  catch(e){ /* transient upload failure — keep the last good frame */ }
+}
+function camSlate(){
+  if(camSlateTex) return camSlateTex;
+  const c=document.createElement('canvas'); c.width=640; c.height=360;
+  const g=c.getContext('2d');
+  g.fillStyle='#14161c'; g.fillRect(0,0,640,360);
+  g.strokeStyle='#2dd4bf'; g.lineWidth=3; g.strokeRect(14,14,612,332);
+  g.fillStyle='#e8eaee'; g.font='bold 44px sans-serif'; g.textAlign='center';
+  g.fillText('NO CAMERA',320,158);
+  g.fillStyle='#878b94'; g.font='21px sans-serif';
+  g.fillText(camState==='denied'?'camera access denied — allow it in the browser':'select the Webcam source to enable',320,205);
+  const t=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+  camSlateTex=t; return t;
+}
+function renderWebcam(i,t,T){
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+  if(camState==='live'&&camVideo&&camVideo.readyState>=2&&camTex){
+    const P=PROG.cam;
+    if(!P) return;
+    gl.useProgram(P); setTex(P,'u_tex',0,camTex);
+    gl.uniform1f(U(P,'u_flip'),eff('L'+i+'.camFlip')>=0.5?1:0);
+    quadDraw();
+  }else{
+    const P=PROG.copy;
+    if(!P) return;
+    gl.useProgram(P); setTex(P,'u_tex',0,camSlate());
+    quadDraw();
+  }
+}
 /* v1.3 node graph: renderLayerInto renders a layer source into any target.
    srcOv overrides the layer's fired source (used by Source nodes). */
 function renderLayerInto(i,t,T,srcOv,ignByp){
@@ -2535,11 +2775,12 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
   gl.viewport(0,0,T.w,T.h);
   const sidx=(srcOv===undefined)?S.layers[i].src:srcOv;
   if(sidx===4){ renderCloner(i,t,T); return; }
+  if(sidx===camIdx()){ renderWebcam(i,t,T); return; }
   gl.clearColor(0,0,0,1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   if(!ignByp && !layerEnabled(i)) return;
   const L=S.layers[i];
-  const prog=(sidx>=5)?PROG.imports[sidx-5]:PROG[SRC_KEYS[sidx]];
+  const prog=(sidx>=5&&sidx<camIdx())?PROG.imports[sidx-5]:PROG[SRC_KEYS[sidx]];
   if(!prog) return;
   const aud = eff('L'+i+'.audio')*eff('P.aamt');
   let sp = PARAMS['L'+i+'.speed'].map(eff('L'+i+'.speed'));
@@ -2643,12 +2884,63 @@ function renderGlitch(t){
   gl.uniform1f(U(P,'u_bypass'),S.postBypass.glitch?1:0);
   quadDraw();
 }
+/* content wave: Mirror -> Auto Mask -> Colorize -> Bloom, then Grade */
+function renderMirror(){
+  const P=PROG.mirror;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,postT[2].fb);
+  gl.viewport(0,0,RW,RH);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,postT[1].tex);
+  gl.uniform1f(U(P,'u_mode'),PARAMS['P.mirmode'].map(eff('P.mirmode')));
+  gl.uniform1f(U(P,'u_pos'),eff('P.mirpos'));
+  gl.uniform1f(U(P,'u_bypass'),S.postBypass.mirror?1:0);
+  quadDraw();
+}
+function renderAutoMask(){
+  const P=PROG.automask;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,postT[3].fb);
+  gl.viewport(0,0,RW,RH);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,postT[2].tex);
+  gl.uniform1f(U(P,'u_mode'),PARAMS['P.ammode'].map(eff('P.ammode')));
+  gl.uniform1f(U(P,'u_thr'),eff('P.amthr'));
+  gl.uniform1f(U(P,'u_soft'),eff('P.amsoft'));
+  gl.uniform1f(U(P,'u_keyhue'),eff('P.amkey'));
+  gl.uniform1f(U(P,'u_inv'),eff('P.aminv')>=0.5?1:0);
+  gl.uniform1f(U(P,'u_bypass'),S.postBypass.automask?1:0);
+  quadDraw();
+}
+function renderColorize(){
+  const P=PROG.colorize;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,postT[4].fb);
+  gl.viewport(0,0,RW,RH);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,postT[3].tex);
+  gl.uniform1f(U(P,'u_pal'),PARAMS['P.czpal'].map(eff('P.czpal')));
+  gl.uniform1f(U(P,'u_amt'),eff('P.czamt'));
+  gl.uniform1f(U(P,'u_hueA'),eff('P.czhueA'));
+  gl.uniform1f(U(P,'u_hueB'),eff('P.czhueB'));
+  gl.uniform1f(U(P,'u_bypass'),S.postBypass.colorize?1:0);
+  quadDraw();
+}
+function renderBloomPost(){
+  const P=PROG.bloompost;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,postT[5].fb);
+  gl.viewport(0,0,RW,RH);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,postT[4].tex);
+  gl.uniform1f(U(P,'u_thr'),PARAMS['P.blthr'].map(eff('P.blthr')));
+  gl.uniform1f(U(P,'u_str'),PARAMS['P.blstr'].map(eff('P.blstr')));
+  gl.uniform2f(U(P,'u_texel'),1/RW,1/RH);
+  gl.uniform1f(U(P,'u_bypass'),S.postBypass.bloompost?1:0);
+  quadDraw();
+}
 function renderGrade(t){
   const P=PROG.grade;
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   gl.viewport(0,0,canvas.width,canvas.height);
   gl.useProgram(P);
-  setTex(P,'u_tex',0,postT[1].tex);
+  setTex(P,'u_tex',0,postT[5].tex);
   gl.uniform1f(U(P,'u_bri'),PARAMS['P.bri'].map(eff('P.bri')));
   gl.uniform1f(U(P,'u_con'),PARAMS['P.con'].map(eff('P.con')));
   gl.uniform1f(U(P,'u_sat2'),PARAMS['P.sat'].map(eff('P.sat')));
@@ -3039,6 +3331,7 @@ for(let i=0;i<4;i++){
     const ni=srcIdxMap(v);
     const changed=ni!==S.layers[ii].src;
     S.layers[ii].src=ni;
+    if(ni===camIdx()) ensureCamera(); /* selecting Webcam requests permission */
     syncFiredToSrc(ii); syncDeckSel();
     if(changed && S.sel && S.sel.kind==='layer' && S.sel.i===ii && $('propsel')) buildProps();
   })(i)];
@@ -3187,6 +3480,44 @@ function showClipMenu(x,y,i,k){
 }
 function hideClipMenu(){ const m=$('clipmenu'); if(m) m.style.display='none'; }
 /* ---------- properties panel (selection-driven, tabbed) ---------- */
+/* Clip param section (content wave): EVERY clip shows its source's params.
+   Reused by the Clip tab AND the node-view details panel (dive-in with no
+   node selected). All rows are the standard builders: MIDI-learnable +
+   macro-assignable. */
+function buildClipParamSection(host,i,src){
+  if(typeof src!=='number') return;
+  const sec=el('div','psec');
+  if(src===camIdx()){
+    sec.appendChild(el('div','plab','Webcam'));
+    sec.appendChild(el('div','dim','Camera: '+camState));
+    toggleRow(sec,'L'+i+'.camFlip','H-Flip');
+    const b=el('button',null,'Enable camera');
+    b.addEventListener('click',()=>{ ensureCamera().then(()=>buildProps()); });
+    sec.appendChild(b);
+    sec.appendChild(mkHint('The camera is global; H-Flip is per layer. Pair it with Auto Mask (Chroma) in the post chain.'));
+  }else if(src>=5&&src<camIdx()){
+    const im=S.imports[src-5], uns=im?im.uniforms:null;
+    if(!(uns&&uns.length)) return;
+    registerImportParams(src);
+    sec.appendChild(el('div','plab','Shader uniforms \u2014 '+im.name));
+    for(const un of uns) paramRow(sec,'SH'+src+'.'+un,un);
+    sec.appendChild(mkHint('Float uniforms only for now (vec uniforms are not knobbed yet). Drag a label onto a dashboard dial; click a slider while MIDI Learn is armed.'));
+  }else if(src===4){
+    sec.appendChild(el('div','plab','Cloner 3D (key params)'));
+    discreteRow(sec,'L'+i+'.clMode','Mode',CL_MODES);
+    discreteRow(sec,'L'+i+'.clMesh','Mesh',CL_MESHES);
+    paramRow(sec,'L'+i+'.clCntX','Count X'); paramRow(sec,'L'+i+'.clCntY','Count Y');
+    paramRow(sec,'L'+i+'.clIScl','Scale');
+    sec.appendChild(mkHint('Full Cloner controls live in the Layer tab.'));
+  }else{
+    sec.appendChild(el('div','plab',srcName(src)+' params'));
+    paramRow(sec,'L'+i+'.speed','Speed'); paramRow(sec,'L'+i+'.hue','Hue');
+    paramRow(sec,'L'+i+'.p1','Param 1'); paramRow(sec,'L'+i+'.p2','Param 2');
+    paramRow(sec,'L'+i+'.audio','Audio');
+    if(src===3) sec.appendChild(mkHint('Plugin scratchpad — edit the code in the Sources panel (Load .txt).'));
+  }
+  host.appendChild(sec);
+}
 function buildProps(){
   const sel=S.sel||{kind:'layer',i:0};
   const host=$(sel.kind==='clip' ? 'ptab-clip' : 'ptab-layer');
@@ -3214,19 +3545,7 @@ function buildProps(){
     row.appendChild(bf); row.appendChild(bc); wrap.appendChild(row);
     wrap.appendChild(mkHint('Click a deck clip to fire it. Right-click a clip to assign a source.'));
     host.appendChild(wrap);
-    /* v1.4 task 3: auto-knobs from the shader's `uniform float` declarations */
-    if(typeof src==='number'&&src>=5){
-      const im=S.imports[src-5];
-      const uns=im?im.uniforms:null;
-      if(uns&&uns.length){
-        registerImportParams(src);
-        const usec=el('div','psec');
-        usec.appendChild(el('div','plab','Shader uniforms \u2014 '+im.name));
-        for(const un of uns) paramRow(usec,'SH'+src+'.'+un,un);
-        usec.appendChild(mkHint('Float uniforms only for now (vec uniforms are not knobbed yet). Drag a label onto a dashboard dial; click a slider while MIDI Learn is armed.'));
-        host.appendChild(usec);
-      }
-    }
+    buildClipParamSection(host,i,src);
     return;
   }
   const i=Math.min(3,Math.max(0,sel.i||0)), L=S.layers[i];
@@ -3599,7 +3918,7 @@ function buildCompTab(){
   buildPostFx(); buildMaster(); buildDashboard(); renderMidiList();
 }
 /* ---------- browser: effects / sources ---------- */
-const FXLIST=[['feedback','Feedback'],['kaleido','Kaleidoscope'],['glitch','RGB Split / Glitch'],['grade','Grade']];
+const FXLIST=[['feedback','Feedback'],['kaleido','Kaleidoscope'],['glitch','RGB Split / Glitch'],['mirror','Mirror'],['automask','Auto Mask'],['colorize','Colorize'],['bloompost','Bloom'],['grade','Grade']];
 function buildFxBrowser(){
   const host=$('btab-fx'); if(!host) return; host.innerHTML='';
   FXLIST.forEach(([key,name])=>{
@@ -3758,6 +4077,20 @@ function buildPostFx(){
   paramRow(host,'P.kseg','Segments'); paramRow(host,'P.kang','Angle');
   fxHead(host,'RGB Split / Glitch','glitch');
   paramRow(host,'P.gamt','Amount');
+  fxHead(host,'Mirror','mirror');
+  host.appendChild(mkHint('Resolume-style mirror: fold the image around a position.'));
+  paramRow(host,'P.mirmode','Mode'); paramRow(host,'P.mirpos','Position');
+  fxHead(host,'Auto Mask','automask');
+  host.appendChild(mkHint('Key out brights/darks (Luma) or a color (Chroma) — made for the Webcam source.'));
+  paramRow(host,'P.ammode','Mode'); paramRow(host,'P.amthr','Threshold');
+  paramRow(host,'P.amsoft','Softness'); paramRow(host,'P.amkey','Key Hue');
+  toggleRow(host,'P.aminv','Invert');
+  fxHead(host,'Colorize','colorize');
+  host.appendChild(mkHint('Map luminance to a color ramp.'));
+  paramRow(host,'P.czpal','Palette'); paramRow(host,'P.czamt','Amount');
+  paramRow(host,'P.czhueA','Hue A'); paramRow(host,'P.czhueB','Hue B');
+  fxHead(host,'Bloom','bloompost');
+  paramRow(host,'P.blthr','Threshold'); paramRow(host,'P.blstr','Strength');
 }
 function buildMaster(){
   const host=$('master'); host.innerHTML='';
@@ -3883,14 +4216,21 @@ function compilePlugin(fromInit){
    uniforms set per draw). The "Plugin" slot (index 3) stays the editable
    #plugcode scratchpad — imports are separate entries. */
 if(!PROG.imports) PROG.imports=[];
-function srcCount(){ return 5+S.imports.length; }
+/* Webcam registry decision (content wave): the webcam is ALWAYS the last
+   source index (5 + S.imports.length). Imports stay at absolute indices 5+,
+   so old presets and localStorage (which store absolute indices) never
+   shift. srcCount() grows by one; removeImport() already decrements any
+   src > dead, which keeps webcam clips pointing at the webcam. */
+function camIdx(){ return 5+S.imports.length; }
+function srcCount(){ return 6+S.imports.length; }
 function srcName(s){
   s|=0;
   if(s<5) return LAYER_SRC[s]||'?';
+  if(s===5+S.imports.length) return 'Webcam';
   const im=S.imports[s-5];
   return im?im.name:'?';
 }
-function srcOptions(){ return LAYER_SRC.concat(S.imports.map(im=>im.name)); }
+function srcOptions(){ return LAYER_SRC.concat(S.imports.map(im=>im.name)).concat(['Webcam']); }
 function srcNodeOptions(){ return ['Layer Input'].concat(srcOptions()); }
 function srcIdxMap(v){ const n=srcCount()-1; return Math.min(n,Math.max(0,Math.round(clamp(v,0,1)*n))); }
 function srcIdxFmt(v){ return srcName(srcIdxMap(v)); }
@@ -4338,6 +4678,26 @@ const NTYPES={
       {k:'thr',label:'Threshold',def:0.55,map:v=>v*2.5,fmt:v=>(v*2.5).toFixed(2)},
       {k:'str',label:'Strength',def:0.4,map:v=>v*3,fmt:v=>(v*3).toFixed(2)},
     ]},
+  mirror:{label:'Mirror',group:'FX',color:'#f59e0b',ins:[NPORT_TEX],outs:[NPORT_TEX],
+    params:[
+      {k:'mode',label:'Mode',def:0,map:v=>Math.floor(clamp(v,0,1)*2.999),fmt:v=>['Horizontal','Vertical','Quadrant'][Math.floor(clamp(v,0,1)*2.999)]},
+      {k:'pos',label:'Position',def:0.5,fmt:v=>Math.round(v*100)+'%'},
+    ]},
+  automask:{label:'Auto Mask',group:'FX',color:'#f59e0b',ins:[NPORT_TEX],outs:[NPORT_TEX],
+    params:[
+      {k:'mode',label:'Mode',def:0,map:v=>Math.floor(clamp(v,0,1)*1.999),fmt:v=>['Luma','Chroma'][Math.floor(clamp(v,0,1)*1.999)]},
+      {k:'thr',label:'Threshold',def:0.5},
+      {k:'soft',label:'Softness',def:0.25},
+      {k:'key',label:'Key Hue',def:0.33,fmt:v=>Math.round(v*360)+'\u00B0'},
+      {k:'inv',label:'Invert',def:0,kind:'toggle'},
+    ]},
+  colorize:{label:'Colorize',group:'FX',color:'#f59e0b',ins:[NPORT_TEX],outs:[NPORT_TEX],
+    params:[
+      {k:'pal',label:'Palette',def:0,map:v=>Math.floor(clamp(v,0,1)*4.999),fmt:v=>['Ember','Ice','Acid','Ultra','Custom'][Math.floor(clamp(v,0,1)*4.999)]},
+      {k:'amt',label:'Amount',def:0.8},
+      {k:'hueA',label:'Hue A',def:0.05,fmt:v=>Math.round(v*360)+'\u00B0'},
+      {k:'hueB',label:'Hue B',def:0.13,fmt:v=>Math.round(v*360)+'\u00B0'},
+    ]},
   xform:{label:'Transform',group:'FX',color:'#f59e0b',ins:[NPORT_TEX],outs:[NPORT_TEX],
     params:[
       {k:'scale',label:'Scale',def:0.5,map:v=>0.25+v*3.75,fmt:v=>(0.25+v*3.75).toFixed(2)+'x'},
@@ -4606,6 +4966,41 @@ function renderNodeTex(i,nd,t,ins,T,srcOv){
       gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
       gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE); quadDraw(); gl.disable(gl.BLEND);
       break;
+    }
+    case 'mirror':{
+      const inTex=ins[0]; if(!inTex){ noIn(); break; }
+      const P=PROG.mirror;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+      gl.useProgram(P); setTex(P,'u_tex',0,inTex);
+      gl.uniform1f(U(P,'u_mode'),neff(i,nd.id,'mode'));
+      gl.uniform1f(U(P,'u_pos'),neff(i,nd.id,'pos'));
+      gl.uniform1f(U(P,'u_bypass'),0);
+      quadDraw(); break;
+    }
+    case 'automask':{
+      const inTex=ins[0]; if(!inTex){ noIn(); break; }
+      const P=PROG.automask;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+      gl.useProgram(P); setTex(P,'u_tex',0,inTex);
+      gl.uniform1f(U(P,'u_mode'),neff(i,nd.id,'mode'));
+      gl.uniform1f(U(P,'u_thr'),neff(i,nd.id,'thr'));
+      gl.uniform1f(U(P,'u_soft'),neff(i,nd.id,'soft'));
+      gl.uniform1f(U(P,'u_keyhue'),neff(i,nd.id,'key'));
+      gl.uniform1f(U(P,'u_inv'),eff(idp+'inv')>=0.5?1:0);
+      gl.uniform1f(U(P,'u_bypass'),0);
+      quadDraw(); break;
+    }
+    case 'colorize':{
+      const inTex=ins[0]; if(!inTex){ noIn(); break; }
+      const P=PROG.colorize;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+      gl.useProgram(P); setTex(P,'u_tex',0,inTex);
+      gl.uniform1f(U(P,'u_pal'),neff(i,nd.id,'pal'));
+      gl.uniform1f(U(P,'u_amt'),neff(i,nd.id,'amt'));
+      gl.uniform1f(U(P,'u_hueA'),neff(i,nd.id,'hueA'));
+      gl.uniform1f(U(P,'u_hueB'),neff(i,nd.id,'hueB'));
+      gl.uniform1f(U(P,'u_bypass'),0);
+      quadDraw(); break;
     }
     case 'xform':{
       const inTex=ins[0]; if(!inTex){ noIn(); break; }
@@ -5127,7 +5522,26 @@ function renderNodeProps(nd){
   host.innerHTML='';
   const i=neLayer;
   host.appendChild(el('div','nept','Layer '+LAYER_NAMES[i]+' \u00B7 Node'));
-  if(!nd){ host.appendChild(mkHint('Select a node to edit its parameters. Every parameter is MIDI-learnable and macro-assignable, like the deck.')); return; }
+  if(!nd){
+    /* content wave: diving in with no node selected shows the DIVE CLIP's
+       details (not a generic hint) — he wants to "actually see the details
+       of something when i tab into it". */
+    const dv=(typeof neDive==='object'&&neDive)?neDive:null;
+    if(dv&&typeof dv.c==='number'&&S.clips[dv.i]){
+      const dsrc=S.clips[dv.i][dv.c];
+      host.appendChild(el('div','nepname','Clip '+LAYER_NAMES[dv.i]+' \u00B7 C'+(dv.c+1)+
+        (typeof dsrc==='number'?' ('+srcName(dsrc)+')':' (empty)')));
+      if(typeof dsrc==='number'){
+        host.appendChild(el('div','dim','Layer '+LAYER_NAMES[dv.i]+' graph \u2014 Source node follows this clip.'));
+        buildClipParamSection(host,dv.i,dsrc);
+      }else{
+        host.appendChild(mkHint('Empty clip slot — assign a source from the deck (right-click a clip).'));
+      }
+    }else{
+      host.appendChild(mkHint('Select a node to edit its parameters. Every parameter is MIDI-learnable and macro-assignable, like the deck.'));
+    }
+    return;
+  }
   const def=NTYPES[nd.type];
   host.appendChild(el('div','nepname',escapeHtml(nodeTitle(i,nd))));
   if(nd.type==='lfo'){ buildModulatorNodeEditor(host,i,nd.mod); return; }
@@ -5220,11 +5634,16 @@ function loop(){
   if(S.bpm>0){ const ph=(t*S.bpm/60)%1; pulse=Math.pow(1-ph,3); }
   beatPulse=Math.max(pulse,audioBeat);
   evalModulators(t);
+  pumpWebcam(); /* one texture upload per frame max, shared by all layers */
   for(let i=0;i<4;i++) renderLayer(i,t);
   renderCombine();
   renderFeedback();
   renderKaleido();
   renderGlitch(t);
+  renderMirror();
+  renderAutoMask();
+  renderColorize();
+  renderBloomPost();
   renderGrade(t);
   updatePreview(t); /* live clip preview: never touches output state */
   frames++;
