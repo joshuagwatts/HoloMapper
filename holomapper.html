@@ -93,6 +93,18 @@ details.sec>summary .x{color:var(--dim);font-weight:400;font-size:10px;text-tran
 #plugerr{color:var(--bad);font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;
   white-space:pre-wrap;margin-top:6px;max-height:120px;overflow:auto}
 #plugok{color:var(--ok);font-size:11px;margin-top:6px}
+/* ---- shadertoy .txt drop (v1.4) ---- */
+#drophl{position:fixed;inset:0;z-index:999;display:none;pointer-events:none;border:3px dashed var(--acc2);background:rgba(45,212,191,.07);border-radius:14px;margin:10px;}
+#drophl.on{display:block;}
+#drophl .dtxt{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:800;color:#fff;background:rgba(10,12,16,.88);padding:16px 26px;border-radius:12px;border:1px solid var(--acc2);white-space:nowrap;}
+#shtoast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:1000;display:flex;flex-direction:column;gap:8px;max-width:min(600px,92vw);}
+.sht{background:#14171d;border:1px solid var(--line);border-left:4px solid var(--ok);color:#e8ecf1;border-radius:10px;padding:10px 14px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.55);white-space:pre-wrap;word-break:break-word;max-height:38vh;overflow:auto;}
+.sht.err{border-left-color:var(--bad);}
+.sht .x{float:right;cursor:pointer;opacity:.55;margin-left:12px;font-weight:700;}
+.sht .x:hover{opacity:1;}
+.plugslot{padding:4px 10px;}
+.plugslot.cur{background:var(--acc);border-color:var(--acc);color:#fff;}
+#plugfile{display:none;}
 /* cloner 3d */
 .clonerbox{margin-top:6px;border-top:1px dashed var(--line);padding-top:4px}
 details.cgrp{margin:4px 0}
@@ -222,6 +234,8 @@ body.perform #performbar{display:block}
 .srcrow:hover{border-color:var(--sel)}
 .srcrow.cur{border-color:var(--play);color:var(--play)}
 .srcrow .sdot{width:8px;height:8px;border-radius:50%;background:var(--dim);flex:none}
+.srcrow .srcdel{margin-left:auto;flex:none;padding:2px 8px;color:var(--dim);background:none;border:none;}
+.srcrow .srcdel:hover{color:var(--bad);}
 .srcrow.cur .sdot{background:var(--play)}
 /* meters */
 .meters{display:flex;gap:3px;align-items:flex-end;height:16px}
@@ -786,7 +800,7 @@ const clTglFmt=v=>(v>=0.5?'on':'off');
    section below) mirrors the param into it. */
 const SRC_DEF=[0, 0.5, 0.25, 0.75]; /* default src index /4 per layer */
 for(let i=0;i<4;i++){
-  defParam('L'+i+'.src', LAYER_NAMES[i]+' Source', SRC_DEF[i], clDiscMap(5), clDiscFmt(LAYER_SRC));
+  defParam('L'+i+'.src', LAYER_NAMES[i]+' Source', SRC_DEF[i], v=>srcIdxMap(v), v=>srcIdxFmt(v));
 }
 for(let i=0;i<4;i++){
   const c='L'+i+'.cl', LB=LAYER_NAMES[i]+' ';
@@ -988,7 +1002,7 @@ function validClips(c){
   if(!Array.isArray(c)||c.length!==4) return null;
   for(let i=0;i<4;i++){
     if(!Array.isArray(c[i])||c[i].length!==8) return null;
-    for(let k=0;k<8;k++){ const v=c[i][k]; if(v!==null&&(typeof v!=='number'||v<0||v>4)) return null; }
+    for(let k=0;k<8;k++){ const v=c[i][k]; if(v!==null&&(typeof v!=='number'||v<0||!Number.isInteger(v))) return null; }
   }
   return c;
 }
@@ -1010,7 +1024,7 @@ function defaultState(){
     postBypass:{feedback:false, kaleido:true, glitch:true},
     strobeOn:false, beatSync:false, bpm:120, blackout:false,
     macros:Array.from({length:8},(_,i)=>({label:'M'+(i+1), val:0.5})),
-    midi:[], pluginCode:PLUGIN_DEFAULT, mods:defaultMods()
+    midi:[], pluginCode:PLUGIN_DEFAULT, imports:[], mods:defaultMods()
   };
 }
 let S = defaultState();
@@ -1026,6 +1040,9 @@ try{
   S.clips=S.decks[S.deckIdx].clips;
   if(typeof S.autopilot!=='boolean') S.autopilot=false;
 }catch(e){ console.warn('HoloMapper: state load failed', e); }
+/* v1.4: imported shaders are first-class sources (S.imports). Sanitize. */
+if(!Array.isArray(S.imports)) S.imports=[];
+S.imports=S.imports.filter(im=>im&&typeof im.name==='string'&&typeof im.code==='string');
 const saveState = debounce(()=>{
   try{
     localStorage.setItem(LS_STATE, JSON.stringify(S));
@@ -2497,6 +2514,9 @@ function renderCloner(i,t,T){
    layers -> combine -> feedback(ping-pong) -> kaleido -> glitch -> grade -> screen */
 const SRC_KEYS = ['tunnel','flow','nebula','plugin','cloner'];
 let beatPulse=0;
+/* v1.4: Shadertoy uniforms for .txt loader (iTimeDelta/iFrame/iMouse) */
+let shFrame=0, shDt=0, shPrevT=-1;
+const shMouse=[0,0,0,0]; /* xy: cursor px in GL coords, zw: last click px */
 function snapBeat(v){
   const divs=[0.25,0.5,1,2,4];
   let best=divs[0];
@@ -2510,16 +2530,16 @@ function layerEnabled(i){
 }
 /* v1.3 node graph: renderLayerInto renders a layer source into any target.
    srcOv overrides the layer's fired source (used by Source nodes). */
-function renderLayerInto(i,t,T,srcOv){
+function renderLayerInto(i,t,T,srcOv,ignByp){
   gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
   gl.viewport(0,0,T.w,T.h);
   const sidx=(srcOv===undefined)?S.layers[i].src:srcOv;
   if(sidx===4){ renderCloner(i,t,T); return; }
   gl.clearColor(0,0,0,1);
   gl.clear(gl.COLOR_BUFFER_BIT);
-  if(!layerEnabled(i)) return;
+  if(!ignByp && !layerEnabled(i)) return;
   const L=S.layers[i];
-  const prog=PROG[SRC_KEYS[sidx]];
+  const prog=(sidx>=5)?PROG.imports[sidx-5]:PROG[SRC_KEYS[sidx]];
   if(!prog) return;
   const aud = eff('L'+i+'.audio')*eff('P.aamt');
   let sp = PARAMS['L'+i+'.speed'].map(eff('L'+i+'.speed'));
@@ -2535,6 +2555,19 @@ function renderLayerInto(i,t,T,srcOv){
   gl.uniform1f(U(prog,'u_beat'),beatPulse);
   gl.uniform1f(U(prog,'u_param1'),eff('L'+i+'.p1'));
   gl.uniform1f(U(prog,'u_param2'),eff('L'+i+'.p2'));
+  if(sidx===3||sidx>=5){ /* Shadertoy uniforms for plugin + imported shaders */
+    gl.uniform1f(U(prog,'iTimeDelta'),shDt);
+    gl.uniform1i(U(prog,'iFrame'),shFrame);
+    gl.uniform4f(U(prog,'iMouse'),shMouse[0],shMouse[1],shMouse[2],shMouse[3]);
+  }
+  if(sidx>=5){ /* auto-knob uniforms from `uniform float` declarations */
+    const im=S.imports[sidx-5];
+    if(im&&im.uniforms) for(const un of im.uniforms){
+      const pid='SH'+sidx+'.'+un;
+      if(!PARAMS[pid]) registerImportParams(sidx);
+      gl.uniform1f(U(prog,un),eff(pid));
+    }
+  }
   quadDraw();
 }
 /* v1.3: graph dispatch. Default graph (Source->Output) is pixel-identical to
@@ -3003,7 +3036,7 @@ for(let i=0;i<4;i++){
   PARAM_HOOKS['L'+i+'.src']=[((ii)=>()=>{
     const pk='L'+ii+'.src';
     const v=(S.params[pk]!==undefined)?S.params[pk]:SRC_DEF[ii];
-    const ni=Math.min(4,Math.max(0,Math.round(v*4)));
+    const ni=srcIdxMap(v);
     const changed=ni!==S.layers[ii].src;
     S.layers[ii].src=ni;
     syncFiredToSrc(ii); syncDeckSel();
@@ -3064,7 +3097,7 @@ function fireClipNow(i,k){
   if(src===null||src===undefined) return;
   S.layers[i].ejected=false;
   S.fired[i]=k;
-  setParam('L'+i+'.src', src/4);
+  setParam('L'+i+'.src', src/Math.max(1,srcCount()-1));
 }
 function buildColHead(){
   const host=$('coltabs'); host.innerHTML='';
@@ -3117,10 +3150,10 @@ function buildDeck(){
       const src=S.clips[i][k];
       const c=el('div','clip'+(src===null||src===undefined?' empty':'')+((S.fired[i]===k)?' fired':'')+((S.sel&&S.sel.kind==='clip'&&S.sel.i===i&&S.sel.c===k)?' selc':''));
       c.dataset.i=i; c.dataset.k=k;
-      const th=el('div','cthumb',src===null||src===undefined?'+':LAYER_SRC[src].split(' ')[0]);
-      th.title=(src===null||src===undefined?'Empty slot \u2014 right-click to assign a source':'TRIGGER '+LAYER_SRC[src]+' on '+LAYER_NAMES[i]+' (quantized: '+(S.snap||'bar')+')');
+      const th=el('div','cthumb',src===null||src===undefined?'+':srcName(src).split(' ')[0]);
+      th.title=(src===null||src===undefined?'Empty slot \u2014 right-click to assign a source':'TRIGGER '+srcName(src)+' on '+LAYER_NAMES[i]+' (quantized: '+(S.snap||'bar')+')');
       th.addEventListener('click',()=>{ fireClip(i,k); });
-      const cnm=el('div','cname',src===null||src===undefined?'empty':LAYER_SRC[src]);
+      const cnm=el('div','cname',src===null||src===undefined?'empty':srcName(src));
       cnm.title='Select clip '+(k+1)+' without triggering';
       cnm.addEventListener('click',(e)=>{ e.stopPropagation(); selectClip(i,k); });
       c.appendChild(th); c.appendChild(cnm);
@@ -3137,7 +3170,7 @@ function buildDeck(){
 function showClipMenu(x,y,i,k){
   const m=$('clipmenu'); m.innerHTML='';
   const cur=S.clips[i][k];
-  LAYER_SRC.forEach((s,si)=>{
+  srcOptions().forEach((s,si)=>{
     const b=el('button',null,(si===cur?'\u2713 ':'')+s);
     b.addEventListener('click',()=>{ S.clips[i][k]=si; hideClipMenu(); saveState(); buildDeck(); buildProps(); });
     m.appendChild(b);
@@ -3166,7 +3199,7 @@ function buildProps(){
     const lab=el('label','plab','Source'); wrap.appendChild(lab);
     const se=document.createElement('select'); se.className='dsel';
     se.appendChild(new Option('(empty)','-1'));
-    LAYER_SRC.forEach((s,si)=>se.appendChild(new Option(s,si)));
+    srcOptions().forEach((s,si)=>se.appendChild(new Option(s,si)));
     se.value=String(src===null?-1:src);
     se.addEventListener('change',()=>{
       const v=parseInt(se.value,10);
@@ -3181,12 +3214,25 @@ function buildProps(){
     row.appendChild(bf); row.appendChild(bc); wrap.appendChild(row);
     wrap.appendChild(mkHint('Click a deck clip to fire it. Right-click a clip to assign a source.'));
     host.appendChild(wrap);
+    /* v1.4 task 3: auto-knobs from the shader's `uniform float` declarations */
+    if(typeof src==='number'&&src>=5){
+      const im=S.imports[src-5];
+      const uns=im?im.uniforms:null;
+      if(uns&&uns.length){
+        registerImportParams(src);
+        const usec=el('div','psec');
+        usec.appendChild(el('div','plab','Shader uniforms \u2014 '+im.name));
+        for(const un of uns) paramRow(usec,'SH'+src+'.'+un,un);
+        usec.appendChild(mkHint('Float uniforms only for now (vec uniforms are not knobbed yet). Drag a label onto a dashboard dial; click a slider while MIDI Learn is armed.'));
+        host.appendChild(usec);
+      }
+    }
     return;
   }
   const i=Math.min(3,Math.max(0,sel.i||0)), L=S.layers[i];
   const h=el('div','phead'); h.appendChild(el('span','ptitle','LAYER '+LAYER_NAMES[i])); host.appendChild(h);
   const wrap=el('div','psec'); host.appendChild(wrap);
-  discreteRow(wrap,'L'+i+'.src','Source',LAYER_SRC,()=>buildProps());
+  discreteRow(wrap,'L'+i+'.src','Source',srcOptions(),()=>buildProps());
   const br=el('div','prow'); const bl=el('div','pline');
   const blab=el('label'); blab.textContent='Blend'; bl.appendChild(blab);
   const bs=document.createElement('select'); bs.className='dsel'; bs.title='Blend mode';
@@ -3533,7 +3579,7 @@ function buildCompTab(){
   const sP=el('details','sec');
   const sumP=el('summary'); sumP.innerHTML='Shader Plugin <span class="x">FFGL-style slot</span>'; sP.appendChild(sumP);
   const bP=el('div','secbody'); sP.appendChild(bP); host.appendChild(sP);
-  bP.appendChild(mkHint('Paste GLSL below and hit Compile. Assign it to a layer via the source selector ("Plugin"). Errors appear inline.'));
+  bP.appendChild(mkHint('Paste GLSL below and hit Compile — or drag a .txt Shadertoy file anywhere onto the app to import it as a first-class source.'));
   const ta=document.createElement('textarea'); ta.id='plugcode'; ta.spellcheck=false; ta.value=S.pluginCode||'';
   bP.appendChild(ta);
   const pk=el('div','krow');
@@ -3541,7 +3587,13 @@ function buildCompTab(){
   bCc.addEventListener('click',()=>compilePlugin(false));
   const bPd=el('button',null,'Reset to default'); bPd.id='btnPlugDefault';
   bPd.addEventListener('click',()=>{ $('plugcode').value=PLUGIN_DEFAULT; compilePlugin(false); });
-  pk.appendChild(bCc); pk.appendChild(bPd); bP.appendChild(pk);
+  const bLd=el('button',null,'Load .txt'); bLd.id='btnPlugLoad';
+  bLd.title='Import a .txt/.glsl Shadertoy shader as a first-class source';
+  const fi=document.createElement('input'); fi.type='file'; fi.id='plugfile';
+  fi.multiple=true; fi.accept='.txt,.glsl,.frag,.fs';
+  fi.addEventListener('change',()=>{ loadShaderFiles(fi.files); fi.value=''; });
+  bLd.addEventListener('click',()=>fi.click());
+  pk.appendChild(bCc); pk.appendChild(bPd); pk.appendChild(bLd); bP.appendChild(pk); bP.appendChild(fi);
   const po=el('div'); po.id='plugok'; bP.appendChild(po);
   const pe=el('pre'); pe.id='plugerr'; bP.appendChild(pe);
   buildPostFx(); buildMaster(); buildDashboard(); renderMidiList();
@@ -3572,13 +3624,19 @@ function buildSrcBrowser(){
   const host=$('btab-src'); if(!host) return; host.innerHTML='';
   const i=Math.min(3,Math.max(0,S.selLayer||0));
   host.appendChild(mkHint('Target: '+LAYER_NAMES[i]+' — click a source to load it on the selected layer.'));
-  LAYER_SRC.forEach((s,si)=>{
+  srcOptions().forEach((s,si)=>{
     const b=el('button','srcrow'+(S.layers[i].src===si?' cur':''));
     b.appendChild(el('span','sdot'));
     b.appendChild(el('span',null,s));
     b.title='Load '+s+' on '+LAYER_NAMES[i];
-    b.addEventListener('click',()=>{ setParam('L'+i+'.src',si/4); buildSrcBrowser(); });
+    b.addEventListener('click',()=>{ setParam('L'+i+'.src',si/Math.max(1,srcCount()-1)); buildSrcBrowser(); });
     host.appendChild(b);
+    if(si>=5){ /* imported shader: × removes it (clips/layers remapped) */
+      const x=el('button','srcdel','\u2715');
+      x.title='Remove imported source "'+s+'"';
+      x.addEventListener('click',(e)=>{ e.stopPropagation(); removeImport(si-5); });
+      b.appendChild(x);
+    }
   });
 }
 /* ---------- monitors ---------- */
@@ -3598,10 +3656,69 @@ function updatePvLabel(){
   const sel=S.sel||{kind:'layer',i:0};
   if(sel.kind==='clip'){
     const src=S.clips[sel.i][sel.c];
-    lab.textContent='Preview Monitor \u2014 '+LAYER_NAMES[sel.i]+' \u00b7 Clip '+(sel.c+1)+(src!==null&&src!==undefined?' ('+LAYER_SRC[src]+')':' (empty)');
+    lab.textContent='Preview Monitor \u2014 '+LAYER_NAMES[sel.i]+' \u00b7 Clip '+(sel.c+1)+(src!==null&&src!==undefined?' ('+srcName(src)+')':' (empty)');
   } else {
     lab.textContent='Preview Monitor \u2014 '+LAYER_NAMES[Math.min(3,Math.max(0,sel.i||0))];
   }
+}
+/* ---------- live preview monitor (v1.4) ----------
+   Name-click selects a clip -> its source renders here FOR REAL, through the
+   layer's node graph with the source overridden (what firing would produce).
+   Renders into a dedicated 480x270 RGBA8 FBO, never touching layerT[i] or
+   compositor state; stateful node feedback (NRUN fbRead) is snapshotted and
+   restored so live trails stay coherent. Pixels reach the 2D #pv canvas via
+   readPixels + vertical flip. Bypass is ignored: the preview shows the clip,
+   Resolume-style. */
+let pvT=null, pvRead=null, pvOff=null, pvImg=null, pvLive=false;
+function makeTarget8(w,h){
+  const tex=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  const fb=gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  return {tex:tex,fb:fb,w:w,h:h};
+}
+function updatePreview(t){
+  const cv=$('pv'); if(!cv||!cv.getContext) return;
+  const sel=S.sel;
+  const src=(sel&&sel.kind==='clip')?S.clips[sel.i][sel.c]:null;
+  if(typeof src!=='number'){
+    if(pvLive){ pvLive=false; drawPreview(); updatePvLabel(); }
+    return;
+  }
+  const i=Math.min(3,Math.max(0,sel.i|0));
+  if(!pvT){ pvT=makeTarget8(480,270); pvRead=new Uint8Array(480*270*4); }
+  if(useGraph(i)){
+    const savedFb={};
+    for(const k in NRUN) if(k.indexOf(i+'.')===0&&NRUN[k].fbRead!==undefined) savedFb[k]=NRUN[k].fbRead;
+    try{ evalGraph(i,t,src,pvT); }
+    catch(err){ renderLayerInto(i,t,pvT,src,true); }
+    for(const k in savedFb) if(NRUN[k]) NRUN[k].fbRead=savedFb[k];
+  }else{
+    renderLayerInto(i,t,pvT,src,true);
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER,pvT.fb);
+  gl.readPixels(0,0,480,270,gl.RGBA,gl.UNSIGNED_BYTE,pvRead);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  if(cv.width!==320) cv.width=320;
+  if(cv.height!==180) cv.height=180;
+  if(!pvOff){ pvOff=document.createElement('canvas'); pvOff.width=480; pvOff.height=270; }
+  const og=pvOff.getContext('2d');
+  if(!pvImg) pvImg=og.createImageData(480,270);
+  const d=pvImg.data;
+  for(let y=0;y<270;y++){
+    const s=(269-y)*480*4;
+    d.set(pvRead.subarray(s,s+480*4),y*480*4);
+  }
+  og.putImageData(pvImg,0,0);
+  cv.getContext('2d').drawImage(pvOff,0,0,320,180);
+  if(!pvLive){ pvLive=true; updatePvLabel(); }
 }
 /* ---------- blackout ---------- */
 function toggleBlackout(){
@@ -3739,11 +3856,11 @@ function buildPerform(){
 <script>
 'use strict';
 /* ================= SHADER PLUGIN ================= */
+/* ================= SHADER PLUGIN (editable scratchpad) ================= */
 function compilePlugin(fromInit){
   const code=$('plugcode').value;
-  const body=code.replace(/^\s*#version[^\n]*\n/, '');
   lastGlslErr='';
-  const pr=makeProgram(VERT, FRAG_HEAD+body);
+  const pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
   if(!pr){
     $('plugerr').textContent='COMPILE ERROR:\n'+lastGlslErr;
     $('plugok').textContent='';
@@ -3756,6 +3873,195 @@ function compilePlugin(fromInit){
   $('plugok').textContent='Compiled OK — select "Plugin" as a layer source to use it.';
   if(!fromInit) saveState();
   return true;
+}
+
+/* ================= SHADER IMPORT REGISTRY (v1.4) =================
+   Imported .txt shaders are FIRST-CLASS sources. Built-ins are indices
+   0-4 (Tunnel, Flow Field, Nebula, Plugin, Cloner 3D); imports are 5+.
+   S.imports = [{name, code, uniforms}] persists in state + presets;
+   PROG.imports holds the compiled programs (shared across layers,
+   uniforms set per draw). The "Plugin" slot (index 3) stays the editable
+   #plugcode scratchpad — imports are separate entries. */
+if(!PROG.imports) PROG.imports=[];
+function srcCount(){ return 5+S.imports.length; }
+function srcName(s){
+  s|=0;
+  if(s<5) return LAYER_SRC[s]||'?';
+  const im=S.imports[s-5];
+  return im?im.name:'?';
+}
+function srcOptions(){ return LAYER_SRC.concat(S.imports.map(im=>im.name)); }
+function srcNodeOptions(){ return ['Layer Input'].concat(srcOptions()); }
+function srcIdxMap(v){ const n=srcCount()-1; return Math.min(n,Math.max(0,Math.round(clamp(v,0,1)*n))); }
+function srcIdxFmt(v){ return srcName(srcIdxMap(v)); }
+
+/* GLSL ES 1.00 -> 3.00 translation + Shadertoy mainImage wrapper. */
+const ST_DECL =
+'#define iResolution vec3(u_res,1.0)\n'+
+'#define iTime u_time\n'+
+'uniform float iTimeDelta;\n'+
+'uniform int iFrame;\n'+
+'uniform vec4 iMouse;\n';
+function shaderTranslate(code){
+  let body=String(code||'').replace(/^\s*#version[^\n]*\n/,'');
+  body=body.replace(/\btexture2D\s*\(/g,'texture(');
+  body=body.replace(/\bgl_FragColor\b/g,'O');
+  if(/\bvoid\s+mainImage\s*\(/.test(body))
+    return ST_DECL+body+'\nvoid main(){ mainImage(O, gl_FragCoord.xy); }\n';
+  return body;
+}
+/* Reserved uniforms: never knobbed, never scanned as custom. */
+const SH_RESERVED=/^(iResolution|iTime|iTimeDelta|iFrame|iMouse|iDate|iSampleRate|iChannel[0-3]|u_[A-Za-z0-9_]*)$/;
+function scanShaderUniforms(code){
+  const out=[], seen={};
+  const re=/uniform\s+float\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/g;
+  let m;
+  while((m=re.exec(String(code||'')))){
+    const n=m[1];
+    if(SH_RESERVED.test(n)||seen[n]) continue;
+    seen[n]=1; out.push(n);
+  }
+  return out;
+}
+/* Register SH<srcIdx>.<uname> params (idempotent). Range 0-1, default 0.5. */
+function registerImportParams(sidx){
+  const im=S.imports[sidx-5]; if(!im) return;
+  for(const un of (im.uniforms||[])){
+    const id='SH'+sidx+'.'+un;
+    if(!PARAMS[id]) defParam(id, im.name+' \u00b7 '+un, 0.5);
+    if(S.params[id]===undefined) S.params[id]=0.5;
+  }
+}
+/* Compile + register an import. Returns source index (>=5), or -1. */
+function importShader(name, code){
+  code=String(code||'');
+  const clean=(String(name||'shader').replace(/\.(txt|glsl|frag|fs)$/i,'').trim().slice(0,40))||'shader';
+  for(let k=0;k<S.imports.length;k++) if(S.imports[k].code===code) return 5+k;
+  if(/iChannel\d/.test(code)){
+    lastGlslErr='iChannel0..3 texture inputs are not supported by this loader (no texture inputs yet).';
+    return -1;
+  }
+  lastGlslErr='';
+  const pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
+  if(!pr) return -1;
+  S.imports.push({name:clean, code:code, uniforms:scanShaderUniforms(code)});
+  PROG.imports.push(pr);
+  registerImportParams(5+S.imports.length-1);
+  return 5+S.imports.length-1;
+}
+function recompileImports(){
+  PROG.imports=[];
+  for(let k=0;k<S.imports.length;k++){
+    const im=S.imports[k];
+    if(!im.uniforms) im.uniforms=scanShaderUniforms(im.code);
+    PROG.imports.push(makeProgram(VERT, FRAG_HEAD+shaderTranslate(im.code)));
+    registerImportParams(5+k);
+  }
+}
+function removeImport(k){
+  if(k<0||k>=S.imports.length) return;
+  const nm=S.imports[k].name;
+  if(PROG.imports[k]) gl.deleteProgram(PROG.imports[k]);
+  S.imports.splice(k,1); PROG.imports.splice(k,1);
+  const dead=5+k, n=srcCount()-1;
+  for(let i=0;i<4;i++){
+    if(S.layers[i].src===dead) S.layers[i].src=0;
+    else if(S.layers[i].src>dead) S.layers[i].src--;
+    S.params['L'+i+'.src']=S.layers[i].src/Math.max(1,n);
+    for(let c=0;c<S.clips[i].length;c++){
+      const s=S.clips[i][c];
+      if(s===dead) S.clips[i][c]=null;
+      else if(typeof s==='number'&&s>dead) S.clips[i][c]=s-1;
+    }
+    syncFiredToSrc(i);
+  }
+  const keep={};
+  for(const id in S.params){
+    const m=/^SH(\d+)\.(.+)$/.exec(id);
+    if(!m){ keep[id]=S.params[id]; continue; }
+    const si=+m[1];
+    if(si===dead) continue;
+    keep[si>dead?('SH'+(si-1)+'.'+m[2]):id]=S.params[id];
+  }
+  S.params=keep;
+  for(const id in PARAMS) if(/^SH\d+\./.test(id)) delete PARAMS[id];
+  for(const id in CTRLS) if(/^SH\d+\./.test(id)) delete CTRLS[id];
+  for(const id in SYNC_FN) if(/^SH\d+\./.test(id)) delete SYNC_FN[id];
+  for(const m of S.midi){ /* remap MIDI-learned knob ids with the shift */
+    const mm=/^SH(\d+)\.(.+)$/.exec(m.id||'');
+    if(!mm) continue;
+    const si=+mm[1];
+    if(si===dead) m.id=null; else if(si>dead) m.id='SH'+(si-1)+'.'+mm[2];
+  }
+  S.midi=S.midi.filter(m=>m.id);
+  for(let k2=0;k2<S.imports.length;k2++) registerImportParams(5+k2);
+  buildDeck(); buildSrcBrowser(); buildProps(); saveState();
+  shtoast('Removed import "'+nm+'"');
+}
+/* Dismissible toast overlay (drop results, compile errors). */
+function shtoast(msg,isErr,ms){
+  let host=$('shtoast');
+  if(!host){ host=document.createElement('div'); host.id='shtoast'; document.body.appendChild(host); }
+  const d=document.createElement('div'); d.className='sht'+(isErr?' err':'');
+  const x=document.createElement('span'); x.className='x'; x.textContent='\u2715';
+  x.addEventListener('click',()=>d.remove());
+  d.appendChild(x);
+  d.appendChild(document.createTextNode(msg));
+  host.appendChild(d);
+  setTimeout(()=>{ if(d.parentNode) d.remove(); }, ms||8000);
+  while(host.children.length>4) host.firstChild.remove();
+}
+/* First empty clip slot on layer li in the current deck, or -1. */
+function firstEmptyClip(li){
+  const clips=S.clips[li];
+  for(let k=0;k<clips.length;k++) if(clips[k]===null||clips[k]===undefined) return k;
+  return -1;
+}
+/* Import each dropped/loaded file as a first-class source. */
+async function loadShaderFiles(files){
+  const list=Array.from(files||[]).filter(f=>/\.(txt|glsl|frag|fs)$/i.test(f.name||''));
+  if(!list.length){ shtoast('No .txt / .glsl / .frag shader files in that drop.'); return; }
+  const li=Math.min(3,Math.max(0,S.selLayer|0));
+  for(const f of list){
+    let text=null;
+    try{ text=await f.text(); }catch(e){}
+    if(text===null){ shtoast('Could not read '+f.name, true); continue; }
+    const idx=importShader(f.name, text);
+    if(idx<0){ shtoast(f.name+' FAILED:\n'+lastGlslErr, true, 12000); continue; }
+    const nm=S.imports[idx-5].name;
+    const k=firstEmptyClip(li);
+    if(k>=0){
+      S.clips[li][k]=idx;
+      fireClipNow(li,k);
+      shtoast('Imported "'+nm+'" \u2192 clip C'+(k+1)+' on '+LAYER_NAMES[li]+' (fired)');
+    }else{
+      shtoast('Imported "'+nm+'" \u2192 Sources panel only ('+LAYER_NAMES[li]+' row is full)', false);
+    }
+  }
+  buildDeck(); buildSrcBrowser(); buildProps(); saveState();
+}
+/* Drag & drop wiring + iMouse tracking. */
+function initShaderIO(){
+  const glc=$('gl');
+  if(glc && !glc._shwired){
+    glc._shwired=true;
+    glc.addEventListener('mousemove',e=>{
+      const r=glc.getBoundingClientRect();
+      shMouse[0]=(e.clientX-r.left)*glc.width/Math.max(1,r.width);
+      shMouse[1]=(1-(e.clientY-r.top)/Math.max(1,r.height))*glc.height;
+    });
+    glc.addEventListener('mousedown',()=>{ shMouse[2]=shMouse[0]; shMouse[3]=shMouse[1]; });
+  }
+  if(document.body._shdrop) return; document.body._shdrop=true;
+  const hl=document.createElement('div'); hl.id='drophl';
+  hl.innerHTML='<div class="dtxt">Drop .txt shader file(s) to import</div>';
+  document.body.appendChild(hl);
+  let depth=0;
+  const hasF=e=>e.dataTransfer && Array.from(e.dataTransfer.types||[]).indexOf('Files')>=0;
+  document.addEventListener('dragenter',e=>{ if(!hasF(e))return; e.preventDefault(); depth++; hl.classList.add('on'); });
+  document.addEventListener('dragover',e=>{ if(!hasF(e))return; e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
+  document.addEventListener('dragleave',e=>{ if(!hasF(e))return; e.preventDefault(); depth=Math.max(0,depth-1); if(!depth) hl.classList.remove('on'); });
+  document.addEventListener('drop',e=>{ if(!hasF(e))return; e.preventDefault(); depth=0; hl.classList.remove('on'); loadShaderFiles(e.dataTransfer.files); });
 }
 
 /* ================= PRESETS ================= */
@@ -3780,7 +4086,7 @@ function snapshot(){
     clips:S.clips, fired:S.fired,
     decks:S.decks, deckIdx:S.deckIdx, autopilot:S.autopilot,
     postBypass:S.postBypass, strobeOn:S.strobeOn, beatSync:S.beatSync,
-    bpm:S.bpm, snap:S.snap||'bar', macros:S.macros, res:S.res, pluginCode:S.pluginCode, midi:S.midi,
+    bpm:S.bpm, snap:S.snap||'bar', macros:S.macros, res:S.res, pluginCode:S.pluginCode, imports:S.imports, midi:S.midi,
     mods:S.mods, graphs:S.graphs
   }));
 }
@@ -3796,11 +4102,20 @@ function applySnapshot(snap){
   S.fired=Array.isArray(snap.fired)?snap.fired.slice(0,4):[null,null,null,null];
   while(S.fired.length<4) S.fired.push(null);
   S.sel={kind:'layer', i:0};
-  /* source authority: new presets carry L{i}.src params; old ones only have layers[].src */
+  /* v1.4: restore imports BEFORE source indices are resolved (srcCount matters) */
+  if(Array.isArray(snap.imports)){
+    S.imports=snap.imports.filter(im=>im&&typeof im.name==='string'&&typeof im.code==='string')
+      .map(im=>({name:String(im.name).slice(0,40), code:im.code, uniforms:scanShaderUniforms(im.code)}));
+    recompileImports();
+  }
+  /* source authority: absolute layers[].src wins when valid; else the L{i}.src param */
   for(let i=0;i<4;i++){
-    const pk='L'+i+'.src';
-    if(snap.params && snap.params[pk]!==undefined) S.layers[i].src=Math.min(4,Math.max(0,Math.round(clamp(S.params[pk],0,1)*4)));
-    else { S.layers[i].src=Math.min(4,Math.max(0,S.layers[i].src|0)); S.params[pk]=S.layers[i].src/4; }
+    const pk='L'+i+'.src', nS=srcCount()-1;
+    const absSrc=(snap.layers&&snap.layers[i]&&Number.isInteger(snap.layers[i].src))?snap.layers[i].src:null;
+    if(absSrc!==null&&absSrc>=0&&absSrc<=nS) S.layers[i].src=absSrc;
+    else if(snap.params && snap.params[pk]!==undefined) S.layers[i].src=Math.min(nS,Math.max(0,Math.round(clamp(S.params[pk],0,1)*nS)));
+    else S.layers[i].src=Math.min(nS,Math.max(0,S.layers[i].src|0));
+    S.params[pk]=S.layers[i].src/Math.max(1,nS);
     syncFiredToSrc(i);
   }
   S.postBypass=Object.assign({}, d.postBypass, snap.postBypass||{});
@@ -4203,13 +4518,13 @@ function neff(i,nid,k){
   return P.map(eff(id));
 }
 /* per-node texture renderers. ins: portIndex->texture. T: this node's target. */
-function renderNodeTex(i,nd,t,ins,T){
+function renderNodeTex(i,nd,t,ins,T,srcOv){
   const idp='L'+i+'.N'+nd.id+'.';
   const noIn=()=>{ clearTex(T); };
   switch(nd.type){
     case 'src':{
-      const sv=Math.round(eff(idp+'src')*5);
-      renderLayerInto(i,t,T, sv===0?undefined:sv-1);
+      const sv=Math.round(eff(idp+'src')*srcCount());
+      renderLayerInto(i,t,T, sv===0?srcOv:sv-1, srcOv!==undefined);
       break;
     }
     case 'feedback':{
@@ -4318,8 +4633,8 @@ function renderNodeTex(i,nd,t,ins,T){
     default: noIn();
   }
 }
-function renderOutputNode(i,nd,t,wiresByT,texOf){
-  const T=layerT[i];
+function renderOutputNode(i,nd,t,wiresByT,texOf,outT){
+  const T=outT||layerT[i];
   clearTex(T);
   const w=(wiresByT[nd.id]||[])[0];
   if(!w) return;
@@ -4356,7 +4671,7 @@ function graphKey(i){
   return g.nodes.length+':'+g.wires.length+':'+(g.rev||0);
 }
 function touchGraph(i){ const g=S.graphs[i]; g.rev=(g.rev||0)+1; invalidateGraph(i); }
-function evalGraph(i,t){
+function evalGraph(i,t,srcOv,outT){
   if(!ensureNodeProgs()) throw new Error('node shaders failed');
   const g=S.graphs[i];
   const key=graphKey(i);
@@ -4369,11 +4684,11 @@ function evalGraph(i,t){
   for(const nid of order){
     const nd=byId[nid]; if(!nd) continue;
     if(nd.type==='lfo'||nd.type==='audiof') continue;
-    if(nd.type==='output'){ renderOutputNode(i,nd,t,wiresByT,texOf); continue; }
+    if(nd.type==='output'){ renderOutputNode(i,nd,t,wiresByT,texOf,outT); continue; }
     const T=nodeTarget(i,nd.id);
     const ins={};
     for(const w of (wiresByT[nd.id]||[])) ins[w.t.p]=texOf[w.f.n];
-    renderNodeTex(i,nd,t,ins,T);
+    renderNodeTex(i,nd,t,ins,T,srcOv);
     texOf[nd.id]=T.tex;
   }
 }
@@ -4475,8 +4790,8 @@ const NE_W=168;
 function nodeTitle(i,nd){
   const def=NTYPES[nd.type];
   if(nd.type==='src'){
-    const sv=Math.round(eff(nodeParamId(i,nd.id,'src'))*5);
-    return sv===0?('Source \u00B7 '+LAYER_SRC[S.layers[i].src]):('Source \u00B7 '+LAYER_SRC[sv-1]);
+    const sv=Math.round(eff(nodeParamId(i,nd.id,'src'))*srcCount());
+    return sv===0?('Source \u00B7 '+srcName(S.layers[i].src)):('Source \u00B7 '+srcName(sv-1));
   }
   if(nd.type==='lfo') return 'LFO '+MOD_LETTERS[nd.mod];
   return def.label;
@@ -4793,7 +5108,7 @@ function renderNodeProps(nd){
   const grp=el('div','nepgrp');
   for(const pd of (def.params||[])){
     const id=nodeParamId(i,nd.id,pd.k);
-    if(pd.kind==='discrete') discreteRow(grp,id,pd.label,pd.opts);
+    if(pd.kind==='discrete') discreteRow(grp,id,pd.label,(nd.type==='src'&&pd.k==='src')?srcNodeOptions():pd.opts);
     else if(pd.kind==='toggle') toggleRow(grp,id,pd.label);
     else paramRow(grp,id,pd.label);
   }
@@ -4866,6 +5181,7 @@ function loop(){
   const now=performance.now()/1000;
   const t=now-tStart;
   lastT=now;
+  if(shPrevT<0) shPrevT=t; shDt=t-shPrevT; shPrevT=t; shFrame++;
   pollAudio();
   processPending(); /* quantized clip fires whose boundary arrived */
   autopilotTick(); /* autopilot: columns left to right */
@@ -4880,6 +5196,7 @@ function loop(){
   renderKaleido();
   renderGlitch(t);
   renderGrade(t);
+  updatePreview(t); /* live clip preview: never touches output state */
   frames++;
   if(now-fpsT>0.5){
     $('fps').textContent=Math.round(frames/Math.max(now-fpsT,0.001))+' fps';
@@ -4895,7 +5212,7 @@ function init(){
   if(!validClips(S.clips)) S.clips=defaultClips();
   if(!Array.isArray(S.fired)||S.fired.length!==4) S.fired=[null,null,null,null];
   if(!S.sel||typeof S.sel.i!=='number') S.sel={kind:'layer',i:0};
-  for(let i=0;i<4;i++){ S.params['L'+i+'.src']=S.layers[i].src/4; syncFiredToSrc(i); }
+  for(let i=0;i<4;i++){ S.params['L'+i+'.src']=S.layers[i].src/Math.max(1,srcCount()-1); syncFiredToSrc(i); }
   buildDeck(); buildProps(); buildCompTab();
   buildFxBrowser(); buildSrcBrowser();
   buildPerform();
@@ -4910,6 +5227,8 @@ function init(){
   if(!compileAll()) return;
   buildTargets();
   compilePlugin(true);
+  recompileImports();
+  initShaderIO();
   initMidi();
   requestAnimationFrame(loop);
 }

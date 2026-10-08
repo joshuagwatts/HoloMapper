@@ -646,3 +646,29 @@ bridge.py untouched. NOT pushed.
 Try first: click C3 to fire a column on the bar line, then hit AUTO and
 watch it walk left to right. Double-click a layer name to dive into its
 node graph.
+
+## v1.4 — Shader imports as first-class sources (2026-10-08, REDESIGNED per Joshua)
+- SUPERSEDES the per-layer plugin-slot draft from earlier today: Plugin is back to ONE global editable `#plugcode` scratchpad (`S.pluginCode` string, `PROG.plugin`); imports are separate first-class sources.
+- Dynamic source registry: built-ins 0–4 (Tunnel, Flow Field, Nebula, Plugin, Cloner 3D) + imports 5+. `S.imports=[{name,code,uniforms}]`, `PROG.imports[]` compiled programs (shared across layers, uniforms set per draw). Helpers: `srcCount()`, `srcName()`, `srcOptions()`, `srcIdxMap()/srcIdxFmt()` (proportional normalized mapping).
+- Drop .txt/.glsl/.frag/.fs anywhere (or "Load .txt" button) → each file becomes a named source (filename minus extension) in the SOURCES browser + a new clip in the current deck (selected layer, first empty slot; row-full → Sources only + toast why). The clip auto-fires so he sees it immediately. Dedupe: identical code reuses the existing source.
+- 5-source assumptions fixed everywhere: layer src param map/fmt, PARAM_HOOKS, fireClipNow/applyState/init divisors (applyState now prefers absolute `layers[].src` when valid, so old presets don't shift when imports are added), renderLayerInto dispatch, clip cells, clip menu, clip props select, layer props select, Sources browser (with × per import → `removeImport()` remaps clips/layers/params), node src node (opts + `*srcCount()`), nodeTitle, validClips (any non-negative int), preview label.
+- `shaderTranslate()`: strips `#version`, `texture2D(`→`texture(`, `gl_FragColor`→`O`; `mainImage` wrapped with iResolution/iTime defines + iTimeDelta/iFrame/iMouse uniforms (per-frame in renderLayerInto, iMouse tracked on #gl).
+- Failure: bad compile → dismissible toast with compiler log, nothing touched, never black-screens. iChannel shaders get a plain-English unsupported message.
+- Persists in presets AND localStorage (code included); imports recompile on init/preset-load.
+- Verified 32/32 headless (checks/import_check.mjs): drop→Sources panel + deck clip + auto-fire; fire after reload; reload→imports+programs+knob values survive; preset save/mutate/load restores imports + SH params; removeImport remaps; broken drop → error toast, live shaders untouched. Screenshots: checks/txtdrop_dragover.png, checks/import_loaded.png.
+- Known limits: no iChannel texture inputs; import names capped at 40 chars; no import rename UI yet.
+
+## v1.4 — Preview monitor goes live (2026-10-08)
+- Name-click (`.cname` → selectClip) now renders the clip's source FOR REAL in the preview monitor; box-click (`.cthumb` → fireClip) still fires to output (verified unchanged, quantized).
+- `updatePreview(t)` runs every frame from `loop()` after renderGrade: when `S.sel.kind==='clip'`, renders the selected clip's source through the layer's node graph (`evalGraph(i,t,srcOv,pvT)` — src override applies to "Layer Input" src nodes only, explicit src nodes keep their setting) or the fixed pipeline (`renderLayerInto(i,t,pvT,src,ignByp=true)`) into a dedicated 480×270 RGBA8 FBO, then readPixels → vertical flip → putImageData → drawImage onto the 2D #pv (320×180). Empty/no selection → static checkerboard + label (only redrawn on transition).
+- Never disturbs output: writes only pvT; NRUN `fbRead` snapshotted/restored around preview eval so feedback trails stay coherent; bloom/cloner scratch is frame-local. Layer bypass ignored in preview (Resolume behavior — preview shows the clip regardless).
+- Verified 14/14 headless (checks/preview_check.mjs): real-DOM name clicks, preview non-checkerboard + animates, follows across layers, box-click fires (regression), empty clip → stable checkerboard + "(empty)" label, graph path, fbRead stable, zero page errors. Screenshot: checks/preview_live.png (PREVIEW MONITOR — L1 · CLIP 1 (TUNNEL) rendering live).
+- Perf note: one extra graph eval at 480×270 + one 518KB readPixels per frame while a clip is selected; negligible next to the main render.
+
+## v1.4 — Auto-knobs from shader uniforms (2026-10-08)
+- On import (and preset/state load), `scanShaderUniforms()` finds `uniform float <name>;` declarations, excluding reserved: iResolution, iTime, iTimeDelta, iFrame, iMouse, iDate, iSampleRate, iChannel0–3, engine `u_*`.
+- Each becomes a real param `SH<srcIdx>.<uname>` (0–1, default 0.5), rendered as sliders in the Clip tab when that shader's clip is selected — via the standard `paramRow` builder, so MIDI-learn and dashboard macro-assign come free. Uniforms uploaded every frame before the shader draws. Persisted in presets + localStorage like any param; `removeImport()` drops/shifts SH params with the index.
+- Verified inside checks/import_check.mjs: 3 knobs appear, CTRLS-registered + learnable, dragging changes the render both directions, preset round-trip preserves values, uniform-less shader shows no knobs section.
+- Known limit (stated in UI + here): float uniforms only — vec uniforms are parked, not half-built.
+
+Try first: drag any Shadertoy .txt onto the app — it lands in SOURCES and fires on L1 instantly; click its clip NAME to watch it in the preview monitor, then drag its uniform knobs in the Clip tab.
