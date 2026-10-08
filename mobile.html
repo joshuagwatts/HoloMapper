@@ -226,70 +226,141 @@ body.perform #performbar{display:block}
 .krow{display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap}
 
 
-/* ================= v3 mobile deck (compact, desktop's sibling) ================= */
+/* ================= v4 — Resolume-faithful mobile shell =================
+   Primary reference: Joshua's Resolume Arena 7.1.0 screenshot
+   (research/resolume-arena-7.1.0-reference.webp).
+   Near-black panels, teal (#2dd4bf) active accents, dense 10-11px labels.
+   Paradigm kept: clip grid hero → transport bar → tabbed property panels. */
+:root{ --teal:#2dd4bf; --teal-dk:#0d2b26; }
 html,body{height:100%;}
 body{display:flex;flex-direction:column;height:100dvh;overflow:hidden;
-  text-size-adjust:100%;-webkit-text-size-adjust:100%;}
-/* ---- topbar: compact, scrolls horizontally ---- */
-#topbar{flex:none;display:flex;align-items:center;gap:8px;padding:6px 8px;flex-wrap:nowrap;
-  overflow-x:auto;overflow-y:hidden;scrollbar-width:none;white-space:nowrap;}
+  text-size-adjust:100%;-webkit-text-size-adjust:100%;background:#0b0d10;}
+/* ---- topbar ---- */
+#topbar{flex:none;display:flex;align-items:center;gap:8px;padding:6px 10px;
+  background:#0c0e12;border-bottom:1px solid #1c222c;white-space:nowrap;
+  overflow-x:auto;scrollbar-width:none;}
 #topbar::-webkit-scrollbar{display:none;}
 #topbar>*{flex:none;}
 #topbar .brand{font-size:14px;}
-#masterSl{width:64px;}
-#topbar input[type=text]{width:88px;}
+#topbar .vtag{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:1px 6px;}
+#masterSl{width:70px;}
 #topbar .tbtn{padding:6px 10px;font-size:12px;}
-#topbar .tval{font-weight:800;color:var(--acc2);font-size:14px;}
-#topbar .sm{font-size:10px;}
-#topbar select{max-width:110px;}
-/* ---- stage ---- */
-#stage{position:relative;flex:1 1 auto;min-height:0;background:#000;}
+#fps{font-size:10px;color:var(--dim);min-width:44px;text-align:right;font-variant-numeric:tabular-nums;}
+/* ---- stage = output monitor ---- */
+#stage{position:relative;flex:1 1 auto;min-height:120px;background:#000;}
 #gl{position:absolute;inset:0;width:100%;height:100%;display:block;background:#000;touch-action:none;}
-/* ---- panel with tabs ---- */
-#panel{flex:none;height:37dvh;min-height:224px;display:flex;flex-direction:column;
-  background:var(--panel);border-top:1px solid var(--line);}
-#ptabs{flex:none;display:flex;gap:6px;padding:6px 8px 0;}
-#ptabs button{flex:1;padding:8px 0;font-weight:700;font-size:13px;}
-#ptabs button.on{background:var(--acc);border-color:var(--acc);color:#fff;}
-#pbody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
-.ptab{display:flex;flex-direction:column;gap:8px;padding:8px 8px 16px;}
-.ptab[hidden]{display:none!important;}
-.ptab h2{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:2px 0;}
-.ptab section{margin-bottom:4px;}
-.trow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0;}
-/* ---- macro bar ---- */
-#macrobar{flex:none;display:flex;align-items:center;gap:8px;padding:6px 8px;
-  background:var(--panel);border-top:1px solid var(--line);}
-#dashmacros{flex:1;display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;min-width:0;}
-#dashmacros::-webkit-scrollbar{display:none;}
-.dmacro{flex:1 0 96px;min-width:96px;}
-.dmacro input[type=range]{height:26px;}
-#btnBlackout{flex:none;padding:10px 14px;font-weight:800;}
-#btnBlackout.armed{background:var(--warn);border-color:var(--warn);color:#111;}
-/* ---- props slide-over ---- */
-#propsWrap{position:fixed;top:0;right:0;bottom:0;width:min(94vw,430px);z-index:90;
-  background:var(--bg);border-left:1px solid var(--line);
-  transform:translateX(106%);transition:transform .22s ease;
-  display:flex;flex-direction:column;}
-body.propsOpen #propsWrap{transform:none;}
-#propsHead{flex:none;display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);}
-#propsHead .ptitle{flex:1;}
-#propsel{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
-/* ---- deck density ---- */
-#deck{padding:8px;display:flex;flex-direction:column;gap:8px;}
-.lstrip{margin-bottom:0;}
-@media (max-width:640px){
-  .clipgrid{display:flex;overflow-x:auto;gap:6px;scrollbar-width:none;}
-  .clipgrid::-webkit-scrollbar{display:none;}
-  .clip{flex:0 0 62px;min-height:58px;font-size:10px;}
+/* ---- panel ---- */
+#panel{flex:none;height:58dvh;min-height:340px;display:flex;flex-direction:column;
+  background:#0e1013;border-top:1px solid #20262f;}
+/* grid scroll zone: column headers + layer rows scroll together */
+#gridscroll{flex:none;overflow-x:auto;scrollbar-width:none;background:#0c0e12;
+  border-bottom:1px solid #1c222c;}
+#gridscroll::-webkit-scrollbar{display:none;}
+#colrow{display:flex;gap:4px;padding:7px 8px 4px;min-width:max-content;align-items:center;}
+.gspacer{flex:none;width:88px;}
+#colbtns{display:flex;gap:4px;}
+.colbtn{flex:0 0 52px;min-width:52px;padding:6px 0;font-size:10px;font-weight:700;text-align:center;
+  background:#14171d;border:1px solid #222a35;border-radius:5px;color:#8f99a9;touch-action:manipulation;}
+.colbtn.conn{background:var(--teal);border-color:var(--teal);color:#052723;
+  box-shadow:0 0 8px rgba(45,212,191,.45);}
+#deck{padding:3px 8px 7px;min-width:max-content;}
+.lstrip{display:flex;align-items:stretch;gap:4px;margin-bottom:5px;}
+.lstrip:last-child{margin-bottom:0;}
+.lgut{flex:none;width:88px;display:flex;flex-direction:column;gap:3px;background:#111318;
+  border:1px solid #1e242e;border-radius:6px;padding:4px 5px;}
+.lgut .lrow1{display:flex;align-items:center;gap:3px;}
+.ltab{font-size:10px;font-weight:800;padding:3px 6px;border-radius:4px;background:#1a1f28;
+  color:#cfd6e2;border:1px solid #28303d;flex:1;text-align:center;}
+.lstrip.sel .ltab{background:var(--teal);border-color:var(--teal);color:#052723;}
+.lstrip.sel{border-color:rgba(45,212,191,.45)!important;}
+.tbtn{padding:3px 5px;font-size:9px;font-weight:800;border-radius:4px;background:#1a1f28;
+  border:1px solid #28303d;color:#aeb7c6;min-width:20px;text-align:center;}
+.tbtn.onB{background:#f5a623;border-color:#f5a623;color:#201503;}
+.tbtn.onS{background:#f5d90a;border-color:#f5d90a;color:#201503;}
+.lgut .lop{width:100%;height:20px;accent-color:var(--teal);margin:0;}
+.clipgrid{display:flex;gap:4px;}
+.clip{flex:0 0 52px;min-width:52px;min-height:50px;font-size:9px;font-weight:600;border-radius:5px;
+  background:#13151b;border:1px solid #212835;color:#8f99a9;
+  display:flex;align-items:center;justify-content:center;text-align:center;padding:2px;
+  touch-action:manipulation;line-height:1.2;}
+.clip.empty{border-style:dashed;color:#454f60;background:#0e1013;}
+.clip.fired{border-color:var(--teal);color:#e6fffa;background:var(--teal-dk);
+  box-shadow:0 0 9px rgba(45,212,191,.5);}
+.clip.selc{outline:2px solid #fff;}
+/* transport bar */
+#transport{flex:none;display:flex;align-items:center;gap:6px;padding:7px 10px;
+  background:#0c0e12;border-bottom:1px solid #1c222c;overflow-x:auto;scrollbar-width:none;}
+#transport::-webkit-scrollbar{display:none;}
+#transport>*{flex:none;}
+#btnTap2{padding:8px 18px;font-weight:800;font-size:13px;background:#1a1f28;
+  border:1px solid #2c3542;border-radius:6px;color:#e2e8f2;}
+#bpmBig{font-size:17px;font-weight:800;color:var(--teal);min-width:36px;text-align:center;
+  font-variant-numeric:tabular-nums;}
+.tsm{font-size:10px;color:#69707f;}
+.tbtn2{padding:8px 11px;font-size:12px;font-weight:700;background:#1a1f28;
+  border:1px solid #2c3542;border-radius:6px;color:#c6cdd9;}
+.tbtn2.on{background:var(--teal);border-color:var(--teal);color:#052723;}
+#btnBlackout2{padding:8px 14px;font-weight:800;background:#1a1f28;
+  border:1px solid #2c3542;border-radius:6px;color:#e2e8f2;}
+#btnBlackout2.armed{background:var(--warn);border-color:var(--warn);color:#111;}
+@media (max-width:480px){
+  #transport{gap:5px;padding:7px 8px;}
+  #btnTap2{padding:8px 12px;font-size:12px;}
+  .tbtn2{padding:8px 8px;font-size:11px;}
+  #btnBlackout2{padding:8px 10px;font-size:12px;}
+  #bpmBig{font-size:15px;min-width:30px;}
+  .tsm{display:none;}
 }
-.lhead .lop{flex:1;min-width:56px;}
-/* ---- clip menu popup ---- */
-#clipmenu{position:fixed;z-index:95;display:none;background:var(--panel2);
-  border:1px solid var(--line);border-radius:8px;padding:6px;min-width:170px;
+.ck.sm{font-size:10px;color:#69707f;display:flex;align-items:center;gap:4px;white-space:nowrap;}
+/* panel tabs */
+#ptabs{flex:none;display:flex;background:#0c0e12;}
+#ptabs button{flex:1;padding:9px 0;font-weight:700;font-size:10px;text-transform:uppercase;
+  letter-spacing:.6px;background:none;border:none;border-radius:0;color:#6d7686;
+  border-bottom:2px solid transparent;}
+#ptabs button.on{color:var(--teal);border-bottom-color:var(--teal);}
+#pbody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+.ptab{padding:4px 10px 24px;}
+.ptab[hidden]{display:none!important;}
+/* collapsible sections (Resolume ▸) */
+details.rsec{border-bottom:1px solid #181d25;}
+details.rsec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:7px;
+  padding:10px 2px;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:1px;color:#aeb7c6;}
+details.rsec>summary::-webkit-details-marker{display:none;}
+details.rsec>summary::before{content:'▸';color:var(--teal);font-size:12px;flex:none;}
+details.rsec[open]>summary::before{content:'▾';}
+.rbody{padding:2px 2px 12px;}
+/* teal param rows */
+.prow{margin:8px 0;}
+.pline{display:flex;align-items:center;gap:8px;}
+.pline label{flex:0 0 88px;font-size:11px;color:#98a1b1;}
+.pline input[type=range]{flex:1;height:26px;accent-color:var(--teal);}
+.pval{flex:0 0 54px;text-align:right;font-size:11px;color:var(--teal);font-variant-numeric:tabular-nums;}
+select.dsel{background:#0b0e13;color:#e2e8f2;border:1px solid #2a3240;border-radius:6px;
+  padding:6px 8px;font-size:12px;max-width:100%;}
+/* dashboard knobs (Resolume's 8-knob dashboard) */
+#dashknobs{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 6px;padding:8px 2px;}
+.dknob{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;}
+.kdial{width:58px;height:58px;border-radius:50%;touch-action:none;position:relative;flex:none;
+  background:conic-gradient(var(--teal) calc(var(--v,0.5)*1turn), #1b2029 0);}
+.kdial::after{content:'';position:absolute;inset:8px;border-radius:50%;background:#0e1013;}
+.kptr{position:absolute;inset:0;z-index:1;pointer-events:none;}
+.kptr::before{content:'';position:absolute;left:50%;top:5px;width:3px;height:13px;margin-left:-1.5px;
+  background:var(--teal);border-radius:2px;transform-origin:1.5px 24px;
+  transform:rotate(calc(var(--v,0.5)*270deg - 135deg));}
+.klab{font-size:10px;color:#98a1b1;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.kval{font-size:10px;color:var(--teal);font-variant-numeric:tabular-nums;}
+/* fx stack rows */
+.fxhead{display:flex;align-items:center;gap:8px;padding:9px 2px 5px;font-size:12px;font-weight:700;color:#cfd6e2;}
+.fxhead .byp{margin-left:auto;font-size:10px;padding:4px 10px;font-weight:800;border-radius:4px;}
+.fxhead .byp.off{color:var(--amber);border-color:var(--amber);}
+/* clip menu popup */
+#clipmenu{position:fixed;z-index:95;display:none;background:#151a23;
+  border:1px solid #2a3240;border-radius:8px;padding:6px;min-width:170px;
   box-shadow:0 8px 24px rgba(0,0,0,.5);}
-#clipmenu button{display:block;width:100%;text-align:left;margin:2px 0;padding:8px 10px;background:none;border:none;}
-/* ---- mapping overlays live inside #stage ---- */
+#clipmenu button{display:block;width:100%;text-align:left;margin:2px 0;padding:9px 10px;
+  background:none;border:none;font-size:12px;}
+/* mapping overlays live inside #stage */
 #mapWrap{position:absolute;inset:0;z-index:30;display:none;pointer-events:none;}
 #mapWrap.on{display:block;}
 #mapcv{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
@@ -297,43 +368,43 @@ body.propsOpen #propsWrap{transform:none;}
 #handles.on{display:block;}
 body.output.pins #handles{display:block!important;}
 .chandle{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;
-  background:rgba(139,92,246,.25);border:3px solid var(--acc);pointer-events:auto;
+  background:rgba(45,212,191,.18);border:3px solid var(--teal);pointer-events:auto;
   display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;
   color:#fff;touch-action:none;text-shadow:0 1px 3px #000;}
-.chandle.sel{background:rgba(34,211,238,.35);border-color:var(--acc2);}
+.chandle.sel{background:rgba(45,212,191,.4);}
 #mhandle{position:absolute;width:48px;height:48px;margin:-24px 0 0 -24px;border-radius:8px;
-  background:rgba(34,211,238,.3);border:3px dashed var(--acc2);pointer-events:auto;touch-action:none;display:none;}
+  background:rgba(45,212,191,.25);border:3px dashed var(--teal);pointer-events:auto;touch-action:none;display:none;}
 .surfrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1b2230;}
-.surfrow .sname{flex:1;font-weight:700;font-size:15px;}
+.surfrow .sname{flex:1;font-weight:700;font-size:13px;}
 .seg{display:flex;gap:8px;margin:8px 0;}
-.seg button{flex:1;padding:10px 0;}
-.meter{width:26px;background:#232b38;border-radius:6px;position:relative;overflow:hidden;height:40px;flex:none;}
-.meter>i{position:absolute;bottom:0;left:0;right:0;background:var(--acc2);height:0%;}
-/* ---- output mode ---- */
+.seg button{flex:1;padding:10px 0;font-size:12px;}
+.meter{width:26px;background:#1b2029;border-radius:6px;position:relative;overflow:hidden;height:40px;flex:none;}
+.meter>i{position:absolute;bottom:0;left:0;right:0;background:var(--teal);height:0%;}
+/* output mode */
 #btnExitOut{position:fixed;top:calc(10px + env(safe-area-inset-top));right:10px;z-index:60;display:none;
   width:52px;height:52px;border-radius:50%;background:rgba(20,20,30,.55);color:#fff;font-size:20px;
   border:1px solid rgba(255,255,255,.25);}
 #btnOutPins{position:fixed;top:calc(10px + env(safe-area-inset-top));right:72px;z-index:60;display:none;
   width:52px;height:52px;border-radius:50%;background:rgba(20,20,30,.55);color:#fff;font-size:20px;
   border:1px solid rgba(255,255,255,.25);touch-action:manipulation;}
-body.output #topbar,body.output #panel,body.output #macrobar{display:none!important;}
+body.output #topbar,body.output #panel{display:none!important;}
 body.output #handles{display:none!important;}
 body.output.pins #handles{display:block!important;}
 body.output #btnExitOut{display:block;}
 body.output #btnOutPins{display:block;}
-body.output.pins #btnOutPins{background:rgba(139,92,246,.75);border-color:var(--acc);}
+body.output.pins #btnOutPins{background:rgba(45,212,191,.6);border-color:var(--teal);}
 body.output #stage{position:fixed;inset:0;z-index:40;}
-/* ---- perform mode ---- */
+/* perform mode */
 #btnExitPerform{position:fixed;top:calc(10px + env(safe-area-inset-top));left:10px;z-index:60;display:none;
   width:52px;height:52px;border-radius:50%;background:rgba(20,20,30,.55);color:#fff;font-size:20px;
   border:1px solid rgba(255,255,255,.25);}
 body.perform #topbar,body.perform #panel{display:none;}
 body.perform #btnExitPerform{display:block;}
-/* ---- panel hide (map corner reach) ---- */
+/* panel hide (map corner reach) */
 #panelFab{position:fixed;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:60;display:none;
-  padding:12px 16px;border-radius:24px;background:var(--panel2);border:1px solid var(--acc);
-  font-weight:700;}
-/* ---- errbanner ---- */
+  padding:12px 16px;border-radius:24px;background:#151a23;border:1px solid var(--teal);
+  font-weight:700;color:var(--teal);}
+/* errbanner */
 #errbanner{position:fixed;top:calc(60px + env(safe-area-inset-top));left:10px;right:10px;z-index:70;display:none;
   background:#3a1d1d;border:1px solid var(--bad);color:#ffd7d7;border-radius:12px;padding:12px;font-size:13px;}
 #errbanner.show{display:block;}
@@ -344,24 +415,17 @@ body.perform #btnExitPerform{display:block;}
 .midrow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px;}
 .midrow .ml{flex:1;}
 .midrow .cc{color:var(--dim);}
+.trow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0;}
+.hint{color:var(--dim);font-size:11px;margin:6px 0}
+.krow{display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap}
 
 </style>
 </head>
 <body>
 <div id="errbanner"></div>
 <header id="topbar">
-  <span class="brand">&#9670; HoloMapper</span><span class="vtag">v3</span>
+  <span class="brand">&#9670; HoloMapper</span><span class="vtag">v4</span>
   <span class="tgrp"><input type="range" id="masterSl" min="0" max="1" step="0.001" value="1" data-ctrl="P.master" title="Master output"></span>
-  <button id="btnTap" class="tbtn" title="Tap tempo">Tap</button>
-  <span id="bpm" class="tval">120</span><span class="dim sm">BPM</span>
-  <label class="ck sm" title="Snap layer speeds to beat divisions"><input type="checkbox" id="ckBeatSync">Sync</label>
-  <button id="btnLearn" class="tbtn" title="MIDI learn">MIDI</button>
-  <span id="midistat" class="dim sm">MIDI</span>
-  <input type="text" id="presetName" placeholder="preset name">
-  <button id="btnSavePreset" class="tbtn">Save</button>
-  <select id="presetSel" title="Load a saved preset"><option value="">-- presets --</option></select>
-  <button id="btnLoadPreset" class="tbtn">Load</button>
-  <button id="btnDelPreset" class="tbtn">Del</button>
   <select id="resSel" title="Internal render resolution">
     <option value="480x270">480p</option>
     <option value="960x540" selected>540p</option>
@@ -369,7 +433,7 @@ body.perform #btnExitPerform{display:block;}
   </select>
   <button id="btnPerform" class="tbtn" title="Perform mode">PERFORM</button>
   <button id="btnOutput" class="tbtn" title="Projector output mode">&#x26F6;</button>
-  <span id="fps" class="dim sm"></span>
+  <span id="fps"></span>
 </header>
 <div id="stage">
   <canvas id="gl"></canvas>
@@ -377,41 +441,54 @@ body.perform #btnExitPerform{display:block;}
   <div id="handles"></div>
 </div>
 <div id="panel">
+  <div id="gridscroll">
+    <div id="colrow"><span class="gspacer"></span><div id="colbtns"></div></div>
+    <div id="deck"></div>
+  </div>
+  <div id="transport">
+    <button id="btnTap2">TAP</button>
+    <span id="bpmBig">120</span><span class="tsm">BPM</span>
+    <button id="btnHalf" class="tbtn2" title="Half tempo">/2</button>
+    <button id="btnDouble" class="tbtn2" title="Double tempo">*2</button>
+    <button id="btnResync" class="tbtn2" title="Resync beat phase">RESYNC</button>
+    <button id="btnPauseT" class="tbtn2" title="Pause transport">PAUSE</button>
+    <button id="btnBlackout2">BLACKOUT</button>
+    <label class="ck sm" title="Snap layer speeds to beat divisions"><input type="checkbox" id="ckBeatSync">Sync</label>
+  </div>
   <div id="ptabs">
-    <button data-tab="Deck" class="on">Deck</button>
+    <button data-tab="Comp" class="on">Composition</button>
+    <button data-tab="Layer">Layer</button>
+    <button data-tab="Clip">Clip</button>
     <button data-tab="Fx">FX</button>
     <button data-tab="Map">Map</button>
   </div>
   <div id="pbody">
-    <div id="tabDeck" class="ptab"><div id="deck"></div></div>
+    <div id="tabComp" class="ptab"><div id="compUI"></div></div>
+    <div id="tabLayer" class="ptab" hidden><div id="layerProps"></div></div>
+    <div id="tabClip" class="ptab" hidden><div id="clipProps"></div></div>
     <div id="tabFx" class="ptab" hidden>
-      <section><h2>Post FX chain</h2><div id="postfx"></div></section>
-      <section><h2>Master</h2><div id="master"></div></section>
-      <section><h2>Shader plugin</h2>
+      <details class="rsec" open><summary>Post FX chain</summary><div class="rbody"><div id="postfx"></div></div></details>
+      <details class="rsec"><summary>Master</summary><div class="rbody"><div id="master"></div></div></details>
+      <details class="rsec"><summary>Shader plugin</summary><div class="rbody">
         <textarea id="plugcode" rows="10" spellcheck="false"></textarea>
         <div class="trow"><button id="btnCompile">Compile</button><button id="btnPlugDefault">Default</button><span id="plugok"></span></div>
         <div id="plugerr"></div>
-      </section>
-      <section><h2>Audio</h2>
+      </div></details>
+      <details class="rsec"><summary>Audio</summary><div class="rbody">
         <div class="trow">
           <button id="btnAudio">Enable audio</button>
           <span class="meter"><i id="mBass"></i></span><span class="meter"><i id="mMid"></i></span><span class="meter"><i id="mHigh"></i></span>
           <span id="audiostat" class="dim">audio off</span>
         </div>
-      </section>
-      <section><h2>MIDI <span id="midiCount"></span></h2>
+      </div></details>
+      <details class="rsec"><summary>MIDI <span id="midiCount"></span></summary><div class="rbody">
         <div class="trow"><button id="btnLearn2">MIDI Learn</button><button id="btnMidiClear">Clear all</button></div>
         <div id="midistat2" class="hint"></div>
         <div id="midilist"></div>
-      </section>
+      </div></details>
     </div>
     <div id="tabMap" class="ptab" hidden><div id="mapUI"></div></div>
   </div>
-</div>
-<div id="macrobar"><div id="dashmacros"></div><button id="btnBlackout">BLACKOUT</button></div>
-<div id="propsWrap">
-  <div id="propsHead"><span class="ptitle">PROPS</span><button id="btnPropsClose">&#x2715; Close</button></div>
-  <div id="propsel"></div>
 </div>
 <div id="clipmenu"></div>
 <div id="pmacros" hidden></div>
@@ -943,6 +1020,7 @@ function setMacro(i, v01, fromEl){
   S.macros[i].val=v01;
   document.querySelectorAll('[data-ctrl="macro'+i+'"]').forEach(elm=>{ if(elm!==fromEl) elm.value=v01; });
   document.querySelectorAll('[data-val="macro'+i+'"]').forEach(sp=>{ sp.textContent=Math.round(v01*100)+'%'; });
+  document.querySelectorAll('[data-knob="macro'+i+'"]').forEach(elm=>{ elm.style.setProperty('--v', v01); });
   saveState();
 }
 /* MIDI learn arming state */
@@ -2567,7 +2645,7 @@ function tapTempo(){
   if(taps.length>1){
     const iv=(taps[taps.length-1]-taps[0])/(taps.length-1);
     S.bpm=clamp(Math.round(60/iv),40,240);
-    $('bpm').textContent=S.bpm;
+    $('bpmBig').textContent=S.bpm;
     saveState();
   }
 }
@@ -2578,14 +2656,15 @@ function tapTempo(){
 /* ================= MIDI ================= */
 let midiAccess=null;
 function midiStatus(txt, armed){
-  const s=$('midistat');
+  const s=$('midistat2')||$('midistat');
+  if(!s) return;
   s.textContent='MIDI: '+txt;
   s.classList.toggle('armed', !!armed);
 }
 function setLearn(armed){
   learnArmed=armed;
   if(!armed) pendingCtrl=null;
-  $('btnLearn').classList.toggle('on', armed);
+  const _bl=$('btnLearn'); if(_bl) _bl.classList.toggle('on', armed);
   $('btnLearn2').classList.toggle('on', armed);
   if(armed) midiStatus('learn armed — click a slider, then wiggle a knob', true);
   else if(midiAccess) midiStatus(midiAccess.inputs.size+' device(s) ready');
@@ -2716,7 +2795,7 @@ for(let i=0;i<4;i++){
     const changed=ni!==S.layers[ii].src;
     S.layers[ii].src=ni;
     syncFiredToSrc(ii); syncDeckSel();
-    if(changed && S.sel && S.sel.kind==='layer' && S.sel.i===ii && $('propsel')) buildProps();
+    if(changed){ buildProps('layerProps','layer'); buildProps('clipProps','clip'); }
   })(i)];
 }
 function syncFiredToSrc(i){
@@ -2738,14 +2817,17 @@ function syncDeckSel(){
     c.classList.toggle('fired', S.fired[i]===k);
     c.classList.toggle('selc', !!S.sel && S.sel.kind==='clip' && S.sel.i===i && S.sel.c===k);
   });
+  syncColumns();
 }
 function selectLayer(i){
   S.selLayer=i; S.sel={kind:'layer', i};
-  syncDeckSel(); buildProps(); saveState();
+  syncDeckSel(); buildProps('layerProps','layer'); buildProps('clipProps','clip');
+  showTab('Layer'); saveState();
 }
 function selectClip(i,k){
   S.selLayer=i; S.sel={kind:'clip', i:i, c:k};
-  syncDeckSel(); buildProps(); saveState();
+  syncDeckSel(); buildProps('layerProps','layer'); buildProps('clipProps','clip');
+  showTab('Clip'); saveState();
 }
 function toggleBypass(i){
   const L=S.layers[i]; L.bypass=!L.bypass; saveState(); syncDeckSel();
@@ -2754,6 +2836,7 @@ function fireClip(i,k){
   const src=S.clips[i][k];
   if(src===null||src===undefined) return;
   S.fired[i]=k;
+  S.colFired=null; syncColumns();
   setParam('L'+i+'.src', src/4);
 }
 function buildDeck(){
@@ -2762,17 +2845,20 @@ function buildDeck(){
     const L=S.layers[i];
     const st=el('div','lstrip'+((S.sel&&S.sel.kind==='layer'&&S.sel.i===i)?' sel':''));
     st.style.setProperty('--lhue', Math.round(LAYER_HUES[i]*360));
-    const head=el('div','lhead');
-    head.appendChild(el('span','ltab'));
-    const nm=el('button','lname','L'+(i+1)); nm.title='Select layer (key '+(i+1)+')';
-    nm.addEventListener('click',()=>selectLayer(i)); head.appendChild(nm);
-    const bS=el('button','tbtn bSolo'+(L.solo?' onS':''),'S'); bS.title='Solo layer';
-    bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); syncDeckSel(); });
+    const gut=el('div','lgut');
+    const r1=el('div','lrow1');
+    const tab=el('button','ltab','L'+(i+1)); tab.title='Select layer (key '+(i+1)+')';
+    tab.addEventListener('click',()=>selectLayer(i)); r1.appendChild(tab);
+    const bX=el('button','tbtn bClr','\u2715'); bX.title='Clear layer (unload clip)';
+    bX.addEventListener('click',()=>{ L.bypass=true; S.fired[i]=null; S.colFired=null; saveState(); syncDeckSel(); syncColumns(); });
+    r1.appendChild(bX);
     const bB=el('button','tbtn bByp'+(L.bypass?' onB':''),'B'); bB.title='Bypass layer (key B)';
     bB.addEventListener('click',()=>toggleBypass(i));
-    const bX=el('button','tbtn bClr','\u2715'); bX.title='Clear layer (unload clip)';
-    bX.addEventListener('click',()=>{ L.bypass=true; S.fired[i]=null; saveState(); syncDeckSel(); });
-    head.appendChild(bS); head.appendChild(bB); head.appendChild(bX);
+    r1.appendChild(bB);
+    const bS=el('button','tbtn bSolo'+(L.solo?' onS':''),'S'); bS.title='Solo layer';
+    bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); syncDeckSel(); });
+    r1.appendChild(bS);
+    gut.appendChild(r1);
     const op=document.createElement('input');
     op.type='range'; op.min=0; op.max=1; op.step=0.001; op.className='lop';
     op.value=(S.params['L'+i+'.op']!==undefined)?S.params['L'+i+'.op']:1;
@@ -2780,12 +2866,8 @@ function buildDeck(){
     op.title=LAYER_NAMES[i]+' Opacity \u2014 click while MIDI Learn is armed to map';
     op.addEventListener('input',()=>setParam('L'+i+'.op',parseFloat(op.value),op));
     CTRLS['L'+i+'.op']={set:v=>setParam('L'+i+'.op',v), label:LAYER_NAMES[i]+' Opacity'};
-    head.appendChild(op);
-    const bs=document.createElement('select'); bs.className='lbsel'; bs.title='Blend mode';
-    BLENDS.forEach((b,bi)=>bs.appendChild(new Option(b,bi))); bs.value=L.blend;
-    bs.addEventListener('change',()=>{ L.blend=parseInt(bs.value,10); saveState(); });
-    head.appendChild(bs);
-    st.appendChild(head);
+    gut.appendChild(op);
+    st.appendChild(gut);
     const grid=el('div','clipgrid');
     for(let k=0;k<8;k++){
       const src=S.clips[i][k];
@@ -2809,13 +2891,13 @@ function showClipMenu(x,y,i,k){
   const cur=S.clips[i][k];
   LAYER_SRC.forEach((s,si)=>{
     const b=el('button',null,(si===cur?'\u2713 ':'')+s);
-    b.addEventListener('click',()=>{ S.clips[i][k]=si; hideClipMenu(); saveState(); buildDeck(); buildProps(); });
+    b.addEventListener('click',()=>{ S.clips[i][k]=si; hideClipMenu(); saveState(); buildDeck(); buildProps('layerProps','layer'); buildProps('clipProps','clip'); });
     m.appendChild(b);
   });
   const bc=el('button',null,'Clear slot'); bc.style.color='#ff7b7b';
   bc.addEventListener('click',()=>{
     S.clips[i][k]=null; if(S.fired[i]===k) S.fired[i]=null;
-    hideClipMenu(); saveState(); buildDeck(); buildProps();
+    hideClipMenu(); saveState(); buildDeck(); buildProps('layerProps','layer'); buildProps('clipProps','clip');
   });
   m.appendChild(bc);
   m.style.display='block';
@@ -2824,9 +2906,14 @@ function showClipMenu(x,y,i,k){
 }
 function hideClipMenu(){ const m=$('clipmenu'); if(m) m.style.display='none'; }
 /* ---------- properties panel (selection-driven) ---------- */
-function buildProps(){
-  const host=$('propsel'); if(!host) return; host.innerHTML='';
-  const sel=S.sel||{kind:'layer',i:0};
+function buildProps(hostId, view){
+  const host=$(hostId||'propsel'); if(!host) return; host.innerHTML='';
+  const base=S.sel||{kind:'layer',i:0};
+  const li=Math.min(3,Math.max(0,base.i||0));
+  let sel;
+  if(view==='layer') sel={kind:'layer', i:li};
+  else if(view==='clip') sel={kind:'clip', i:li, c:(base.kind==='clip'?base.c:(S.fired[li]??0))};
+  else sel=base;
   if(sel.kind==='clip'){
     const i=sel.i, k=sel.c, src=S.clips[i][k];
     const h=el('div','phead'); h.appendChild(el('span','ptitle','CLIP  '+LAYER_NAMES[i]+' \u00B7 '+(k+1)));
@@ -2839,14 +2926,14 @@ function buildProps(){
     se.value=String(src===null?-1:src);
     se.addEventListener('change',()=>{
       const v=parseInt(se.value,10);
-      S.clips[i][k]=v<0?null:v; saveState(); buildDeck(); buildProps();
+      S.clips[i][k]=v<0?null:v; saveState(); buildDeck(); buildProps('layerProps','layer'); buildProps('clipProps','clip');
     });
     wrap.appendChild(se);
     const row=el('div','krow');
     const bf=el('button',null,'Fire clip'); bf.title='Load this source on '+LAYER_NAMES[i];
-    bf.addEventListener('click',()=>fireClip(i,k));
+    bf.addEventListener('click',()=>{ fireClip(i,k); buildProps('clipProps','clip'); });
     const bc=el('button',null,'Clear slot');
-    bc.addEventListener('click',()=>{ S.clips[i][k]=null; if(S.fired[i]===k)S.fired[i]=null; saveState(); buildDeck(); buildProps(); });
+    bc.addEventListener('click',()=>{ S.clips[i][k]=null; if(S.fired[i]===k)S.fired[i]=null; saveState(); buildDeck(); buildProps('layerProps','layer'); buildProps('clipProps','clip'); });
     row.appendChild(bf); row.appendChild(bc); wrap.appendChild(row);
     wrap.appendChild(mkHint('Click a deck clip to fire it. Right-click a clip to assign a source.'));
     host.appendChild(wrap);
@@ -3162,31 +3249,6 @@ function buildMaster(){
   host.appendChild(mh);
   paramRow(host,'P.master','Master');
 }
-function buildDashboard(){
-  const host=$('dashmacros'); host.innerHTML='';
-  for(let m=0;m<8;m++){
-    const d=el('div','dmacro');
-    const lab=document.createElement('input');
-    lab.className='dmacrolab'; lab.value=S.macros[m].label; lab.maxLength=8;
-    lab.title='Rename macro (click, type, Enter)';
-    lab.addEventListener('change',()=>{
-      S.macros[m].label=lab.value.trim()||('M'+(m+1));
-      syncMacroLabels(); saveState(); buildDashboard();
-    });
-    d.appendChild(lab);
-    const sl=document.createElement('input');
-    sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001; sl.value=S.macros[m].val;
-    sl.setAttribute('data-ctrl','macro'+m);
-    sl.title='Macro '+(m+1)+' \u2014 click while MIDI Learn is armed to map';
-    sl.addEventListener('input',()=>setMacro(m,parseFloat(sl.value),sl));
-    CTRLS['macro'+m]={set:v=>setMacro(m,v), label:'Macro '+(m+1)};
-    d.appendChild(sl);
-    const vv=el('span','pval',Math.round(S.macros[m].val*100)+'%');
-    vv.setAttribute('data-val','macro'+m);
-    d.appendChild(vv);
-    host.appendChild(d);
-  }
-}
 function syncMacroLabels(){
   const spots=document.querySelectorAll('#pmacros .pmacro .ml');
   spots.forEach((elm,idx)=>{ if(idx<8 && S.macros[idx]) elm.textContent=S.macros[idx].label; });
@@ -3286,9 +3348,10 @@ function applySnapshot(snap){
     S.pluginCode=snap.pluginCode; $('plugcode').value=S.pluginCode; compilePlugin(true);
   }
   if(snap.res && snap.res!==S.res){ S.res=snap.res; $('resSel').value=S.res; buildTargets(); }
-  buildDeck(); buildProps(); buildPostFx(); buildMaster(); buildDashboard(); buildPerform();
+  buildDeck(); buildColumns(); buildProps('layerProps','layer'); buildProps('clipProps','clip');
+  buildPostFx(); buildMaster(); buildDashKnobs(); buildPerform();
   renderMidiList(); syncTopToggles();
-  $('bpm').textContent=S.bpm;
+  $('bpmBig').textContent=S.bpm;
   saveState();
 }
 function syncTopToggles(){
@@ -3559,9 +3622,10 @@ function positionHandles(){
   const host = document.getElementById('handles');
   const sf = S.map.surfaces[MUI.selSurf];
   const showH = (MUI.tab === 'Map' && MUI.mapMode === 'corners') || (MUI.out && MUI.outPins);
-  if(!showH || !sf){ host.style.display = 'none'; }
+  host.classList.toggle('on', !!(showH && sf));
+  host.style.display = '';
+  if(!showH || !sf){ return; }
   else{
-    host.style.display = 'block';
     let hs = host.children;
     while(hs.length < 4){
       const d = document.createElement('div');
@@ -3592,34 +3656,35 @@ function positionOverlays(){ drawMapOverlay(); }
 
 
 </script>
-<script>'use strict';
-/* ================= HOLOMAPPER MOBILE v3 — compact deck shell =================
+<script>
+'use strict';
+/* ================= HOLOMAPPER MOBILE v4 — Resolume-faithful shell =================
+   Primary reference: Joshua's Resolume Arena 7.1.0 screenshot
+   (research/resolume-arena-7.1.0-reference.webp).
    Engine blocks above are verbatim from holomapper.html (v1.2).
-   Shell: topbar, deck tabs, props slide-over, macro bar, map tab, output mode. */
+   Shell: topbar, column headers + clip grid (hero), transport bar,
+   tabbed panels (Composition/Layer/Clip/FX/Map), output mode. */
 
-/* ---- engine snapshot wrappers: include mapping state ---- */
-const snapshotEngine = snapshot;
-const applySnapshotEngine = applySnapshot;
-function snapshot(){
-  const s = snapshotEngine();
+/* ---- engine snapshot wrappers: include mapping + fired-column state ----
+   NOTE: these MUST have distinct names. A later `function snapshot()`
+   declaration would shadow the engine's binding at script-instantiation time,
+   so `const snapshotEngine = snapshot` self-captures -> infinite recursion
+   (this exact pattern was latently broken since the v3 shell). */
+function snapshotFull(){
+  const s = snapshot(); /* engine's */
   s.map = JSON.parse(JSON.stringify(S.map || defaultMap()));
+  s.colFired = (typeof S.colFired === 'number') ? S.colFired : null;
   return s;
 }
-function applySnapshot(snap){
-  applySnapshotEngine(snap);
+function applySnapshotFull(snap){
+  applySnapshot(snap); /* engine's */
   S.map = (snap.map && Array.isArray(snap.map.surfaces) && snap.map.surfaces.length)
     ? snap.map : defaultMap();
   if(MUI.selSurf >= S.map.surfaces.length) MUI.selSurf = 0;
+  if(typeof snap.colFired === 'number') S.colFired = snap.colFired;
   buildMapTarget(); refitCanvas(); buildMapUI(); positionOverlays();
   saveState();
 }
-
-/* ---- props slide-over: deck layer taps open it ---- */
-function openProps(){ document.body.classList.add('propsOpen'); }
-function closeProps(){ document.body.classList.remove('propsOpen'); }
-const _selectLayer = selectLayer;
-selectLayer = function(i){ _selectLayer(i); openProps(); };
-
 /* ---- panel hide (map corner reach) ---- */
 function setSheetHidden(hide){
   $('panel').style.display = hide ? 'none' : '';
@@ -3631,12 +3696,130 @@ function setSheetHidden(hide){
 function showTab(name){
   MUI.tab = name;
   document.querySelectorAll('#ptabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
-  $('tabDeck').hidden = name!=='Deck';
+  $('tabComp').hidden = name!=='Comp';
+  $('tabLayer').hidden = name!=='Layer';
+  $('tabClip').hidden = name!=='Clip';
   $('tabFx').hidden = name!=='Fx';
   $('tabMap').hidden = name!=='Map';
   $('mapWrap').classList.toggle('on', name==='Map');
   $('handles').classList.toggle('on', name==='Map');
+  if(name==='Layer') buildProps('layerProps','layer');
+  if(name==='Clip') buildProps('clipProps','clip');
   if(name==='Map') buildMapUI();
+  positionOverlays();
+}
+
+/* ---- columns: fire one clip per layer (Resolume column trigger) ---- */
+function buildColumns(){
+  const host=$('colbtns'); host.innerHTML='';
+  for(let k=0;k<8;k++){
+    const b=el('button','colbtn'+(S.colFired===k?' conn':''),'C'+(k+1));
+    b.title='Fire column '+(k+1)+' — one clip per layer';
+    b.setAttribute('data-ctrl','col'+k);
+    CTRLS['col'+k]={set:((kk)=>v=>{ if(v>=0.5) fireColumn(kk); })(k), label:'Fire column '+(k+1)};
+    b.addEventListener('click',()=>fireColumn(k));
+    host.appendChild(b);
+  }
+}
+function fireColumn(k){
+  for(let i=0;i<4;i++){
+    const src=S.clips[i][k];
+    if(src!==null&&src!==undefined) fireClip(i,k);
+  }
+  S.colFired=k; syncColumns(); saveState();
+}
+function syncColumns(){
+  document.querySelectorAll('#colbtns .colbtn').forEach((b,k)=>b.classList.toggle('conn', S.colFired===k));
+}
+
+/* ---- transport ---- */
+function resyncBeat(){ tStart=performance.now()/1000; }
+function togglePauseT(){
+  S.paused=!S.paused;
+  $('btnPauseT').classList.toggle('on', !!S.paused);
+  saveState();
+}
+
+/* ---- dashboard knobs (Resolume's 8-knob dashboard) ---- */
+function buildDashKnobs(){
+  const host=$('dashknobs'); if(!host) return; host.innerHTML='';
+  for(let m=0;m<8;m++){
+    const d=el('div','dknob');
+    const dial=el('div','kdial');
+    dial.style.setProperty('--v', S.macros[m].val);
+    dial.setAttribute('data-knob','macro'+m);
+    dial.setAttribute('data-ctrl','macro'+m);
+    dial.title='Macro '+(m+1)+' '+S.macros[m].label+' — drag vertically; double-tap resets';
+    const ptr=el('div','kptr'); dial.appendChild(ptr);
+    let sy=0, sv=0, dragging=false;
+    const setV=v=>{ setMacro(m,v,dial); dial.style.setProperty('--v', S.macros[m].val); };
+    dial.addEventListener('pointerdown',e=>{
+      dragging=true; sy=e.clientY; sv=S.macros[m].val;
+      try{ dial.setPointerCapture(e.pointerId); }catch(_){}
+      e.preventDefault();
+    });
+    dial.addEventListener('pointermove',e=>{
+      if(!dragging) return;
+      setV(sv+(sy-e.clientY)/160);
+    });
+    const up=()=>{ dragging=false; };
+    dial.addEventListener('pointerup',up);
+    dial.addEventListener('pointercancel',up);
+    dial.addEventListener('dblclick',()=>setV(0.5));
+    CTRLS['macro'+m]={set:v=>{ setMacro(m,v); dial.style.setProperty('--v', S.macros[m].val); },
+      label:'Macro '+(m+1)+' '+S.macros[m].label};
+    d.appendChild(dial);
+    d.appendChild(el('div','klab',S.macros[m].label));
+    const vv=el('div','kval',Math.round(S.macros[m].val*100)+'%');
+    vv.setAttribute('data-val','macro'+m); d.appendChild(vv);
+    host.appendChild(d);
+  }
+}
+
+/* ---- composition tab ---- */
+function buildCompUI(){
+  const host=$('compUI'); host.innerHTML='';
+  const d1=document.createElement('details'); d1.className='rsec'; d1.open=true;
+  const s1=document.createElement('summary'); s1.textContent='Dashboard'; d1.appendChild(s1);
+  const rb1=el('div','rbody'); const dk=el('div'); dk.id='dashknobs'; rb1.appendChild(dk);
+  d1.appendChild(rb1); host.appendChild(d1);
+  buildDashKnobs();
+  const d2=document.createElement('details'); d2.className='rsec';
+  const s2=document.createElement('summary'); s2.textContent='Presets'; d2.appendChild(s2);
+  const rb2=el('div','rbody'); const row=el('div','trow');
+  const nm=document.createElement('input'); nm.type='text'; nm.id='presetName'; nm.placeholder='preset name';
+  const bs=el('button','tbtn','Save'); bs.id='btnSavePreset';
+  const se=document.createElement('select'); se.id='presetSel'; se.title='Load a saved preset';
+  const bl=el('button','tbtn','Load'); bl.id='btnLoadPreset';
+  const bd=el('button','tbtn','Del'); bd.id='btnDelPreset';
+  row.append(nm,bs,se,bl,bd); rb2.appendChild(row); d2.appendChild(rb2); host.appendChild(d2);
+  refreshPresetSel();
+  bs.addEventListener('click',()=>{
+    const n=nm.value.trim();
+    if(!n){ showErr('Name the preset first.'); setTimeout(()=>$('errbanner').classList.remove('show'),3000); return; }
+    const p=getPresets(); p[n]=snapshotFull(); setPresets(p); nm.value=''; refreshPresetSel();
+  });
+  bl.addEventListener('click',()=>{
+    const n=se.value; if(!n) return;
+    const p=getPresets(); if(p[n]){ applySnapshotFull(p[n]); afterPresetLoad(); }
+  });
+  bd.addEventListener('click',()=>{
+    const n=se.value; if(!n) return;
+    const p=getPresets(); delete p[n]; setPresets(p); refreshPresetSel();
+  });
+}
+/* refresh all UI after a preset load */
+function afterPresetLoad(){
+  buildDeck(); buildColumns(); syncColumns();
+  buildProps('layerProps','layer'); buildProps('clipProps','clip');
+  buildDashKnobs(); buildPostFx(); buildMaster(); buildMapUI();
+  refreshPresetSel();
+  if($('resSel')) $('resSel').value=S.res;
+  if($('bpmBig')) $('bpmBig').textContent=S.bpm;
+  if($('masterSl')) $('masterSl').value=(S.params['P.master']!==undefined)?S.params['P.master']:1;
+  if($('ckBeatSync')) $('ckBeatSync').checked=!!S.beatSync;
+  if($('btnBlackout2')) $('btnBlackout2').classList.toggle('armed', !!S.blackout);
+  if($('btnPauseT')) $('btnPauseT').classList.toggle('on', !!S.paused);
   positionOverlays();
 }
 
@@ -3898,6 +4081,7 @@ let tStart=performance.now()/1000, lastT=0, frames=0, fpsT=0;
 function loop(){
   requestAnimationFrame(loop);
   const now=performance.now()/1000;
+  if(S.paused && lastT>0) tStart+=(now-lastT);
   const t=now-tStart; lastT=now;
   pollAudio();
   let pulse=0;
@@ -3922,38 +4106,33 @@ function loop(){
 /* ================= WIRING ================= */
 function wireV3(){
   document.querySelectorAll('#ptabs button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
-  $('btnPropsClose').addEventListener('click', closeProps);
   $('panelFab').addEventListener('click', ()=>setSheetHidden(false));
   $('masterSl').addEventListener('input', e=>setParam('P.master', parseFloat(e.target.value), e.target));
   $('masterSl').value=(S.params['P.master']!==undefined)?S.params['P.master']:1;
-  $('btnTap').addEventListener('click', tapTempo);
+  /* transport bar */
+  $('btnTap2').addEventListener('click', tapTempo);
+  $('btnHalf').addEventListener('click', ()=>{
+    S.bpm=clamp(Math.round(S.bpm/2),40,240);
+    $('bpmBig').textContent=S.bpm; saveState();
+  });
+  $('btnDouble').addEventListener('click', ()=>{
+    S.bpm=clamp(Math.round(S.bpm*2),40,240);
+    $('bpmBig').textContent=S.bpm; saveState();
+  });
+  $('btnResync').addEventListener('click', resyncBeat);
+  $('btnPauseT').addEventListener('click', togglePauseT);
   $('ckBeatSync').addEventListener('change', e=>{ S.beatSync=e.target.checked; saveState(); });
-  $('btnLearn').addEventListener('click', ()=>setLearn(!learnArmed));
+  $('btnBlackout2').addEventListener('click', ()=>{
+    S.blackout=!S.blackout;
+    $('btnBlackout2').classList.toggle('armed', S.blackout);
+    saveState();
+  });
   $('btnLearn2').addEventListener('click', ()=>setLearn(!learnArmed));
   $('btnMidiClear').addEventListener('click', ()=>{ S.midi=[]; saveState(); renderMidiList(); });
   $('btnAudio').addEventListener('click', toggleAudio);
   $('btnPerform').addEventListener('click', togglePerform);
   $('btnExitPerform').addEventListener('click', togglePerform);
   $('btnOutput').addEventListener('click', ()=>setOutput(true));
-  $('btnBlackout').addEventListener('click', ()=>{
-    S.blackout=!S.blackout;
-    $('btnBlackout').classList.toggle('armed', S.blackout);
-    saveState();
-  });
-  $('btnSavePreset').addEventListener('click', ()=>{
-    const name=$('presetName').value.trim();
-    if(!name){ showErr('Name the preset first.'); setTimeout(()=>$('errbanner').classList.remove('show'),3000); return; }
-    const p=getPresets(); p[name]=snapshot(); setPresets(p);
-    $('presetName').value='';
-  });
-  $('btnLoadPreset').addEventListener('click', ()=>{
-    const name=$('presetSel').value; if(!name) return;
-    const p=getPresets(); if(p[name]) applySnapshot(p[name]);
-  });
-  $('btnDelPreset').addEventListener('click', ()=>{
-    const name=$('presetSel').value; if(!name) return;
-    const p=getPresets(); delete p[name]; setPresets(p);
-  });
   $('resSel').addEventListener('change', ()=>{
     S.res=$('resSel').value; buildTargets(); buildMapTarget(); refitCanvas(); saveState();
   });
@@ -3964,7 +4143,7 @@ function wireV3(){
     const m=$('clipmenu');
     if(m&&m.style.display==='block'&&!m.contains(e.target)) hideClipMenu();
   });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ hideClipMenu(); closeProps(); } });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ hideClipMenu(); } });
   /* MIDI learn: pointerdown capture so the tap selects without moving the slider */
   document.addEventListener('pointerdown', e=>{
     if(!learnArmed) return;
@@ -3984,7 +4163,7 @@ function wireV3(){
 
 /* ================= INIT ================= */
 function init(){
-  S.blackout=false;
+  S.blackout=false; S.paused=false;
   try{
     if(!localStorage.getItem('holomapper.mobile.seen')){
       S.res='960x540';
@@ -3993,20 +4172,23 @@ function init(){
   }catch(e){}
   if(!validClips(S.clips)) S.clips=defaultClips();
   if(!Array.isArray(S.fired)||S.fired.length!==4) S.fired=[null,null,null,null];
+  if(typeof S.colFired!=='number') S.colFired=null;
   if(!S.sel||typeof S.sel.i!=='number') S.sel={kind:'layer',i:0};
   for(let i=0;i<4;i++){ S.params['L'+i+'.src']=S.layers[i].src/4; syncFiredToSrc(i); }
   if(!S.map || !Array.isArray(S.map.surfaces) || !S.map.surfaces.length) S.map=defaultMap();
   if(MUI.selSurf >= S.map.surfaces.length) MUI.selSurf=0;
   $('mhandle').style.pointerEvents='none'; /* visual only; resize via mapcv proximity */
-  buildDeck(); buildProps();
-  buildPostFx(); buildMaster(); buildDashboard();
-  renderMidiList(); refreshPresetSel(); syncTopToggles();
+  buildDeck(); buildColumns();
+  buildProps('layerProps','layer'); buildProps('clipProps','clip');
+  buildPostFx(); buildMaster(); buildCompUI();
+  renderMidiList(); syncTopToggles();
   buildMapUI();
   $('plugcode').value=S.pluginCode;
   $('resSel').value=S.res;
-  $('bpm').textContent=S.bpm;
-  $('btnBlackout').classList.toggle('armed', !!S.blackout);
-  showTab('Deck');
+  $('bpmBig').textContent=S.bpm;
+  $('btnBlackout2').classList.toggle('armed', !!S.blackout);
+  $('btnPauseT').classList.toggle('on', !!S.paused);
+  showTab('Comp');
   wireV3();
   if(!initGL()) return;
   initQuad();

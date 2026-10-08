@@ -414,3 +414,77 @@ Known limits:
   wired but touch has no keyboard.
 - Screenshots verify layout, not the spectral look — needs his eyes on the
   live Pages URL in Chrome.
+
+## v4 — Resolume-faithful mobile shell (2026-10-08)
+Reference-first rebuild. Primary reference: Joshua's OWN Resolume Arena 7.1.0
+screenshot (research/resolume-arena-7.1.0-reference.webp, copied from the file he
+sent); secondary: web research notes (research/resolume-ui-notes.md). Engine
+(v1.2), mapping math, output mode, pins, presets, MIDI, audio: untouched except
+two surgical transport additions (RESYNC/PAUSE). UI shell only.
+
+What changed (mobile.html only):
+- Clip grid is now the hero, Resolume's paradigm: column headers C1–C8 across the
+  top (tap = fire the whole column, one clip per layer; connected column glows
+  teal), 4 layer rows with left gutters (L1–L4 tab, ✕ B S, per-layer opacity
+  slider). Playing clip = teal glow; empty slots = dark dashed wells; selected
+  layer tab = teal. Clip assign still via long-press.
+- Transport bar under the grid, mirroring his: TAP, BPM (teal), /2, *2, RESYNC
+  (resets beat phase), PAUSE (freeze-frame of the shared clock), BLACKOUT,
+  beat-sync checkbox. BLACKOUT sits right after PAUSE so it needs no scroll.
+- Bottom panels retabbed to Composition | Layer | Clip | FX | Map (his
+  Composition/Layer/Clip + our FX/Map). Composition tab: ▸ Dashboard with 8
+  ROTARY KNOBS (his dashboard is knobs; drag vertically, double-tap resets,
+  MIDI-learnable, labels + % readouts) and ▸ Presets. Layer/Clip tabs render the
+  same prop builders as before (incl. all 6 drawable modulator curve editors
+  under Cloner). FX tab: post-FX chain, Master, shader plugin, audio, MIDI —
+  all inside collapsible ▸ sections like his. Map tab unchanged.
+- Visual language: near-black panels, teal (#2dd4bf) for active/playing/
+  selected/connected, amber bypass / yellow solo (his colors), dense 10–11px
+  labels, teal slider fills, −/+ steppers kept where they were.
+- Removed: Deck/FX/Map tab scheme, macrobar (macros live in the dashboard now),
+  props slide-over (replaced by Layer/Clip tabs).
+
+Bugs found by testing and fixed:
+1. snapshot()/applySnapshot() shell wrappers infinitely recursed ("Maximum call
+   stack size exceeded") — `const snapshotEngine = snapshot` self-captured
+   because the later function declaration shadows the engine binding at
+   script-instantiation time. This pattern was latently broken since the v3
+   shell (v3 presets never actually worked). Fixed with distinctly-named
+   snapshotFull()/applySnapshotFull(); colFired now persists in presets too.
+2. midiStatus() targeted the removed topbar #midistat → null.textContent threw
+   on init. Now targets #midistat2 with a guard.
+3. Map corner handles were visible on every tab: positionHandles() set inline
+   display:block, which survived showTab's class toggle. Now owns the 'on'
+   class and clears inline style.
+4. Selected layer strip had a purple outline (base CSS .lstrip.sel) — now teal.
+
+Verification (puppeteer-core + Chromium 152/SwiftShader, harness kept at
+checks/hmv4check.mjs):
+- node --check on all 15 script blocks: pass. Zero page errors on load.
+- 34/34 functional checks pass at 390x844 AND 1024x1366: 32 clip cells, 8
+  column buttons, 8 dashboard knobs, canvas sized, default tab Composition,
+  column fire (fired=[2,2,2,2], colFired=2, 4 teal highlights), single fire
+  clears column, layer/clip tab switching + props render, pause toggle,
+  resync, macro knob label sync, preset round-trip (fired/macros/colFired
+  restored), FX postfx rows, Map surfaces, 6 modulator curve canvases in the
+  Layer tab, output mode hides UI, pins button shows 4 corner handles,
+  exit restores UI.
+- Screenshots (checks/): v4_phone_390x844.png, v4_phone_390x844_fired.png,
+  v4_tablet_1024x1366.png, v4_tablet_1024x1366_fired.png, v4_outpins_390.png.
+- Honest comparison vs his 7.1.0 screenshot — matches: teal selection
+  language, grid paradigm (columns across, layers down, ✕BS gutter), transport
+  row contents/order, tabbed Composition/Layer/Clip panels, collapsible ▸
+  sections, dashboard knobs, near-black density. Doesn't match (deliberate):
+  no thumbnails (our sources are procedural — name labels instead), no deck
+  tabs (one clip bank; columns cover the paradigm), no Files browser, no A/B
+  crossfader or RECORD, no menu bar, no separate preview monitor (the visible
+  canvas IS the monitor), Map tab has no Resolume equivalent (kept in the same
+  visual language).
+
+Known limits:
+- 2–3 fps in headless SwiftShader is the software renderer — real GPU is
+  ground truth for look/perf, as always.
+- Knob drag is vertical-pointer; on his phone this needs his thumb-verdict.
+- PAUSE freezes the shared clock (full freeze-frame incl. modulators) — the
+  honest equivalent of Resolume's transport pause.
+- Not pushed (per task). Files in place: mobile.html, research/, checks/.
