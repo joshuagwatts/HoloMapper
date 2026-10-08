@@ -561,3 +561,88 @@ Known limits:
 Try first: double-click a layer name (L1) -> drag Feedback between Source
 and Output -> select it -> push Trails. Then double-click LFO A and draw a
 curve.
+
+## 2026-10-08 — Desktop deck UI rebuild v5 (Resolume Arena 7 faithful)
+
+Reference-first rebuild of holomapper.html shell against the Arena 7 manual
+research + Joshua's actual 7.1.0 and 7.27.1 screenshots. Engine/params/MIDI/
+presets/audio/node-graph evaluation untouched. mobile.html, remote.html,
+bridge.py untouched. NOT pushed.
+
+### What changed
+- Layer 1 now renders at the BOTTOM of the clip grid (display i=3..0);
+  engine composite order unchanged.
+- Clip cells split: thumbnail = TRIGGER (quantized to Beat Snap), name
+  handle = SELECT without triggering. Column tabs C1-C8 fire one clip per
+  layer (quantized, MIDI-learnable).
+- Per-layer strip: X (eject), B (bypass, orange), S (solo, yellow), opacity
+  slider, blend dropdown. Blue = selected, teal glow = fired column.
+- Transport toolbar: beat-phase canvas, BPM +/-, TAP, RESYNC, nudge hold
+  buttons, /2 *2, Beat Snap selector (none/beat/bar/2/4 bars, default bar),
+  PAUSE, AUTO (autopilot), BLACKOUT. Spacebar = blackout; T = tap.
+- Dashboard: 8 rotary dials top the Composition panel. Drag ANY parameter
+  label onto a dial to assign (per-param depth + invert checkbox);
+  double-click renames, right-click clears, MIDI-learn works.
+- Deck tabs (SOURCES, HOLOWATTS, +) across the top of the grid — his
+  paradigm. Switching decks swaps the clip bank only; playback (fired
+  sources, layers, clock) is never interrupted. Double-click renames,
+  right-click deletes, + adds. Persisted in presets/localStorage.
+- Autopilot: columns autoplay LEFT to RIGHT, one per Beat Snap quantum.
+  Toggle in transport; continues from last fired column; manual column
+  fires just move the playhead.
+- Clip cells show a teal FX dot when the layer's node graph has FX nodes
+  beyond the default src->output path (honest mapping of his
+  "effects stack on sources": the layer node graph IS the effect stack;
+  clip-level FX chains parked as a named next step).
+- Visual language: #1a1b1e base, 1px flat borders, semantic color only
+  (blue select, teal playing, orange bypass, yellow solo, red
+  master-down/blackout, green MIDI-learn tint). 11px dense sans.
+- Master clock (beatT0/pausedBeats/beatsNow); tap re-anchors; pause freezes
+  clock only. Quantized trigger queue processed in loop().
+
+### Verification
+- node --check on all 19 script blocks: PASS.
+- Headless harness (hmv5check.mjs): 37/37 PASS — layer order, clip
+  trigger vs select, column fire, snap queue->boundary fire, bypass/solo/
+  eject colors, MIDI-learn green tint, spacebar blackout, tap/resync/
+  pause, preset round-trip (bpm/bypass/snap/decks), dial drag-assign +
+  invert + vertical drag, node dive-in/out, zero page errors at
+  1600x900 and 1920x1080.
+- Decks/autopilot suite: 14/14 PASS — default SOURCES+HOLOWATTS tabs,
+  switch-without-interrupting-playback, independent banks, add deck,
+  autopilot toggle + left-to-right advance on bar boundaries.
+- Preset round-trip with decks: 6/6 (deck name/idx/clips/autopilot/snap).
+- PERFORM mode: fixed a regression (grid auto-placement collapse when
+  siblings hide) — full-screen output + macro overlay verified.
+
+### Bugs found & fixed during build
+- #transport was nested inside #gridzone (not a #main child) -> lower zone
+  collapsed to 32px; dials unhittable. Moved to sibling.
+- Dial drag "failure" was the collapsed layout, not the handler — trusted
+  mouse + synthetic events both drive dials correctly once hittable.
+- PERFORM black: #lowerzone/#main auto-placed into empty rows when
+  siblings display:none. Added body.perform single-row rules for #app,
+  #main, #lowerzone.
+
+### Deliberate divergences (from his 7.27.1 screenshot)
+- 4 layers, not 36: the ENGINE is 4 layers (combine shader u_l0..u_l3,
+  PARAMS L0-L3, node graphs x4, MIDI maps). 36-layer engine = separate
+  project; not faked.
+- No crossfader A/B bus, no per-layer M/V toggles: no engine crossfader;
+  opacity covers the V fader. Cut rather than half-shipped.
+- No LINK button: no Ableton Link implementation. No STOP: generative
+  sources have no stop concept (PAUSE = clock pause).
+- Clip "thumbnails" are source-name labels (procedural sources, no
+  bitmaps). Preview monitor is checkerboard + label (matches his empty
+  preview). Browser has Effects/Sources only (no file library).
+- Clip-level FX chains: parked. Layer node graph is the effect stack;
+  clips show an FX dot when the layer graph is non-trivial.
+
+### Screenshots (checks/)
+- v5_deck_1600.png, v5_comp_1600.png, v5_deck_1920.png, v5_nodes.png
+- v5_decks_auto_1600.png (deck tabs + AUTO lit + fired column),
+  v5_comp_1600b.png (dashboard close-up), v5_perform_1600.png
+
+Try first: click C3 to fire a column on the bar line, then hit AUTO and
+watch it walk left to right. Double-click a layer name to dive into its
+node graph.
