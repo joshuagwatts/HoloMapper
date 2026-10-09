@@ -435,7 +435,7 @@ body.perform #performbar{display:block}
 <div id="app">
   <!-- ================= TOP BAR ================= -->
   <header id="topbar">
-    <span class="brand">HoloMapper</span><span class="vtag">v2</span>
+    <span class="brand">HoloMapper</span><span class="vtag" id="appver" title="HoloMapper build version">…</span>
     <span class="tsep"></span>
     <button id="btnNodes" title="Open node graph for selected layer (N)">Nodes</button>
     <button id="btnLearn" title="MIDI learn (M)">MIDI Learn</button>
@@ -454,12 +454,12 @@ body.perform #performbar{display:block}
     <button id="btnImport" title="Import preset JSON from file">Import</button>
     <input type="file" id="importFile" accept=".json,application/json" style="display:none">
     <span class="sp"></span>
-    <span id="fps">-- fps</span>
-    <select id="resSel" title="Internal render resolution">
-      <option value="960x540">960x540</option>
-      <option value="1280x720" selected>1280x720</option>
-      <option value="1920x1080">1920x1080</option>
-      <option value="auto">Auto</option>
+    <span id="fps" title="Live frame rate (rolling 1s average) · effective render scale">-- fps</span>
+    <select id="qualitySel" title="Render quality">
+      <option value="auto" selected>Auto</option>
+      <option value="high">High</option>
+      <option value="medium">Medium</option>
+      <option value="low">Low</option>
     </select>
     <button id="btnHelp" title="Keyboard shortcuts (?)">?</button>
     <button id="btnPerform" title="Perform mode (P)">PERFORM</button>
@@ -590,6 +590,9 @@ body.perform #performbar{display:block}
 
 <script>
 'use strict';
+/* HoloMapper build version — bump this one line per release. Shown in the
+   top bar next to the HoloMapper brand. */
+const APP_VERSION='1.2.0';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1073,7 +1076,7 @@ function defaultState(){
   const params={};
   for(const id in PARAMS) params[id]=PARAMS[id].def;
   return {
-    v:1, res:'1280x720', selLayer:0, sel:{kind:'layer', i:0}, graphs:null,
+    v:1, quality:'auto', selLayer:0, sel:{kind:'layer', i:0}, graphs:null,
     layers:[
       {src:0, blend:0, bypass:false, solo:false, ejected:false},
       {src:2, blend:2, bypass:false, solo:false, ejected:false},
@@ -1103,6 +1106,9 @@ try{
   S.clips=S.decks[S.deckIdx].clips;
   if(typeof S.autopilot!=='boolean') S.autopilot=false;
 }catch(e){ console.warn('HoloMapper: state load failed', e); }
+/* render quality is a device preference: old saved states carry res, new ones
+   carry quality; anything unrecognized falls back to auto */
+if(['auto','high','medium','low'].indexOf(S.quality)<0) S.quality='auto';
 /* v1.4: imported shaders are first-class sources (S.imports). Sanitize. */
 if(!Array.isArray(S.imports)) S.imports=[];
 S.imports=S.imports.filter(im=>im&&typeof im.name==='string'&&typeof im.code==='string');
@@ -1709,12 +1715,23 @@ function makeTarget(w,h,depth){
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   return {tex:tex, fb:fb, w:w, h:h, ok:ok, rb:(typeof rb!=='undefined'?rb:null)};
 }
+/* Render-quality scaling. BASE_W/H = the display canvas size (full-size
+   composite, never scaled). Internal targets are BASE * Q_SCALES[qScaleIdx].
+   S.quality: 'auto' (default, adapts to measured fps), 'high', 'medium',
+   'low'. Persisted in localStorage via S (saveState). */
+const BASE_W=1280, BASE_H=720;
+const Q_SCALES=[1.0, 0.75, 0.5];
+const Q_LABEL={auto:'Auto', high:'High', medium:'Medium', low:'Low'};
+let qScaleIdx=0; /* effective scale index: 0=1.0x, 1=0.75x, 2=0.5x */
+function effScale(){ return Q_SCALES[qScaleIdx]; }
 function buildTargets(){
-  /* Auto resolution: S.res==='auto' tracks the adaptive autoRes instead */
-  const rstr=(S.res==='auto')?autoRes:S.res;
-  const wh = rstr.split('x').map(Number);
-  RW=wh[0]; RH=wh[1];
-  canvas.width=RW; canvas.height=RH;
+  /* Render quality: the display canvas always stays at the full base
+     resolution (the final composite never shrinks); the internal render
+     targets are multiplied by the quality scale. At 1.0x this is
+     pixel-identical to the old fixed-1280x720 path. */
+  canvas.width=BASE_W; canvas.height=BASE_H;
+  RW=Math.max(2,Math.round(BASE_W*effScale()));
+  RH=Math.max(2,Math.round(BASE_H*effScale()));
   layerT=[makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true)];
   compT=makeTarget(RW,RH);
   fbT=[makeTarget(RW,RH),makeTarget(RW,RH)];
@@ -2820,7 +2837,15 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
   let sp = PARAMS['L'+i+'.speed'].map(eff('L'+i+'.speed'));
   if(S.beatSync) sp=snapBeat(sp);
   gl.useProgram(prog);
-  gl.uniform1f(U(prog,'u_time'),t);
+  /* imported shaders: Time Speed knob scales the iTime they see (u_time is
+     #defined as iTime by the Shadertoy wrapper). Every import has one. */
+  let tEff=t;
+  if(sidx>=5&&sidx<camIdx()){
+    const tsid='SH'+sidx+'.timeSpeed';
+    if(!PARAMS[tsid]) registerImportParams(sidx);
+    tEff=t*PARAMS[tsid].map(eff(tsid));
+  }
+  gl.uniform1f(U(prog,'u_time'),tEff);
   gl.uniform2f(U(prog,'u_res'),T.w,T.h);
   gl.uniform1f(U(prog,'u_speed'),sp);
   gl.uniform1f(U(prog,'u_hue'),eff('L'+i+'.hue'));
@@ -2835,12 +2860,27 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
     gl.uniform1i(U(prog,'iFrame'),shFrame);
     gl.uniform4f(U(prog,'iMouse'),shMouse[0],shMouse[1],shMouse[2],shMouse[3]);
   }
-  if(sidx>=5){ /* auto-knob uniforms from `uniform float` declarations */
+  if(sidx>=5&&sidx<camIdx()){ /* auto-knob uniforms, per scanShaderUniforms */
     const im=S.imports[sidx-5];
-    if(im&&im.uniforms) for(const un of im.uniforms){
-      const pid='SH'+sidx+'.'+un;
-      if(!PARAMS[pid]) registerImportParams(sidx);
-      gl.uniform1f(U(prog,un),eff(pid));
+    if(im&&im.uniforms){
+      if(!PARAMS['SH'+sidx+'.timeSpeed']) registerImportParams(sidx);
+      for(const u0 of im.uniforms){
+        const u=normUniform(u0); if(!u) continue;
+        const base='SH'+sidx+'.'+u.name;
+        if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
+          const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw', vv=[];
+          for(let c=0;c<ncomp;c++) vv.push(eff(base+'.'+axes[c]));
+          if(ncomp===2) gl.uniform2f(U(prog,u.name),vv[0],vv[1]);
+          else if(ncomp===3) gl.uniform3f(U(prog,u.name),vv[0],vv[1],vv[2]);
+          else gl.uniform4f(U(prog,u.name),vv[0],vv[1],vv[2],vv[3]);
+        }else if(u.type==='int'){
+          gl.uniform1i(U(prog,u.name),PARAMS[base].map(eff(base)));
+        }else if(u.type==='bool'){
+          gl.uniform1i(U(prog,u.name),eff(base)>=0.5?1:0);
+        }else{
+          gl.uniform1f(U(prog,u.name),eff(base));
+        }
+      }
     }
   }
   quadDraw();
@@ -3313,7 +3353,7 @@ function mkSpan(cls, txt){ const s=el('span',cls); s.textContent=txt; return s; 
 function mkHint(txt){ return el('div','hint',txt); }
 
 /* One param row: slider line + macro-assign line. Registers for MIDI learn. */
-function paramRow(parent, id, short){
+function paramRow(parent, id, short, step){
   const def=PARAMS[id];
   const wrap=el('div','prow');
   const line=el('div','pline');
@@ -3322,7 +3362,7 @@ function paramRow(parent, id, short){
   lab.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/hm-param',id); e.dataTransfer.effectAllowed='copy'; });
   line.appendChild(lab);
   const sl=document.createElement('input');
-  sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001;
+  sl.type='range'; sl.min=0; sl.max=1; sl.step=(step>0?step:0.001);
   sl.value=(S.params[id]!==undefined)?S.params[id]:def.def;
   sl.setAttribute('data-ctrl',id); sl.title=def.label+' — click while MIDI Learn is armed to map';
   sl.addEventListener('input',()=>setParam(id,parseFloat(sl.value),sl));
@@ -3546,12 +3586,30 @@ function buildClipParamSection(host,i,src){
     sec.appendChild(b);
     sec.appendChild(mkHint('The camera is global; H-Flip is per layer. Pair it with Auto Mask (Chroma) in the post chain.'));
   }else if(src>=5&&src<camIdx()){
-    const im=S.imports[src-5], uns=im?im.uniforms:null;
-    if(!(uns&&uns.length)) return;
+    const im=S.imports[src-5];
+    if(!im) return;
     registerImportParams(src);
     sec.appendChild(el('div','plab','Shader uniforms \u2014 '+im.name));
-    for(const un of uns) paramRow(sec,'SH'+src+'.'+un,un);
-    sec.appendChild(mkHint('Float uniforms only for now (vec uniforms are not knobbed yet). Drag a label onto a dashboard dial; click a slider while MIDI Learn is armed.'));
+    const uns=(im.uniforms||[]).map(normUniform).filter(Boolean);
+    for(const u of uns){
+      const base='SH'+src+'.'+u.name;
+      if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
+        const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw';
+        for(let c=0;c<ncomp;c++) paramRow(sec,base+'.'+axes[c],u.name+'.'+axes[c]);
+      }else if(u.type==='bool'){
+        toggleRow(sec,base,u.name);
+      }else if(u.type==='int'){
+        paramRow(sec,base,u.name,0.1);
+      }else{
+        paramRow(sec,base,u.name);
+      }
+    }
+    /* Time Speed: every import gets one, so there's always a live knob */
+    paramRow(sec,'SH'+src+'.timeSpeed','Time Speed');
+    if(!uns.length)
+      sec.appendChild(mkHint('No tunable uniforms found \u2014 add `uniform float myParam;` or `const float myParam = 0.5;` to your shader and re-import to get knobs.'));
+    else
+      sec.appendChild(mkHint('int uniforms are 0\u201310, bool is a toggle. Drag a label onto a dashboard dial; click a control while MIDI Learn is armed.'));
   }else if(src===4){
     sec.appendChild(el('div','plab','Cloner 3D (key params)'));
     discreteRow(sec,'L'+i+'.clMode','Mode',CL_MODES);
@@ -4373,39 +4431,188 @@ function shaderTranslate(code){
 }
 /* Reserved uniforms: never knobbed, never scanned as custom. */
 const SH_RESERVED=/^(iResolution|iTime|iTimeDelta|iFrame|iMouse|iDate|iSampleRate|iChannel[0-3]|u_[A-Za-z0-9_]*)$/;
+/* Uniform scanner: float -> slider (0-1), int -> stepped slider (0-10),
+   bool -> toggle, vec2/3/4 -> per-component sliders (0-1 each).
+   Returns descriptors {name, type, init}. An initializer sets the knob
+   default (clamped into the knob's range); without one, float=0.5, int=0,
+   bool=off, vec components=0.5. Arrays are skipped. Old saved states stored
+   plain name strings -> normUniform() treats them as float. */
 function scanShaderUniforms(code){
   const out=[], seen={};
-  const re=/uniform\s+float\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/g;
+  const re=/uniform\s+(?:highp\s+|mediump\s+|lowp\s+)?(float|int|bool|vec2|vec3|vec4)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:=\s*([^;]+?))?\s*;/g;
   let m;
   while((m=re.exec(String(code||'')))){
-    const n=m[1];
+    const type=m[1], n=m[2];
     if(SH_RESERVED.test(n)||seen[n]) continue;
-    seen[n]=1; out.push(n);
+    seen[n]=1;
+    out.push({name:n, type:type, init:(m[3]||'').trim()||null});
   }
   return out;
 }
-/* Register SH<srcIdx>.<uname> params (idempotent). Range 0-1, default 0.5. */
+function normUniform(u){
+  if(typeof u==='string') return {name:u, type:'float', init:null};
+  if(u&&typeof u.name==='string') return {name:u.name, type:u.type||'float', init:u.init||null};
+  return null;
+}
+/* Normalized (0-1) knob default from a descriptor. comp = vec component idx. */
+function shDefVal(u, comp){
+  const init=u.init;
+  if(u.type==='bool'){
+    if(!init) return 0;
+    return (/true/i.test(init)||parseFloat(init)!==0)?1:0;
+  }
+  if(u.type==='int'){
+    const v=init!==null?parseInt(init,10):0;
+    return clamp(isNaN(v)?0:v,0,10)/10;
+  }
+  let raw=0.5;
+  if(init!==null){
+    /* strip a constructor wrapper like vec3(...) so its name's digits
+       (the "3" in "vec3") aren't mistaken for a component value */
+    const pm=init.match(/\(([^()]*)\)/);
+    const numSrc=pm?pm[1]:init;
+    const nums=numSrc.match(/-?\d*\.?\d+(?:[eE][-+]?\d+)?/g)||[];
+    if(nums.length===1) raw=parseFloat(nums[0]); /* scalar or splat */
+    else if(nums.length>1) raw=parseFloat(nums[Math.min(comp|0,nums.length-1)]);
+  }
+  return clamp(raw,0,1);
+}
+/* Register SH<srcIdx>.<name> params (idempotent). vec components get
+   SH<srcIdx>.<name>.x/.y/.z/.w. Plus the always-on SH<srcIdx>.timeSpeed
+   (0-2x, default 1x) so every import has at least one live knob. */
 function registerImportParams(sidx){
   const im=S.imports[sidx-5]; if(!im) return;
-  for(const un of (im.uniforms||[])){
-    const id='SH'+sidx+'.'+un;
-    if(!PARAMS[id]) defParam(id, im.name+' \u00b7 '+un, 0.5);
-    if(S.params[id]===undefined) S.params[id]=0.5;
+  for(const u0 of (im.uniforms||[])){
+    const u=normUniform(u0); if(!u) continue;
+    const base='SH'+sidx+'.'+u.name, lab=im.name+' \u00b7 '+u.name;
+    if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
+      const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw';
+      for(let c=0;c<ncomp;c++){
+        const id=base+'.'+axes[c], d=shDefVal(u,c);
+        if(!PARAMS[id]) defParam(id, lab+'.'+axes[c], d);
+        if(S.params[id]===undefined) S.params[id]=d;
+      }
+    }else if(u.type==='int'){
+      const d=shDefVal(u);
+      if(!PARAMS[base]) defParam(base, lab, d, v=>Math.round(v*10), v=>String(Math.round(v*10)));
+      if(S.params[base]===undefined) S.params[base]=d;
+    }else if(u.type==='bool'){
+      const d=shDefVal(u);
+      if(!PARAMS[base]) defParam(base, lab, d, v=>v>=0.5?1:0, v=>v>=0.5?'on':'off');
+      if(S.params[base]===undefined) S.params[base]=d;
+    }else{
+      const d=shDefVal(u);
+      if(!PARAMS[base]) defParam(base, lab, d);
+      if(S.params[base]===undefined) S.params[base]=d;
+    }
   }
+  const tsid='SH'+sidx+'.timeSpeed';
+  if(!PARAMS[tsid]) defParam(tsid, im.name+' \u00b7 Time Speed', 0.5, v=>v*2, v=>(v*2).toFixed(2)+'x');
+  if(S.params[tsid]===undefined) S.params[tsid]=0.5;
+}
+/* Index-preserving GLSL comment stripper (replaces comments with spaces so
+   match indices still line up with the original source). */
+function stripGlslComments(src){
+  return String(src||'')
+    .replace(/\/\*[\s\S]*?\*\//g, s=>' '.repeat(s.length))
+    .replace(/\/\/[^\n]*/g, s=>' '.repeat(s.length));
+}
+/* const-float / #define -> uniform conversion (knob expansion).
+   Shadertoy-style shaders often declare tweakables as global
+   `const float NAME = <literal>;` or `#define NAME <float-literal>` instead
+   of uniforms — those read as "no knobs" (broken-feeling). Safe ones are
+   rewritten to `uniform float NAME;` and the literal becomes the knob
+   default. Conservative by design:
+   - float literals only, global scope only (brace depth 0)
+   - skip when used as an array size/index ([...]), a loop bound (for
+     header), or another const's initializer (uniforms aren't constant
+     expressions) — when in doubt, it's skipped
+   - #define: only whole-line simple defines whose literal looks like a
+     float (has . or exponent); skipped entirely if the file uses any
+     #if/#ifdef/#ifndef (conditional redefinition risk)
+   - importShader falls back to the original source if the converted source
+     fails to compile, so a compiling shader can never break.
+   Returns {code, defs:{name: literalString}}. */
+function convertConstFloats(code){
+  const defs={};
+  const src=String(code||'');
+  const stripped=stripGlslComments(src);
+  const converted={};
+  const FLOATLIT='-?\\d*\\.?\\d+(?:[eE][-+]?\\d+)?';
+  const skipName=(n)=>{
+    if(SH_RESERVED.test(n)) return true;
+    if(converted[n]) return true;
+    if(new RegExp('\\[[^\\]]*\\b'+n+'\\b[^\\]]*\\]').test(stripped)) return true; /* array size/index, incl. int(N) wrappers */
+    if(new RegExp('\\bfor\\s*\\([^)]*\\b'+n+'\\b').test(stripped)) return true;
+    if(new RegExp('\\bconst\\s+[A-Za-z_][A-Za-z0-9_]*\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=[^;]*\\b'+n+'\\b').test(stripped)) return true;
+    return false;
+  };
+  const depthAt=(idx)=>{
+    let d=0;
+    for(let i=0;i<idx;i++){ const c=stripped[i]; if(c==='{')d++; else if(c==='}')d--; }
+    return d;
+  };
+  const repls=[];   /* {start,end,text} applied back-to-front */
+  const newUniforms=[];
+  /* 1. global const float declarations */
+  {
+    const re=new RegExp('^([ \\t]*)const\\s+float\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*('+FLOATLIT+')\\s*;','gm');
+    let m;
+    while((m=re.exec(stripped))){
+      const n=m[2];
+      if(skipName(n)||depthAt(m.index)!==0) continue;
+      converted[n]=1; defs[n]=m[3];
+      repls.push({start:m.index, end:m.index+m[0].length, text:m[1]+'uniform float '+n+';'});
+    }
+  }
+  /* 2. simple #define float literals (never inside conditional blocks) */
+  if(!/#\s*(if|ifdef|ifndef|elif|else|endif)\b/.test(stripped)){
+    const re=/^([ \t]*)#[ \t]*define[ \t]+([A-Za-z_][A-Za-z0-9_]*)[ \t]+([^\n]*)$/gm;
+    let m;
+    while((m=re.exec(stripped))){
+      const n=m[2], body=m[3].trim();
+      const lm=body.match(new RegExp('^\\(?\\s*('+FLOATLIT+')\\s*\\)?$'));
+      if(!lm||/[eE.]/.test(lm[1])===false) continue; /* must look like a float */
+      if(skipName(n)) continue;
+      const uses=(stripped.match(new RegExp('\\b'+n+'\\b','g'))||[]).length;
+      if(uses<2) continue; /* the define itself + at least one real use */
+      converted[n]=1; defs[n]=lm[1];
+      repls.push({start:m.index, end:m.index+m[0].length, text:''});
+      newUniforms.push('uniform float '+n+';');
+    }
+  }
+  let out=src;
+  repls.sort((a,b)=>b.start-a.start);
+  for(const r of repls) out=out.slice(0,r.start)+r.text+out.slice(r.end);
+  if(newUniforms.length) out=newUniforms.join('\n')+'\n'+out;
+  return {code:out, defs:defs};
 }
 /* Compile + register an import. Returns source index (>=5), or -1. */
 function importShader(name, code){
-  code=String(code||'');
+  const raw=String(code||'');
   const clean=(String(name||'shader').replace(/\.(txt|glsl|frag|fs)$/i,'').trim().slice(0,40))||'shader';
-  for(let k=0;k<S.imports.length;k++) if(S.imports[k].code===code) return 5+k;
+  /* const-float/#define conversion first: dedup compares the canonical
+     (converted) form, plus the raw form for pre-conversion-era imports */
+  const conv=convertConstFloats(raw);
+  code=conv.code;
+  for(let k=0;k<S.imports.length;k++) if(S.imports[k].code===code||S.imports[k].code===raw) return 5+k;
   if(/iChannel\d/.test(code)){
     lastGlslErr='iChannel0..3 texture inputs are not supported by this loader (no texture inputs yet).';
     return -1;
   }
   lastGlslErr='';
-  const pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
+  let pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
+  let defs=conv.defs;
+  if(!pr){
+    /* conversion broke compilation: fall back to the original source with
+       no const knobs — a compiling shader can never break here */
+    code=raw; defs={};
+    pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
+  }
   if(!pr) return -1;
-  S.imports.push({name:clean, code:code, uniforms:scanShaderUniforms(code)});
+  const uniforms=scanShaderUniforms(code);
+  for(const u of uniforms){ if(defs[u.name]!==undefined) u.init=defs[u.name]; }
+  S.imports.push({name:clean, code:code, uniforms:uniforms});
   PROG.imports.push(pr);
   registerImportParams(5+S.imports.length-1);
   return 5+S.imports.length-1;
@@ -4547,7 +4754,7 @@ function snapshot(){
     clips:S.clips, fired:S.fired,
     decks:S.decks, deckIdx:S.deckIdx, autopilot:S.autopilot,
     postBypass:S.postBypass, strobeOn:S.strobeOn, beatSync:S.beatSync,
-    bpm:S.bpm, snap:S.snap||'bar', macros:S.macros, res:S.res, pluginCode:S.pluginCode, imports:S.imports, midi:S.midi,
+    bpm:S.bpm, snap:S.snap||'bar', macros:S.macros, pluginCode:S.pluginCode, imports:S.imports, midi:S.midi,
     mods:S.mods, graphs:S.graphs
   }));
 }
@@ -4590,7 +4797,8 @@ function applySnapshot(snap){
   if(typeof snap.pluginCode==='string' && snap.pluginCode!==S.pluginCode){
     S.pluginCode=snap.pluginCode; compilePlugin(true);
   }
-  if(snap.res && snap.res!==S.res){ S.res=snap.res; $('resSel').value=S.res; buildTargets(); }
+  /* pre-1.2 presets carried snap.res (a resolution); quality is a device
+     preference now, so presets no longer touch it. */
   buildDeck(); buildProps(); buildCompTab();
   buildFxBrowser(); buildSrcBrowser(); buildPerform();
   if(typeof neOpen!=='undefined'&&neOpen){ drawNodes(); drawWires(); renderNodeProps(null); }
@@ -4671,10 +4879,8 @@ function wireStatic(){
     };
     r.readAsText(f);
   });
-  /* render resolution */
-  $('resSel').addEventListener('change',()=>{
-    S.res=$('resSel').value; buildTargets(); saveState();
-  });
+  /* render quality (Auto adapts to measured fps; High/Med/Low pin the scale) */
+  $('qualitySel').addEventListener('change',()=>{ setQuality($('qualitySel').value); });
   /* help */
   $('btnHelp').addEventListener('click',()=>toggleHelp(true));
   $('btnHelpClose').addEventListener('click',()=>toggleHelp(false));
@@ -5754,24 +5960,56 @@ else neInit();
 'use strict';
 /* ================= MAIN LOOP ================= */
 let tStart=performance.now()/1000, lastT=0, frames=0, fpsT=0, pvTick=0;
-/* adaptive resolution: only active when resSel is "Auto". Starts at 1280x720,
-   steps down when slow, back up when fast. Manual modes are untouched. */
-let autoRes='1280x720', emaDt=1/60, slowN=0, fastN=0;
-const AUTO_STEPS=['960x540','1280x720','1920x1080'];
-function autoResTick(fdt){
-  if(S.res!=='auto') return;
-  fdt=Math.min(Math.max(fdt,0),0.1); /* ignore tab-switch gaps */
-  emaDt=emaDt*0.95+fdt*0.05;
-  const si=AUTO_STEPS.indexOf(autoRes);
-  if(emaDt>0.026 && si>0){ if(++slowN>=90){ slowN=0; fastN=0; autoRes=AUTO_STEPS[si-1]; buildTargets(); } }
-  else if(emaDt<0.013 && si<AUTO_STEPS.length-1){ if(++fastN>=600){ fastN=0; slowN=0; autoRes=AUTO_STEPS[si+1]; buildTargets(); } }
-  else { slowN=0; fastN=0; }
+/* Auto quality: a rolling 1s fps average drives the render-scale steps.
+   Step DOWN (1.0 -> 0.75 -> 0.5) when fps < 45 sustained ~3s; step back UP
+   when fps > 57 sustained ~10s. A 5s cooldown after every step plus the
+   split 45/57 thresholds = hysteresis, no thrashing. Manual High/Medium/Low
+   pin the scale and skip this entirely. qFpsAvg also feeds the fps meter. */
+let qSlowT=0, qFastT=0, qCooldown=0, qLastT=0, qFpsAvg=60;
+const qTs=[]; /* frame timestamps (seconds) for the rolling 1s fps average */
+function qualityAutoTick(now){
+  qTs.push(now);
+  while(qTs.length>2 && qTs[0]<now-1.0) qTs.shift();
+  while(qTs.length>600) qTs.shift(); /* frozen-time safety: never grow unbounded */
+  qFpsAvg=qTs.length/Math.max(now-qTs[0],1e-3);
+  if(S.quality!=='auto'){ qSlowT=0; qFastT=0; qLastT=now; return; }
+  const dt=Math.min(Math.max(now-qLastT,0),0.5); /* ignore tab-switch gaps */
+  qLastT=now;
+  if(qCooldown>0){ qCooldown-=dt; qSlowT=0; qFastT=0; return; }
+  if(qFpsAvg<45){ qSlowT+=dt; qFastT=0; }
+  else if(qFpsAvg>57){ qFastT+=dt; qSlowT=0; }
+  else { qSlowT=0; qFastT=0; }
+  if(qSlowT>=3.0 && qScaleIdx<2) setQualityScale(qScaleIdx+1,true);
+  else if(qFastT>=10.0 && qScaleIdx>0) setQualityScale(qScaleIdx-1,true);
+}
+function setQualityScale(idx,auto){
+  qScaleIdx=Math.max(0,Math.min(2,idx));
+  qSlowT=0; qFastT=0; qCooldown=5.0;
+  buildTargets();
+  syncQualityUI();
+  if(auto) toast('Auto quality: render scale '+effScale()+'x');
+}
+/* Manual quality selection (High=1.0x, Medium=0.75x, Low=0.5x). Auto keeps
+   the current scale and adapts from there. Persists via saveState (S). */
+function setQuality(q){
+  if(!Q_LABEL[q]) q='auto';
+  S.quality=q;
+  if(q==='high') qScaleIdx=0;
+  else if(q==='medium') qScaleIdx=1;
+  else if(q==='low') qScaleIdx=2;
+  qSlowT=0; qFastT=0; qCooldown=0;
+  buildTargets(); syncQualityUI(); saveState();
+}
+function syncQualityUI(){
+  const s=$('qualitySel');
+  if(s){ s.value=S.quality; s.title='Render quality ('+Q_LABEL[S.quality]+
+    '): internal render scale '+effScale()+'x — display stays full-size'; }
 }
 function loop(){
   requestAnimationFrame(loop);
   const now=performance.now()/1000;
   const t=now-tStart;
-  autoResTick(now-lastT);
+  qualityAutoTick(now);
   lastT=now;
   if(shPrevT<0) shPrevT=t; shDt=t-shPrevT; shPrevT=t; shFrame++;
   pollAudio();
@@ -5802,7 +6040,8 @@ function loop(){
   if(!neOpen && (pvTick=(pvTick+1)%3)===0) updatePreview(t);
   frames++;
   if(now-fpsT>0.5){
-    $('fps').textContent=Math.round(frames/Math.max(now-fpsT,0.001))+' fps';
+    /* rolling 1s fps average + effective render scale, always honest */
+    $('fps').textContent=Math.round(qFpsAvg)+' fps · '+effScale()+'x';
     frames=0; fpsT=now;
     updateMeters();
   }
@@ -5822,7 +6061,12 @@ function init(){
   refreshPresetSel();
   syncTopToggles();
   drawPreview(); syncTransport();
-  $('resSel').value=S.res;
+  $('appver').textContent='v'+APP_VERSION;
+  /* quality: manual pins the scale, auto starts full and adapts from there */
+  if(S.quality==='medium') qScaleIdx=1;
+  else if(S.quality==='low') qScaleIdx=2;
+  else qScaleIdx=0;
+  syncQualityUI();
   $('bpm').textContent=S.bpm;
   wireStatic();
   if(!initGL()) return;
