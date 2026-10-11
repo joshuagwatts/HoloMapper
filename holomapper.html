@@ -46,7 +46,36 @@ select{background:#141518;color:var(--txt);border:1px solid var(--line);
 label.ck{display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px}
 input[type=checkbox]{accent-color:var(--sel);width:13px;height:13px}
 /* ---- main: grid zone / transport / lower zone ---- */
-#main{display:grid;grid-template-rows:auto 32px minmax(0,1fr);min-height:0;min-width:0}
+/* ============ dockable panels (Resolume-style layout) ============
+   #main is a vertical stack of rows; each row holds 1+ columns; each column
+   holds a vertical stack of panels. Panels drag by their header grip. */
+#main{display:flex;flex-direction:column;position:relative;min-height:0;min-width:0;height:100%}
+.dockrow{display:flex;min-height:0;min-width:0;width:100%}
+.dockcol{display:flex;flex-direction:column;min-height:0;min-width:0;position:relative}
+.dockpanel{display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;background:var(--panel)}
+.dockhead{flex:none;height:20px;display:flex;align-items:center;gap:7px;padding:0 8px;
+  background:#14161d;border-bottom:1px solid var(--line);cursor:grab;
+  user-select:none;-webkit-user-select:none;touch-action:none;
+  font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
+.dockhead:active{cursor:grabbing}
+.dockhead .dgrip{font-size:11px;letter-spacing:3px;line-height:1;color:var(--dim)}
+.dockhead:hover .dgrip{color:var(--acc2)}
+.dockpanel.dragsrc{opacity:.35}
+.dockbody{flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.dockbody>#gridzone,.dockbody>#monitors,.dockbody>#proptabs,.dockbody>#browser{flex:1 1 auto;min-height:0;min-width:0}
+.dockbody>#transport{flex:1 1 auto;min-height:0}
+.tgrip{flex:none;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;
+  color:var(--dim);font-size:12px;letter-spacing:3px;padding:0 6px 0 2px;line-height:1}
+.tgrip:hover{color:var(--acc2)}
+.tgrip:active{cursor:grabbing}
+body.dockdragging,body.dockdragging *{cursor:grabbing!important;user-select:none;-webkit-user-select:none}
+#dockghost{position:fixed;z-index:1000;pointer-events:none;opacity:.72;margin:0;
+  outline:2px solid var(--acc2);outline-offset:-2px;background:var(--panel);overflow:hidden}
+.dockind{position:fixed;z-index:999;pointer-events:none;background:var(--acc2);
+  box-shadow:0 0 10px var(--acc2);border-radius:2px;display:none}
+.dockdiv{flex:none;width:7px;margin:0 -2px;cursor:ew-resize;touch-action:none;position:relative;z-index:5}
+.dockdiv:hover,.dockdiv.on{background:rgba(45,212,191,.4)}
+#btnDockReset.armed{background:#7f1d1d;border-color:#ef4444;color:#fff}
 #gridzone{border-bottom:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;min-height:0}
 #transport{display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--panel);
   border-bottom:1px solid var(--line);font-size:11px;white-space:nowrap;overflow:hidden}
@@ -172,10 +201,9 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .clip .fxdot{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;
   background:var(--play);box-shadow:0 0 4px rgba(45,212,191,.8)}
 /* ============ clip inspector (dedicated window, not a tab) ============
-   Right-side slide-over docked inside #lowerzone: overlays the browser/
-   props area, never the deck grid (deck lives above in #gridzone). Fixed
+   Right-side slide-over docked inside #main (re-anchored from #lowerzone by
+   the docking system): overlays the workspace, never the deck grid. Fixed
    absolute positioning = zero layout reflow when it opens/closes. */
-#lowerzone{position:relative}
 #clipinsp{position:absolute;top:0;right:0;bottom:0;width:302px;background:var(--panel);
   border-left:1px solid var(--line);z-index:60;display:flex;flex-direction:column;
   transform:translateX(103%);transition:transform .18s ease;
@@ -212,8 +240,10 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
   background:rgba(16,17,20,.94);border-top:1px solid var(--line);padding:8px 12px}
 body.perform #topbar,body.perform #gridzone,body.perform #transport,body.perform #proptabs,body.perform #browser{display:none}
 body.perform #app{grid-template-rows:minmax(0,1fr)}
-body.perform #main{grid-template-rows:minmax(0,1fr)}
-body.perform #lowerzone{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+body.perform .dockpanel{display:none}
+body.perform .dockpanel[data-panel="monitors"]{display:flex}
+body.perform .dockrow{display:none}
+body.perform .dockrow:has(.dockpanel[data-panel="monitors"]){display:flex}
 body.perform #monitors{border-right:none}
 body.perform #outmon{height:auto;flex:1}
 body.perform #pvmon{display:none}
@@ -468,6 +498,7 @@ body.perform #performbar{display:block}
       <option value="low">Low</option>
     </select>
     <button id="btnHelp" title="Keyboard shortcuts (?)">?</button>
+    <button id="btnDockReset" title="Reset panel layout to default">Reset layout</button>
     <button id="btnPerform" title="Perform mode (P)">PERFORM</button>
     <button id="btnFull" title="Fullscreen output (F)">Fullscreen</button>
     <button id="btnPrm" title="Connect to the phone remote via bridge.py">Phone remote</button>
@@ -594,6 +625,329 @@ body.perform #performbar{display:block}
   <button id="btnCtxReload">Reload HoloMapper</button>
 </div>
 
+<script>
+'use strict';
+/* ================= DOCKABLE PANELS (Resolume-style layout) =================
+   #main is a vertical stack of rows; each row holds 1+ columns; each column
+   holds a vertical stack of panels. Drag a panel by its header grip (or the
+   transport's grip handle) and drop it: before/after another panel, into a
+   column's empty space, onto a column edge (splits a new column), or onto a
+   row edge (new row). An insertion indicator shows the exact snap spot.
+   Layout persists in localStorage; Reset layout restores the default. */
+const DOCK_IDS=['deck','transport','monitors','proptabs','browser'];
+const DOCK_TITLES={deck:'Deck',transport:'Transport',monitors:'Monitors',proptabs:'Properties',browser:'Browser'};
+const DOCK_KEY='holomapper.dock.v1';
+let dockLayout=null;
+const dockWraps={}; /* id -> .dockpanel element (inner content preserved) */
+
+function dockDefault(){return{v:1,rows:[
+  {h:'auto',cols:[{w:'1fr',panels:[{id:'deck',size:'auto'}]}]},
+  {h:'32px',cols:[{w:'1fr',panels:[{id:'transport',size:'auto'}]}]},
+  {h:'1fr',cols:[{w:'392px',panels:[{id:'monitors',size:'1fr'}]},
+                 {w:'1fr',panels:[{id:'proptabs',size:'1fr'}]},
+                 {w:'228px',panels:[{id:'browser',size:'1fr'}]}]}
+]};}
+
+function dockFlexDim(d){return d==='auto'?'0 0 auto':(d==='1fr'?'1 1 0':'0 0 '+d);}
+function dockSer(){return JSON.stringify(dockLayout,function(k,v){return k==='_el'?'[el]':v;});}
+
+/* Wrap the existing static sections into dock panels (ids preserved, so all
+   existing builders/listeners keep working). Runs once at boot. */
+function dockWrapPanels(){
+  const bodies={deck:'gridzone',transport:'transport',monitors:'monitors',proptabs:'proptabs',browser:'browser'};
+  for(const id of DOCK_IDS){
+    const p=el('div','dockpanel');p.dataset.panel=id;
+    if(id!=='transport'){
+      const h=el('div','dockhead');
+      h.appendChild(el('span','dgrip','\u28ff\u28ff'));
+      h.appendChild(el('span',null,DOCK_TITLES[id]));
+      h.title='Drag to move the '+DOCK_TITLES[id]+' panel';
+      h.addEventListener('pointerdown',(e)=>dockGripDown(e,id));
+      p.appendChild(h);
+    }
+    const b=el('div','dockbody');
+    b.appendChild($(bodies[id])); /* move existing section in, listeners intact */
+    p.appendChild(b);
+    dockWraps[id]=p;
+  }
+  const tg=el('span','tgrip','\u28ff\u28ff');tg.title='Drag to move the Transport panel';
+  tg.addEventListener('pointerdown',(e)=>dockGripDown(e,'transport'));
+  dockWraps.transport.querySelector('#transport').prepend(tg);
+  /* clip inspector re-anchors to the workspace root (it lived in #lowerzone) */
+  $('main').appendChild($('clipinsp'));
+  const lz=$('lowerzone');if(lz)lz.remove();
+}
+
+function dockRender(){
+  const main=$('main');
+  main.querySelectorAll(':scope > .dockrow').forEach(r=>r.remove());
+  for(let ri=0;ri<dockLayout.rows.length;ri++){const row=dockLayout.rows[ri];
+    const r=el('div','dockrow');r.style.flex=dockFlexDim(row.h);row._el=r;r._mrow=ri;
+    row.cols.forEach((col,ci)=>{
+      if(ci>0){
+        const dv=el('div','dockdiv');dv.title='Drag to resize columns';
+        dv.addEventListener('pointerdown',dockDivDown);
+        r.appendChild(dv);
+      }
+      const c=el('div','dockcol');c.style.flex=dockFlexDim(col.w);col._el=c;c._mcol=col;
+      for(const p of col.panels){
+        const w=dockWraps[p.id];w.style.flex=dockFlexDim(p.size||'1fr');
+        c.appendChild(w);
+      }
+      r.appendChild(c);
+    });
+    main.appendChild(r);
+  }
+}
+
+/* Column resize dividers */
+function dockDivDown(e){
+  e.preventDefault();
+  const dv=e.currentTarget;
+  const le=dv.previousElementSibling,re=dv.nextElementSibling;
+  if(!le||!re||!le._mcol||!re._mcol)return;
+  const lm=le._mcol,rm=re._mcol;
+  const lw=le.getBoundingClientRect().width,rw=re.getBoundingClientRect().width;
+  lm.w=Math.max(80,Math.round(lw))+'px';rm.w=Math.max(80,Math.round(rw))+'px';
+  le.style.flex='0 0 '+lm.w;re.style.flex='0 0 '+rm.w;
+  dv.classList.add('on');
+  const sx=e.clientX;
+  const move=(ev)=>{
+    const d=ev.clientX-sx;
+    const nlw=Math.max(80,Math.round(lw+d)),nrw=Math.max(80,Math.round(rw-d));
+    lm.w=nlw+'px';rm.w=nrw+'px';
+    le.style.flex='0 0 '+nlw+'px';re.style.flex='0 0 '+nrw+'px';
+  };
+  const up=()=>{
+    window.removeEventListener('pointermove',move);
+    window.removeEventListener('pointerup',up);
+    window.removeEventListener('pointercancel',up);
+    dv.classList.remove('on');dockSave();
+  };
+  window.addEventListener('pointermove',move);
+  window.addEventListener('pointerup',up);
+  window.addEventListener('pointercancel',up);
+}
+
+/* ---------- drag & drop ---------- */
+let dockDrag=null,dockInd=null;
+
+function dockGripDown(e,pid){
+  if(e.button!==undefined&&e.button>0)return;
+  e.preventDefault();
+  const sx=e.clientX,sy=e.clientY;let on=false;
+  const move=(ev)=>{
+    if(!on){
+      if(Math.hypot(ev.clientX-sx,ev.clientY-sy)<6)return;
+      on=true;dockStartDrag(pid,sx,sy);
+    }
+    dockDragMove(ev);
+  };
+  const unsub=()=>{
+    window.removeEventListener('pointermove',move);
+    window.removeEventListener('pointerup',up);
+    window.removeEventListener('pointercancel',cancel);
+  };
+  const up=()=>{unsub();if(on)dockEndDrag(true);};
+  const cancel=()=>{unsub();if(on)dockEndDrag(false);};
+  window.addEventListener('pointermove',move);
+  window.addEventListener('pointerup',up);
+  window.addEventListener('pointercancel',cancel);
+}
+
+function dockFind(pid){
+  for(let ri=0;ri<dockLayout.rows.length;ri++){const row=dockLayout.rows[ri];
+    for(let ci=0;ci<row.cols.length;ci++){const col=row.cols[ci];
+      for(let pi=0;pi<col.panels.length;pi++)
+        if(col.panels[pi].id===pid)return{ri,ci,pi,row,col};}}
+  return null;
+}
+function dockLocOfCol(mc){
+  for(let ri=0;ri<dockLayout.rows.length;ri++){
+    const ci=dockLayout.rows[ri].cols.indexOf(mc);if(ci>=0)return{ri,ci};}
+  return null;
+}
+
+function dockStartDrag(pid,sx,sy){
+  if(!dockFind(pid))return;
+  const src=dockWraps[pid],r=src.getBoundingClientRect();
+  const g=src.cloneNode(true);
+  g.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
+  g.removeAttribute('data-panel');
+  g.id='dockghost';
+  g.style.width=r.width+'px';g.style.height=r.height+'px';
+  g.style.left=r.left+'px';g.style.top=r.top+'px';
+  document.body.appendChild(g);
+  src.classList.add('dragsrc');
+  document.body.classList.add('dockdragging');
+  dockDrag={pid,ghost:g,ox:sx-r.left,oy:sy-r.top,op:null,before:dockSer()};
+}
+
+function dockDragMove(ev){
+  const d=dockDrag;if(!d)return;
+  d.ghost.style.left=(ev.clientX-d.ox)+'px';
+  d.ghost.style.top=(ev.clientY-d.oy)+'px';
+  d.op=dockHitTest(ev.clientX,ev.clientY,d.pid);
+  dockShowIndicator(d.op);
+}
+
+function dockHitTest(x,y,pid){
+  const els=document.elementsFromPoint(x,y);
+  let pEl=null,cEl=null,rEl=null;
+  for(const n of els){
+    if(!n.classList)continue;
+    if(!pEl&&n.classList.contains('dockpanel')&&n.dataset.panel&&n.dataset.panel!==pid)pEl=n;
+    else if(!cEl&&n.classList.contains('dockcol'))cEl=n;
+    else if(!rEl&&n.classList.contains('dockrow'))rEl=n;
+    if(pEl&&cEl&&rEl)break;
+  }
+  const E=18,RE=14;
+  if(rEl&&typeof rEl._mrow==='number'){
+    const rr=rEl.getBoundingClientRect();
+    if(y-rr.top<RE)return{t:'newrow',pos:'before',ri:rEl._mrow};
+    if(rr.bottom-y<RE)return{t:'newrow',pos:'after',ri:rEl._mrow};
+  }
+  if(pEl){
+    const r=pEl.getBoundingClientRect(),loc=dockFind(pEl.dataset.panel);
+    if(!loc)return null;
+    if(x-r.left<E)return{t:'newcol',pos:'before',ri:loc.ri,ci:loc.ci};
+    if(r.right-x<E)return{t:'newcol',pos:'after',ri:loc.ri,ci:loc.ci};
+    return{t:'insert',pos:y<r.top+r.height/2?'before':'after',ri:loc.ri,ci:loc.ci,pi:loc.pi};
+  }
+  if(cEl&&cEl._mcol){
+    const r=cEl.getBoundingClientRect(),loc=dockLocOfCol(cEl._mcol);
+    if(!loc)return null;
+    if(x-r.left<E)return{t:'newcol',pos:'before',ri:loc.ri,ci:loc.ci};
+    if(r.right-x<E)return{t:'newcol',pos:'after',ri:loc.ri,ci:loc.ci};
+    return{t:'append',ri:loc.ri,ci:loc.ci};
+  }
+  if(rEl&&typeof rEl._mrow==='number'){
+    const r=rEl.getBoundingClientRect();
+    if(y-r.top<16)return{t:'newrow',pos:'before',ri:rEl._mrow};
+    if(r.bottom-y<16)return{t:'newrow',pos:'after',ri:rEl._mrow};
+  }
+  return null;
+}
+
+function dockShowIndicator(op){
+  if(!dockInd){dockInd=el('div','dockind');document.body.appendChild(dockInd);}
+  if(!op){dockInd.style.display='none';return;}
+  const T=5;let x=0,y=0,w=0,h=0;const L=dockLayout;
+  if(op.t==='insert'){
+    const pm=L.rows[op.ri].cols[op.ci].panels[op.pi];
+    const pr=dockWraps[pm.id].getBoundingClientRect();
+    const cr=L.rows[op.ri].cols[op.ci]._el.getBoundingClientRect();
+    x=cr.left+2;w=Math.max(0,cr.width-4);h=T;
+    y=(op.pos==='before'?pr.top:pr.bottom)-T/2;
+  }else if(op.t==='append'){
+    const col=L.rows[op.ri].cols[op.ci];
+    const cr=col._el.getBoundingClientRect();
+    const last=col.panels[col.panels.length-1];
+    x=cr.left+2;w=Math.max(0,cr.width-4);h=T;
+    y=last?dockWraps[last.id].getBoundingClientRect().bottom-T/2:cr.top+10;
+  }else if(op.t==='newcol'){
+    const cr=L.rows[op.ri].cols[op.ci]._el.getBoundingClientRect();
+    x=(op.pos==='before'?cr.left:cr.right)-T/2;y=cr.top+2;w=T;h=Math.max(0,cr.height-4);
+  }else if(op.t==='newrow'){
+    const rr=L.rows[op.ri]._el.getBoundingClientRect();
+    x=rr.left+2;w=Math.max(0,rr.width-4);h=T;
+    y=(op.pos==='before'?rr.top:rr.bottom)-T/2;
+  }
+  const s=dockInd.style;
+  s.display='block';s.left=x+'px';s.top=y+'px';s.width=w+'px';s.height=h+'px';
+}
+
+function dockEndDrag(commit){
+  const d=dockDrag;dockDrag=null;
+  document.body.classList.remove('dockdragging');
+  if(d){d.ghost.remove();dockWraps[d.pid].classList.remove('dragsrc');}
+  dockShowIndicator(null);
+  if(!d||!commit||!d.op)return;
+  dockApplyOp(d.pid,d.op);
+  dockPrune();
+  if(dockSer()!==d.before){dockRender();dockSave();}
+}
+
+function dockApplyOp(pid,op){
+  const from=dockFind(pid);if(!from)return;
+  const pm=from.col.panels.splice(from.pi,1)[0];
+  if(op.t==='insert'){
+    const col=dockLayout.rows[op.ri].cols[op.ci];
+    let idx=op.pi+(op.pos==='after'?1:0);
+    if(from.ri===op.ri&&from.ci===op.ci&&from.pi<idx)idx--;
+    col.panels.splice(idx,0,pm);
+  }else if(op.t==='append'){
+    dockLayout.rows[op.ri].cols[op.ci].panels.push(pm);
+  }else if(op.t==='newcol'){
+    const row=dockLayout.rows[op.ri];
+    row.cols.splice(op.ci+(op.pos==='after'?1:0),0,{w:'1fr',panels:[pm]});
+  }else if(op.t==='newrow'){
+    dockLayout.rows.splice(op.ri+(op.pos==='after'?1:0),0,{h:'1fr',cols:[{w:'1fr',panels:[pm]}]});
+  }
+}
+
+function dockPrune(){
+  for(const r of dockLayout.rows)r.cols=r.cols.filter(c=>c.panels.length>0);
+  dockLayout.rows=dockLayout.rows.filter(r=>r.cols.length>0);
+  if(!dockLayout.rows.length)dockLayout=dockDefault();
+}
+
+/* ---------- persistence ---------- */
+function dockSave(){try{localStorage.setItem(DOCK_KEY,dockSer());}catch(e){}}
+function dockLoad(){
+  try{
+    const raw=localStorage.getItem(DOCK_KEY);if(!raw)return null;
+    const L=JSON.parse(raw);
+    if(!L||!Array.isArray(L.rows))return null;
+    const ids=[];
+    for(const r of L.rows){
+      if(!Array.isArray(r.cols))return null;
+      for(const c of r.cols){
+        if(!Array.isArray(c.panels))return null;
+        for(const p of c.panels){
+          if(!p||DOCK_IDS.indexOf(p.id)<0)return null;
+          ids.push(p.id);
+        }
+      }
+    }
+    if(ids.length!==DOCK_IDS.length||new Set(ids).size!==ids.length)return null;
+    for(const r of L.rows){
+      if(typeof r.h!=='string')r.h='1fr';
+      for(const c of r.cols){
+        if(typeof c.w!=='string')c.w='1fr';
+        for(const p of c.panels)if(typeof p.size!=='string')p.size='1fr';
+      }
+    }
+    return L;
+  }catch(e){return null;}
+}
+
+/* ---------- reset ---------- */
+let dockResetArm=false,dockResetT=null;
+function dockResetDisarm(){
+  dockResetArm=false;const b=$('btnDockReset');
+  if(b){b.textContent='Reset layout';b.classList.remove('armed');}
+}
+function dockInitReset(){
+  const b=$('btnDockReset');if(!b)return;
+  b.addEventListener('click',()=>{
+    if(!dockResetArm){
+      dockResetArm=true;b.textContent='Sure?';b.classList.add('armed');
+      clearTimeout(dockResetT);dockResetT=setTimeout(dockResetDisarm,4000);return;
+    }
+    clearTimeout(dockResetT);dockResetDisarm();
+    dockLayout=dockDefault();dockRender();dockSave();
+  });
+}
+
+function dockInit(){
+  dockWrapPanels();
+  dockLayout=dockLoad()||dockDefault();
+  dockRender();
+  dockInitReset();
+}
+
+</script>
 <script>
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
@@ -6059,6 +6413,7 @@ function loop(){
 
 /* ================= INIT ================= */
 function init(){
+  dockInit(); /* Resolume-style dockable panels: wraps sections, restores layout */
   S.blackout=false; /* never wake up blacked-out after a reload */
   S.firedCol=null; pendingFires=[];
   if(!validClips(S.clips)) S.clips=defaultClips();
