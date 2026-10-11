@@ -179,6 +179,12 @@ select{max-width:100%}
   background:var(--card2);border:1px solid var(--line);color:var(--txt);
   touch-action:manipulation;cursor:pointer}
 .gbtn.on{background:linear-gradient(160deg,var(--vio),#6d3ff0);border-color:transparent;color:#fff}
+.dbtn{width:100%;min-height:52px;padding:12px 18px;font-size:14px;font-weight:800;border-radius:14px;
+  background:var(--card2);border:1px solid var(--line);color:var(--dim);
+  touch-action:manipulation;cursor:pointer;transition:background .2s,box-shadow .2s}
+.dbtn.armed{background:linear-gradient(160deg,var(--bad),#b91c1c);border-color:transparent;color:#fff;
+  box-shadow:0 4px 20px rgba(240,82,77,.45);animation:dbpulse 1s ease-in-out infinite}
+@keyframes dbpulse{50%{box-shadow:0 4px 30px rgba(240,82,77,.8)}}
 .hint{color:var(--dim);font-size:12px;margin:6px 2px}
 .dim{color:var(--dim)}
 .meterbar{display:flex;gap:6px;align-items:flex-end}
@@ -336,6 +342,9 @@ body.output.pins #btnOutPins{background:rgba(34,211,238,.5);border-color:var(--c
         <span class="meter"><i id="mBass"></i></span><span class="meter"><i id="mMid"></i></span><span class="meter"><i id="mHigh"></i></span>
         <span id="audiostat" class="dim">audio off</span>
       </div>
+      <div class="sect" style="margin-top:14px">Factory reset</div>
+      <button class="dbtn" id="btnResetAll">Reset everything to default</button>
+      <div class="hint" id="resetHint">Clears all settings, FX, clip assignments, and saved presets.</div>
     </div>
   </section>
   <section id="tabMap" class="tscroll" hidden>
@@ -4402,6 +4411,34 @@ function wireNew(){
   $('resSel').addEventListener('change', ()=>{
     S.res=$('resSel').value; buildTargets(); buildMapTarget(); refitCanvas(); saveState();
   });
+  /* Factory reset: two-step confirm. First tap arms (red, pulsing), second tap
+     within 5s clears every persisted key and reloads to true factory defaults. */
+  let resetArmT=0;
+  const disarmReset=()=>{
+    const b=$('btnResetAll'); if(!b||!resetArmT) return;
+    resetArmT=0; b.classList.remove('armed');
+    b.textContent='Reset everything to default';
+  };
+  $('btnResetAll').addEventListener('click', e=>{
+    e.stopPropagation();
+    if(!resetArmT){
+      resetArmT=Date.now();
+      const b=$('btnResetAll');
+      b.classList.add('armed');
+      b.textContent='TAP AGAIN TO CONFIRM \u2014 clears everything';
+      setTimeout(()=>{ if(resetArmT && Date.now()-resetArmT>=5000) disarmReset(); },5100);
+    }else{
+      try{
+        [LS_STATE,LS_MIDI,LS_PRESETS,'holomapper.mobile.seen']
+          .forEach(k=>localStorage.removeItem(k));
+      }catch(err){/* private mode — reload still resets the session */}
+      location.reload();
+    }
+  });
+  document.addEventListener('pointerdown', e=>{
+    if(resetArmT && !(e.target&&e.target.closest&&e.target.closest('#btnResetAll')))
+      disarmReset();
+  }, true);
   wireHandles(); wireMask(); wireOutput();
   document.addEventListener('click', e=>{
     const m=$('clipmenu');

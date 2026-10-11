@@ -766,3 +766,9 @@ Try first: drag any Shadertoy .txt onto the app — it lands in SOURCES and fire
 - Screenshots: checks/px_fx_tab.png (grouped FX tab), px_swirl_on.png, px_halftone_on.png, px_plasma_on.png.
 - holomapper.html untouched (mtime 2026-10-09, pre-session).
 - Known limits: default-on Grain/Vignette cards preserve old look; old mobile presets' vig/grain values render slightly differently (new formulas); starfield's 60-iteration loop is the heaviest single effect on weak GPUs.
+
+## Factory reset button (2026-10-10 — checks/reset_check.mjs)
+- NEW: **RESET EVERYTHING** in Mix tab > Setup (bottom of the section, `.dbtn#btnResetAll`). Idle = quiet dark button ("Reset everything to default"); first tap arms it (red gradient, pulsing glow, label "TAP AGAIN TO CONFIRM — clears everything"); second tap within 5s clears all persisted keys + `location.reload()`. Tapping anywhere else or the 5s timeout disarms.
+- Keys cleared: `holomapper.state.v1` (all params/FX/clips/layers/resolution), `holomapper.midi.v1` (bindings), `holomapper.presets.v1` (saved presets), `holomapper.mobile.seen` (first-run flag — its absence re-triggers the factory first-run path, which is the correct factory behavior).
+- Verification: **16/16 PASS** — non-default state built (fired clip, swirl prism FX on, macro moved, res changed, preset saved), arm clears nothing, elsewhere-tap disarms, confirm reloads to true defaults (bpm 120, res 960x540 first-run, swirl bypassed, macro 0.5, preset gone, fired synced to factory [0,2,1,3] as init() does on every boot), zero page errors. Screenshot: checks/reset_armed.png.
+- Known limits: none — destructive action is two-tap gated and the reload guarantees no stale in-memory state.
