@@ -138,6 +138,9 @@ input[type=range]::-moz-range-track{height:12px;border-radius:7px;
 input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;
   background:#fff;border:3px solid var(--vio);box-shadow:0 0 14px rgba(139,92,246,.9)}
 /* ---------- FX cards ---------- */
+.fxgroup{font-size:12px;font-weight:900;letter-spacing:.22em;color:var(--vio);
+  margin:18px 2px 8px;text-transform:uppercase;opacity:.9}
+.fxgroup:first-child{margin-top:2px}
 .fxcard{background:linear-gradient(180deg,var(--card2),var(--card));
   border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:12px}
 .fxcard.offx{opacity:.55}
@@ -752,8 +755,38 @@ defParam('P.gamt',  'Glitch Amt',   0.35);
 defParam('P.bri',   'Brightness',   0.5, v=>0.2+v*1.6,      v=>(0.2+v*1.6).toFixed(2));
 defParam('P.con',   'Contrast',     0.5, v=>v*2,            v=>(v*2).toFixed(2));
 defParam('P.sat',   'Saturation',   0.5, v=>v*2,            v=>(v*2).toFixed(2));
-defParam('P.vig',   'Vignette',     0.28,v=>v*0.9,          v=>Math.round(v*90)+'%');
-defParam('P.grain', 'Grain',        0.2, v=>v*0.25,         v=>Math.round(v*25)+'%');
+defParam('P.vig',   'Vignette',     0.3, v=>v,              v=>Math.round(v*100)+'%');
+defParam('P.grain', 'Grain',        0.2, v=>v,              v=>Math.round(v*100)+'%');
+/* Prism Cam port: effect keys (uniform u_<key>, bypass S.postBypass['px_'+key]).
+   vig/grain default ON to preserve the old grade look; everything else OFF. */
+const PX_KEYS=['swirl','bulge','wave','pixel','vhs','hue','poster','duo','invert',
+  'edge','scan','grain','vig','halo','spin','tunnel','pulse','flow','drift',
+  'stars','rays','shake','prism','plasma'];
+const PX_DEFAULT_BYPASS=Object.fromEntries(PX_KEYS.map(k=>['px_'+k,!(k==='vig'||k==='grain')]));
+/* ---- Prism Cam FX params (ported from Jaiye's Prism Cam — see SRC_PRISM).
+   0..1 slider values; maps reproduce Jaiye's FXDEF slider ranges. ---- */
+defParam('P.px_swirl','Swirl',     0.4, v=>v*10,            v=>(v*10).toFixed(1));
+defParam('P.px_bulge','Bulge',     0.5, v=>v*2,             v=>(v*2).toFixed(2));
+defParam('P.px_wave', 'Wave',      0.5, v=>v*2,             v=>(v*2).toFixed(2));
+defParam('P.px_pixel','Pixel Size',0.3, v=>Math.round(8+v*112), v=>Math.round(8+v*112)+'px');
+defParam('P.px_vhs',  'VHS',       0.7);
+defParam('P.px_hue',  'Hue Cycle', 0.5, v=>v*2,             v=>(v*2).toFixed(2)+'x');
+defParam('P.px_poster','Posterize',1/3, v=>Math.round(2+v*6), v=>Math.round(2+v*6)+' lv');
+defParam('P.px_duo',  'Duotone',   0.8);
+defParam('P.px_invert','Invert',    1.0);
+defParam('P.px_edge', 'Contour',   1.0);
+defParam('P.px_scan', 'Scanlines', 0.5);
+defParam('P.px_spin', 'Spin',      0.5, v=>v*2,             v=>(v*2).toFixed(2)+'x');
+defParam('P.px_tunnel','Tunnel',   0.5, v=>v*2,             v=>(v*2).toFixed(2)+'x');
+defParam('P.px_pulse','Pulse',     0.5, v=>v*2,             v=>(v*2).toFixed(2)+'x');
+defParam('P.px_flow', 'Flow',      0.5, v=>v*2,             v=>(v*2).toFixed(2)+'x');
+defParam('P.px_drift','Drift',     0.5, v=>v*2,             v=>(v*2).toFixed(2)+'x');
+defParam('P.px_stars','Starfield', 0.5, v=>v*2,             v=>(v*2).toFixed(2)+'x');
+defParam('P.px_rays', 'Rays',      0.5, v=>v*2,             v=>(v*2).toFixed(2)+'x');
+defParam('P.px_shake','Shake',     0.5, v=>v*2,             v=>(v*2).toFixed(2)+'x');
+defParam('P.px_prism','Prism',     0.5, v=>v*2,             v=>(v*2).toFixed(2)+'x');
+defParam('P.px_plasma','Plasma',    0.5, v=>v*2,            v=>(v*2).toFixed(2)+'x');
+defParam('P.px_halo', 'Halftone',  2/3, v=>v*1.5,          v=>(v*1.5).toFixed(2)+'x');
 defParam('P.aamt',  'Audio Amount', 0.8);
 defParam('P.srate', 'Strobe Rate',  1/3, v=>1+v*9,          v=>(1+v*9).toFixed(1)+'Hz');
 defParam('P.samt',  'Strobe Amt',   0.5, v=>v*0.85,         v=>Math.round(v*85)+'%');
@@ -822,7 +855,7 @@ function defaultState(){
     ],
     clips:defaultClips(), fired:[null,null,null,null],
     params:params, assigns:{},
-    postBypass:{feedback:false, kaleido:true, glitch:true},
+    postBypass:Object.assign({feedback:false, kaleido:true, glitch:true}, PX_DEFAULT_BYPASS),
     strobeOn:false, beatSync:false, bpm:120, blackout:false,
     macros:Array.from({length:8},(_,i)=>({label:'M'+(i+1), val:0.5})),
     midi:[], pluginCode:PLUGIN_DEFAULT, mods:defaultMods()
@@ -1183,6 +1216,201 @@ void main(){
 }
 `;
 
+/* ================= PRISM CAM FX (ported) =================
+   FX adapted from Jaiye's Prism Cam — github.com/Dawnjaiye/Dawnjaiye
+   (docs/index.html, FS_FX uber-shader). Adapted to mobile's conventions
+   (u_tex/v_uv/O naming); includes the 23 effects mobile didn't have.
+   Skipped (already covered): kaleido, trails/echo, rgb split, glitch,
+   feedback. Vignette + grain MOVED here from the grade pass so every
+   effect lives in exactly one place (P.vig/P.grain param ids kept, so
+   old presets carry over). */
+const SRC_PRISM = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform vec2 u_res, u_texel;
+uniform float u_time;
+uniform float u_bypass;
+uniform float u_swirl,u_bulge,u_wave,u_pixel;
+uniform float u_vhs;
+uniform float u_hue,u_poster,u_duo,u_invert;
+uniform float u_edge,u_scan,u_grain,u_vig,u_halo;
+uniform float u_spin,u_tunnel,u_pulse,u_flow,u_drift;
+uniform float u_stars,u_rays,u_shake;
+uniform float u_prism,u_plasma;
+float hash(float n){return fract(sin(n*127.1)*43758.5453);}
+float hash2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+vec3 rgb2hsv(vec3 c){
+  vec4 K=vec4(0.0,-1.0/3.0,2.0/3.0,-1.0);
+  vec4 p=mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g));
+  vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r));
+  float d=q.x-min(q.w,q.y); float e=1.0e-10;
+  return vec3(abs(q.z+(q.w-q.y)/(6.0*d+e)),d/(q.x+e),q.x);
+}
+vec3 hsv2rgb(vec3 c){
+  vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);
+  vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www);
+  return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);
+}
+float lumAt(vec2 p){return dot(texture(u_tex,p).rgb,vec3(0.299,0.587,0.114));}
+void main(){
+  vec3 c0 = texture(u_tex,v_uv).rgb;
+  if(u_bypass>0.5){ O = vec4(c0,1.0); return; }
+  float t=u_time;
+  vec2 uv=v_uv;
+  if(u_swirl>0.001){
+    vec2 c=uv-0.5; float r=length(c);
+    float ang=u_swirl*exp(-r*r*7.0);
+    float s=sin(ang),co=cos(ang);
+    uv=vec2(co*c.x-s*c.y,s*c.x+co*c.y)+0.5;
+  }
+  if(u_bulge>0.001){
+    vec2 c=uv-0.5; float r=length(c);
+    uv=c*(1.0-u_bulge*0.38*exp(-r*r*8.0))+0.5;
+  }
+  if(u_wave>0.001){
+    uv.x+=sin(uv.y*24.0+t*3.0)*0.022*u_wave;
+    uv.y+=cos(uv.x*20.0-t*2.2)*0.022*u_wave;
+  }
+  if(u_spin>0.001){
+    vec2 c=uv-0.5;
+    float a=t*0.9*u_spin;
+    float s=sin(a),co=cos(a);
+    uv=vec2(co*c.x-s*c.y,s*c.x+co*c.y)+0.5;
+  }
+  if(u_tunnel>0.001){
+    vec2 c=uv-0.5; float r=length(c);
+    float puls=1.0+0.32*u_tunnel*sin(t*2.2*u_tunnel-r*9.0);
+    uv=c*puls+0.5;
+  }
+  if(u_pulse>0.001){
+    vec2 c=uv-0.5; float r=max(length(c),1e-4);
+    float w=sin(r*30.0-t*4.5*u_pulse)*0.035*u_pulse;
+    uv+=c/r*w;
+  }
+  if(u_flow>0.001){
+    vec2 p=uv*3.0;
+    float n1=sin(p.x*2.1+t*0.7)+sin(p.y*1.7-t*0.5)+sin((p.x+p.y)*1.3+t*0.3);
+    float n2=cos(p.x*1.9-t*0.6)+cos(p.y*2.3+t*0.4)+cos((p.x-p.y)*1.1-t*0.2);
+    uv+=vec2(n1,n2)*0.028*u_flow;
+    vec2 q=uv*5.0-vec2(n1,n2)*0.8;
+    uv+=vec2(sin(q.y*2.0+t*1.1),cos(q.x*2.0-t*0.9))*0.014*u_flow;
+  }
+  if(u_drift>0.001){
+    float row=floor(uv.y*24.0);
+    float ph=hash(row*7.13)*6.2831;
+    uv.x+=sin(t*1.3*u_drift+ph)*0.07*u_drift;
+  }
+  if(u_shake>0.001){
+    float st=floor(t*18.0);
+    vec2 sh=(vec2(hash2(vec2(st,1.7)),hash2(vec2(st,9.2)))-0.5)*0.055*u_shake;
+    uv+=sh;
+  }
+  vec2 chroma=vec2(0.0);
+  if(u_vhs>0.001) chroma.x=sin(uv.y*90.0+t*13.0)*0.004*u_vhs;
+  if(u_pixel>0.5){
+    vec2 grid=vec2(u_pixel,u_pixel*u_res.y/u_res.x);
+    uv=(floor(uv*grid)+0.5)/grid;
+  }
+  vec3 col;
+  if(u_vhs>0.001){
+    vec2 roff=chroma;
+    col=vec3(texture(u_tex,uv+roff).r,texture(u_tex,uv).g,texture(u_tex,uv-roff).b);
+  }else{
+    col=texture(u_tex,uv).rgb;
+  }
+  if(u_vhs>0.001){
+    float barPos=fract(t*0.11);
+    float bar=smoothstep(0.045,0.0,abs(v_uv.y-barPos));
+    col=mix(col,vec3(0.85,0.9,0.95),bar*0.5*u_vhs);
+    float n=hash2(vec2(floor(v_uv.x*240.0),floor(v_uv.y*135.0))+floor(t*24.0)*0.37);
+    col+=(n-0.5)*0.22*u_vhs;
+    col*=1.0-0.10*u_vhs;
+  }
+  if(u_prism>0.001){
+    vec2 c=uv-0.5; float r=max(length(c),1e-4);
+    vec2 dir=c/r;
+    float off=(0.004+0.011*(0.5+0.5*sin(t*1.6)))*u_prism;
+    col.r=texture(u_tex,uv+dir*off*r*2.5).r;
+    col.b=texture(u_tex,uv-dir*off*r*2.5).b;
+  }
+  if(u_plasma>0.001){
+    vec2 p=uv*4.0;
+    float pl=sin(p.x*1.5+t*0.6)+sin(p.y*2.0-t*0.4)+sin((p.x+p.y)*1.2+t*0.5)+sin(length(p)*1.8-t*0.7);
+    pl=pl*0.25+0.5;
+    vec3 pc=mix(vec3(0.10,0.20,0.90),vec3(0.90,0.30,0.70),pl);
+    pc=mix(pc,vec3(0.20,0.90,0.80),0.5+0.5*sin(pl*6.2831+t*0.8));
+    col=mix(col,pc,0.38*clamp(u_plasma,0.0,1.5));
+  }
+  if(u_hue>0.001){
+    vec3 hsv=rgb2hsv(col);
+    hsv.x=fract(hsv.x+t*0.06*u_hue);
+    hsv.y=clamp(hsv.y*(0.7+0.6*u_hue),0.0,1.0);
+    col=hsv2rgb(hsv);
+  }
+  if(u_poster>0.5) col=floor(col*u_poster+0.5)/u_poster;
+  if(u_duo>0.001){
+    float g=dot(col,vec3(0.299,0.587,0.114));
+    col=mix(col,mix(vec3(0.015,0.02,0.07),vec3(1.0,0.85,0.55),g),u_duo);
+  }
+  if(u_invert>0.001) col=mix(col,vec3(1.0)-col,u_invert);
+  if(u_edge>0.001){
+    vec2 e=u_texel;
+    float tl=lumAt(uv+vec2(-e.x,-e.y)), tc=lumAt(uv+vec2(0.0,-e.y)), tr=lumAt(uv+vec2(e.x,-e.y));
+    float ml=lumAt(uv+vec2(-e.x,0.0)), mr=lumAt(uv+vec2(e.x,0.0));
+    float bl=lumAt(uv+vec2(-e.x,e.y)), bc=lumAt(uv+vec2(0.0,e.y)), br=lumAt(uv+vec2(e.x,e.y));
+    float gx=-tl-2.0*ml-bl+tr+2.0*mr+br;
+    float gy=-tl-2.0*tc-tr+bl+2.0*bc+br;
+    float line=smoothstep(0.12,0.5,sqrt(gx*gx+gy*gy));
+    vec3 glow=vec3(0.72,0.84,1.0)*(0.5+1.1*line);
+    col=mix(col,col*0.10+glow*line,u_edge);
+  }
+  if(u_rays>0.001){
+    vec2 c=uv-0.5; c.x*=u_res.x/u_res.y;
+    float a=atan(c.y,c.x);
+    float ry=pow(0.5+0.5*sin(a*16.0+t*0.9*u_rays),3.0);
+    float m=smoothstep(0.75,0.08,length(c));
+    col+=vec3(1.0,0.82,0.55)*ry*m*0.38*u_rays;
+  }
+  if(u_stars>0.001){
+    vec2 sp=uv-0.5; sp.x*=u_res.x/u_res.y;
+    vec3 acc=vec3(0.0);
+    for(int i=0;i<3;i++){
+      float fi=float(i);
+      for(int j=0;j<20;j++){
+        float fj=float(j);
+        float h1=hash2(vec2(fj*12.9+fi*7.0,fi*78.2));
+        float h2=hash2(vec2(fj*39.3+fi*3.0,fi*11.7+5.0));
+        float h3=hash2(vec2(fj*73.7,fi*5.3+9.0));
+        float ang=h1*6.2831+fi*2.094;
+        float z=fract(h2-t*(0.05+0.30*h3)*u_stars);
+        float rr=(1.0-z); rr*=rr;
+        vec2 pos=vec2(cos(ang),sin(ang))*rr*0.85;
+        float d=length(sp-pos);
+        float tw=0.6+0.4*sin(t*9.0*h1+h2*40.0);
+        float b=smoothstep(0.018,0.0,d)*z*tw;
+        acc+=mix(vec3(0.60,0.75,1.0),vec3(1.0,0.88,0.70),h3)*b;
+      }
+    }
+    col+=acc*0.6*min(u_stars,1.5);
+  }
+  if(u_halo>0.001){
+    vec2 g=uv*u_res/7.0;
+    float lum=dot(col,vec3(0.299,0.587,0.114));
+    float pulse=1.0+0.22*clamp(u_halo,0.0,1.5)*sin(t*2.5);
+    float rad=clamp((1.0-lum)*0.72*pulse,0.0,0.72);
+    float d=length(fract(g)-0.5);
+    float ink=smoothstep(rad,rad-0.10,d);
+    vec3 ht=mix(vec3(0.94,0.93,0.90),vec3(0.03,0.03,0.06),ink);
+    col=mix(col,ht,clamp(u_halo,0.0,1.0));
+  }
+  if(u_scan>0.001) col*=1.0-u_scan*0.22*(0.5+0.5*sin(v_uv.y*u_res.y*3.14159));
+  if(u_grain>0.001) col+=(hash2(v_uv*913.7+fract(t)*7.31)-0.5)*0.28*u_grain;
+  if(u_vig>0.001){vec2 vc=v_uv-0.5; col*=1.0-u_vig*1.1*dot(vc,vc);}
+  O=vec4(col,1.0);
+}`;
+
 const SRC_GRADE = `#version 300 es
 precision highp float;
 out vec4 O;
@@ -1191,27 +1419,17 @@ uniform sampler2D u_tex;
 uniform float u_bri;
 uniform float u_con;
 uniform float u_sat2;
-uniform float u_vig;
-uniform float u_grain;
 uniform float u_time;
 uniform float u_master;
 uniform float u_strobeOn;
 uniform float u_strobeRate;
 uniform float u_strobeAmt;
-float h21(vec2 p){
-  vec3 p3 = fract(vec3(p.xyx)*0.1031);
-  p3 += dot(p3,p3.yzx+33.33);
-  return fract((p3.x+p3.y)*p3.z);
-}
 void main(){
   vec3 c = texture(u_tex,v_uv).rgb;
   c = (c-0.5)*u_con+0.5;
   c *= u_bri;
   float l = dot(c,vec3(0.299,0.587,0.114));
   c = mix(vec3(l),c,clamp(u_sat2,0.0,3.0));
-  vec2 q = v_uv-0.5;
-  c *= 1.0-u_vig*smoothstep(0.05,0.95,dot(q,q)*2.4);
-  c += (h21(v_uv*vec2(1723.0,983.0)+fract(u_time)*17.0)-0.5)*u_grain;
   if(u_strobeOn>0.5){
     float s = step(0.5,fract(u_time*u_strobeRate));
     c *= mix(1.0,s,u_strobeAmt);
@@ -1325,7 +1543,7 @@ function buildTargets(){
   layerT=[makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true)];
   compT=makeTarget(RW,RH);
   fbT=[makeTarget(RW,RH),makeTarget(RW,RH)];
-  postT=[makeTarget(RW,RH),makeTarget(RW,RH)];
+  postT=[makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH)]; /* [2] = prism pass */
   bloomT=[makeTarget(RW>>1,RH>>1),makeTarget(RW>>1,RH>>1)]; /* v1.2 bloom chain */
   fbRead=0;
   const all=[...layerT,compT,...fbT,...postT];
@@ -1350,6 +1568,7 @@ function compileAll(){
     ['feedback',SRC_FEEDBACK],
     ['kaleido', SRC_KALEIDO],
     ['glitch',  SRC_GLITCH],
+    ['prism',   SRC_PRISM],
     ['grade',   SRC_GRADE],
     ['copy',    SRC_COPY],
     ['bloombp', SRC_BLOOMBP],
@@ -2408,17 +2627,43 @@ function renderGlitch(t){
   gl.uniform1f(U(P,'u_bypass'),S.postBypass.glitch?1:0);
   quadDraw();
 }
+/* Prism Cam FX pass (ported from Jaiye's Prism Cam). One fullscreen pass
+   for all 23 ported effects; each card toggles S.postBypass['px_'+id] and
+   drives its amount param. u_bypass copies through when nothing is on. */
+function renderPrism(t){
+  const P=PROG.prism;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,postT[2].fb);
+  gl.viewport(0,0,RW,RH);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,postT[1].tex);
+  gl.uniform2f(U(P,'u_res'),RW,RH);
+  gl.uniform2f(U(P,'u_texel'),1/RW,1/RH);
+  gl.uniform1f(U(P,'u_time'),t);
+  const px=(uname,pid)=>{ gl.uniform1f(U(P,uname), S.postBypass['px_'+uname.slice(2)]?0:PARAMS[pid].map(eff(pid))); };
+  let anyOn=false;
+  for(const k of PX_KEYS){ if(!S.postBypass['px_'+k]){ anyOn=true; break; } }
+  px('u_swirl','P.px_swirl'); px('u_bulge','P.px_bulge'); px('u_wave','P.px_wave');
+  px('u_pixel','P.px_pixel'); px('u_vhs','P.px_vhs');
+  px('u_hue','P.px_hue'); px('u_poster','P.px_poster'); px('u_duo','P.px_duo');
+  px('u_invert','P.px_invert');
+  px('u_edge','P.px_edge'); px('u_scan','P.px_scan');
+  px('u_grain','P.grain'); px('u_vig','P.vig'); px('u_halo','P.px_halo');
+  px('u_spin','P.px_spin'); px('u_tunnel','P.px_tunnel'); px('u_pulse','P.px_pulse');
+  px('u_flow','P.px_flow'); px('u_drift','P.px_drift');
+  px('u_stars','P.px_stars'); px('u_rays','P.px_rays'); px('u_shake','P.px_shake');
+  px('u_prism','P.px_prism'); px('u_plasma','P.px_plasma');
+  gl.uniform1f(U(P,'u_bypass'),anyOn?0:1);
+  quadDraw();
+}
 function renderGrade(t){
   const P=PROG.grade;
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   gl.viewport(0,0,canvas.width,canvas.height);
   gl.useProgram(P);
-  setTex(P,'u_tex',0,postT[1].tex);
+  setTex(P,'u_tex',0,postT[2].tex);
   gl.uniform1f(U(P,'u_bri'),PARAMS['P.bri'].map(eff('P.bri')));
   gl.uniform1f(U(P,'u_con'),PARAMS['P.con'].map(eff('P.con')));
   gl.uniform1f(U(P,'u_sat2'),PARAMS['P.sat'].map(eff('P.sat')));
-  gl.uniform1f(U(P,'u_vig'),PARAMS['P.vig'].map(eff('P.vig')));
-  gl.uniform1f(U(P,'u_grain'),PARAMS['P.grain'].map(eff('P.grain')));
   gl.uniform1f(U(P,'u_time'),t);
   gl.uniform1f(U(P,'u_master'),PARAMS['P.master'].map(eff('P.master'))*(S.blackout?0:1));
   quadDraw();
@@ -3090,8 +3335,7 @@ function buildPostFx(){
 function buildMaster(){
   const host=$('master'); host.innerHTML='';
   paramRow(host,'P.bri','Bright'); paramRow(host,'P.con','Contrast');
-  paramRow(host,'P.sat','Satur.'); paramRow(host,'P.vig','Vignette');
-  paramRow(host,'P.grain','Grain'); paramRow(host,'P.aamt','Audio amt');
+  paramRow(host,'P.sat','Satur.'); paramRow(host,'P.aamt','Audio amt');
   const h=el('div','fxhead');
   h.appendChild(mkSpan(null,'Strobe'));
   const lab=el('label','ck byp');
@@ -3354,12 +3598,10 @@ function renderGradeTex(t){
   gl.bindFramebuffer(gl.FRAMEBUFFER,mapSrcT.fb);
   gl.viewport(0,0,RW,RH);
   gl.useProgram(P);
-  setTex(P,'u_tex',0,postT[1].tex);
+  setTex(P,'u_tex',0,postT[2].tex);
   gl.uniform1f(U(P,'u_bri'),PARAMS['P.bri'].map(eff('P.bri')));
   gl.uniform1f(U(P,'u_con'),PARAMS['P.con'].map(eff('P.con')));
   gl.uniform1f(U(P,'u_sat2'),PARAMS['P.sat'].map(eff('P.sat')));
-  gl.uniform1f(U(P,'u_vig'),PARAMS['P.vig'].map(eff('P.vig')));
-  gl.uniform1f(U(P,'u_grain'),PARAMS['P.grain'].map(eff('P.grain')));
   gl.uniform1f(U(P,'u_time'),t);
   gl.uniform1f(U(P,'u_master'),PARAMS['P.master'].map(eff('P.master'))*(S.blackout?0:1));
   quadDraw();
@@ -3683,20 +3925,53 @@ function mBigSlider(parent, pid, label){
   return sl;
 }
 
-/* ---- FX tab: big toggle cards, 1–2 chunky sliders each ----
-   NOTE: the mobile engine (v1.2-era) ships Trails / Kaleido / RGB Split /
-   Color-grade / Strobe. Desktop's newer Mirror / Auto Mask / Colorize /
-   Bloom are NOT in this engine — porting them is a separate engine task. */
+/* ---- FX tab: big toggle cards, 1–2 chunky sliders each, grouped like
+   Prism Cam (Warp / Time / Color / Look / Motion).
+   Engine: Trails / Kaleido / RGB Split / Color-grade / Strobe (own passes)
+   + 23 Prism Cam FX ported from Jaiye's Prism Cam
+   (github.com/Dawnjaiye/Dawnjaiye) in the single SRC_PRISM pass.
+   Desktop's newer Mirror / Auto Mask / Colorize / Bloom are NOT in this
+   engine — porting them is a separate engine task. */
 const FXDEFS=[
-  {key:'feedback', name:'Trails',    sub:'feedback melt',      params:[['P.trails','Amount'],['P.zoom','Zoom']]},
-  {key:'kaleido',  name:'Kaleido',   sub:'kaleidoscope',       params:[['P.kseg','Slices'],['P.kang','Spin']]},
-  {key:'glitch',   name:'RGB Split', sub:'glitchy color split',params:[['P.gamt','Amount']]},
-  {key:null,       name:'Color',     sub:'grade',              params:[['P.sat','Saturation'],['P.con','Contrast']]},
-  {key:'strobe',   name:'Strobe',    sub:'flash', strobe:true, params:[['P.srate','Rate']]},
+  {group:'Warp', key:'kaleido', name:'Kaleido', sub:'kaleidoscope', params:[['P.kseg','Slices'],['P.kang','Spin']]},
+  {group:'Warp', key:'px_swirl', name:'Swirl', sub:'twist warp', params:[['P.px_swirl','Swirl']]},
+  {group:'Warp', key:'px_bulge', name:'Bulge', sub:'lens bulge', params:[['P.px_bulge','Bulge']]},
+  {group:'Warp', key:'px_wave', name:'Wave', sub:'liquid wave', params:[['P.px_wave','Wave']]},
+  {group:'Warp', key:'px_pixel', name:'Pixelate', sub:'chunky pixels', params:[['P.px_pixel','Size']]},
+  {group:'Time', key:'feedback', name:'Trails', sub:'feedback melt', params:[['P.trails','Amount'],['P.zoom','Zoom']]},
+  {group:'Time', key:'glitch', name:'RGB Split', sub:'glitchy color split', params:[['P.gamt','Amount']]},
+  {group:'Time', key:'px_vhs', name:'VHS', sub:'tape damage', params:[['P.px_vhs','VHS']]},
+  {group:'Time', key:'strobe', name:'Strobe', sub:'flash', strobe:true, params:[['P.srate','Rate']]},
+  {group:'Color', key:null, name:'Color', sub:'grade', params:[['P.sat','Saturation'],['P.con','Contrast']]},
+  {group:'Color', key:'px_hue', name:'Hue Cycle', sub:'color spin', params:[['P.px_hue','Cycle']]},
+  {group:'Color', key:'px_poster', name:'Posterize', sub:'banded color', params:[['P.px_poster','Levels']]},
+  {group:'Color', key:'px_duo', name:'Duotone', sub:'two-tone', params:[['P.px_duo','Duo']]},
+  {group:'Color', key:'px_invert', name:'Invert', sub:'negative', params:[['P.px_invert','Invert']]},
+  {group:'Color', key:'px_prism', name:'Prism', sub:'chromatic rays', params:[['P.px_prism','Prism']]},
+  {group:'Color', key:'px_plasma', name:'Plasma', sub:'liquid light', params:[['P.px_plasma','Plasma']]},
+  {group:'Look', key:'px_edge', name:'Contour', sub:'edge lines', params:[['P.px_edge','Lines']]},
+  {group:'Look', key:'px_scan', name:'Scanlines', sub:'crt lines', params:[['P.px_scan','Scan']]},
+  {group:'Look', key:'px_grain', name:'Grain', sub:'film grain', params:[['P.grain','Grain']]},
+  {group:'Look', key:'px_vig', name:'Vignette', sub:'edge darken', params:[['P.vig','Vignette']]},
+  {group:'Look', key:'px_halo', name:'Halftone', sub:'print dots', params:[['P.px_halo','Halftone']]},
+  {group:'Motion', key:'px_spin', name:'Spin', sub:'rotate', params:[['P.px_spin','Spin']]},
+  {group:'Motion', key:'px_tunnel', name:'Tunnel', sub:'zoom pulse', params:[['P.px_tunnel','Tunnel']]},
+  {group:'Motion', key:'px_pulse', name:'Pulse', sub:'ripple rings', params:[['P.px_pulse','Pulse']]},
+  {group:'Motion', key:'px_flow', name:'Flow', sub:'liquid drift', params:[['P.px_flow','Flow']]},
+  {group:'Motion', key:'px_drift', name:'Drift', sub:'row drift', params:[['P.px_drift','Drift']]},
+  {group:'Motion', key:'px_stars', name:'Starfield', sub:'warp stars', params:[['P.px_stars','Stars']]},
+  {group:'Motion', key:'px_rays', name:'Rays', sub:'light rays', params:[['P.px_rays','Rays']]},
+  {group:'Motion', key:'px_shake', name:'Shake', sub:'camera shake', params:[['P.px_shake','Shake']]},
 ];
 function buildFxCards(){
   const host=$('fxHost'); if(!host) return; host.innerHTML='';
+  let lastGroup=null;
   FXDEFS.forEach(fx=>{
+    if(fx.group!==lastGroup){
+      lastGroup=fx.group;
+      const gh=el('div','fxgroup'); gh.textContent=fx.group;
+      host.appendChild(gh);
+    }
     const card=el('div','fxcard');
     const head=el('div','fxchead');
     const nm=el('div','fxname'); nm.innerHTML=fx.name+'<span class="sub">'+fx.sub+'</span>';
@@ -4078,6 +4353,7 @@ function loop(){
   renderFeedback();
   renderKaleido();
   renderGlitch(t);
+  renderPrism(t);
   renderGradeTex(t);
   renderMap();
   frames++;
