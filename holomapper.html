@@ -122,10 +122,9 @@ details.sec>summary .x{color:var(--dim);font-weight:400;font-size:10px;text-tran
 #plugerr{color:var(--bad);font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;
   white-space:pre-wrap;margin-top:6px;max-height:120px;overflow:auto}
 #plugok{color:var(--ok);font-size:11px;margin-top:6px}
-/* ---- shadertoy .txt drop (v1.4) ---- */
-#drophl{position:fixed;inset:0;z-index:999;display:none;pointer-events:none;border:3px dashed var(--acc2);background:rgba(45,212,191,.07);border-radius:14px;margin:10px;}
-#drophl.on{display:block;}
-#drophl .dtxt{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:800;color:#fff;background:rgba(10,12,16,.88);padding:16px 26px;border-radius:12px;border:1px solid var(--acc2);white-space:nowrap;}
+/* ---- shadertoy .txt drop (v1.4; per-clip highlight, 2026-10-11) ---- */
+.clip.drophl{border-color:var(--play);box-shadow:0 0 14px rgba(45,212,191,.75);outline:2px solid var(--play);outline-offset:-2px}
+.clip.drophl .cthumb,.clip.drophl .cname{color:#fff}
 #shtoast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:1000;display:flex;flex-direction:column;gap:8px;max-width:min(600px,92vw);}
 .sht{background:#14171d;border:1px solid var(--line);border-left:4px solid var(--ok);color:#e8ecf1;border-radius:10px;padding:10px 14px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.55);white-space:pre-wrap;word-break:break-word;max-height:38vh;overflow:auto;}
 .sht.err{border-left-color:var(--bad);}
@@ -206,8 +205,8 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
   color:var(--dim);font-size:9px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;
   align-items:stretch;justify-content:center;text-align:center;padding:0;line-height:1.15;user-select:none;overflow:hidden}
 .clip .cthumb{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;padding:2px}
-.clip .cname{flex:none;font-size:8px;color:var(--dim);border-top:1px solid #23262c;padding:1px 2px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clip .cname{flex:none;font-size:11px;line-height:1.25;color:var(--dim);border-top:1px solid #23262c;padding:8px 4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .clip:hover{border-color:var(--sel)}
 .clip:hover .cname{color:var(--txt)}
 .clip.fired{border-color:var(--play);box-shadow:0 0 8px rgba(45,212,191,.45)}
@@ -5244,6 +5243,30 @@ async function loadShaderFiles(files){
   }
   buildDeck(); buildSrcBrowser(); buildProps(); saveState();
 }
+/* Import dropped shader files and assign the FIRST one to a specific clip
+   slot (per-clip drop target, 2026-10-11). Selects + quantized-fires it,
+   like clicking the clip's fire box. Extra files become Sources entries. */
+async function loadShaderFilesOnto(files, i, k){
+  const list=Array.from(files||[]).filter(f=>/\.(txt|glsl|frag|fs)$/i.test(f.name||''));
+  if(!list.length){ shtoast('No .txt / .glsl / .frag shader files in that drop.'); return; }
+  let firstIdx=-1, firstName=null;
+  for(const f of list){
+    let text=null;
+    try{ text=await f.text(); }catch(e){}
+    if(text===null){ shtoast('Could not read '+f.name, true); continue; }
+    const idx=importShader(f.name, text);
+    if(idx<0){ shtoast(f.name+' FAILED:\n'+lastGlslErr, true, 12000); continue; }
+    if(firstIdx<0){ firstIdx=idx; firstName=S.imports[idx-5].name; }
+  }
+  if(firstIdx>=0){
+    S.clips[i][k]=firstIdx;
+    selectClip(i,k);
+    openClipInspector(i,k);
+    fireClip(i,k);
+    shtoast('Imported "'+firstName+'" \u2192 clip C'+(k+1)+' on '+LAYER_NAMES[i]+' (fired)');
+  }
+  buildDeck(); buildSrcBrowser(); buildProps(); saveState();
+}
 /* Drag & drop wiring + iMouse tracking. */
 function initShaderIO(){
   const glc=$('gl');
@@ -5257,15 +5280,32 @@ function initShaderIO(){
     glc.addEventListener('mousedown',()=>{ shMouse[2]=shMouse[0]; shMouse[3]=shMouse[1]; });
   }
   if(document.body._shdrop) return; document.body._shdrop=true;
-  const hl=document.createElement('div'); hl.id='drophl';
-  hl.innerHTML='<div class="dtxt">Drop .txt shader file(s) to import</div>';
-  document.body.appendChild(hl);
-  let depth=0;
   const hasF=e=>e.dataTransfer && Array.from(e.dataTransfer.types||[]).indexOf('Files')>=0;
-  document.addEventListener('dragenter',e=>{ if(!hasF(e))return; e.preventDefault(); depth++; hl.classList.add('on'); });
-  document.addEventListener('dragover',e=>{ if(!hasF(e))return; e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
-  document.addEventListener('dragleave',e=>{ if(!hasF(e))return; e.preventDefault(); depth=Math.max(0,depth-1); if(!depth) hl.classList.remove('on'); });
-  document.addEventListener('drop',e=>{ if(!hasF(e))return; e.preventDefault(); depth=0; hl.classList.remove('on'); loadShaderFiles(e.dataTransfer.files); });
+  /* Per-clip drop highlight (2026-10-11): only the hovered .clip glows, never
+     the whole screen. Flicker-free: the highlight only changes when
+     closest('.clip') actually changes; dragleave checks relatedTarget so
+     moving between a clip's children doesn't clear it. */
+  const clipAt=e=>(e.target&&e.target.closest)?e.target.closest('.clip'):null;
+  let dropClipEl=null;
+  const setDropClip=c=>{
+    if(dropClipEl===c) return;
+    if(dropClipEl) dropClipEl.classList.remove('drophl');
+    dropClipEl=c;
+    if(dropClipEl) dropClipEl.classList.add('drophl');
+  };
+  document.addEventListener('dragenter',e=>{ if(!hasF(e))return; e.preventDefault(); setDropClip(clipAt(e)); });
+  document.addEventListener('dragover',e=>{ if(!hasF(e))return; e.preventDefault(); e.dataTransfer.dropEffect='copy'; setDropClip(clipAt(e)); });
+  document.addEventListener('dragleave',e=>{
+    if(!hasF(e))return; e.preventDefault();
+    const to=(e.relatedTarget&&e.relatedTarget.closest)?e.relatedTarget.closest('.clip'):null;
+    if(to!==dropClipEl) setDropClip(to);
+  });
+  document.addEventListener('drop',e=>{
+    if(!hasF(e))return; e.preventDefault();
+    const c=clipAt(e); setDropClip(null);
+    if(c&&c.dataset.i!==undefined&&c.dataset.k!==undefined) loadShaderFilesOnto(e.dataTransfer.files,+c.dataset.i,+c.dataset.k);
+    else loadShaderFiles(e.dataTransfer.files);
+  });
 }
 
 /* ================= PRESETS ================= */
