@@ -5,203 +5,198 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
 <title>HoloMapper Mobile</title>
 <style>
-/* ============ HoloMapper Mobile v5 — touch-first, HoloWatts energy ============
-   Phone-app idioms: bottom tab bar, big thumb targets, native momentum
-   scrolling. The desktop stays the technical one; this one is for play. */
+/* ============ HoloMapper Mobile v6 — desktop paradigm, phone fit ============
+   The desktop instrument (deck, columns, transport, inspector, macros) with
+   phone ergonomics: big touch targets, horizontal strip scrolling, bottom
+   sheets. Desktop's semantic-color language: teal = live, amber = queued /
+   armed, red = destructive. */
 :root{
-  --bg:#07080d; --bg2:#0a0c15;
-  --card:#121524; --card2:#181c31;
-  --line:#262c49;
-  --txt:#f0f2ff; --dim:#8f96bb;
-  --vio:#8b5cf6; --cy:#22d3ee; --pk:#f472b6;
-  --ok:#34d399; --warn:#f5a623; --bad:#f0524d;
-  --r:16px;
+  --bg:#0b0d12; --panel:#14161c; --panel2:#1a1d24;
+  --line:#23262e; --line2:#2e323c;
+  --txt:#e8eaee; --dim:#878b94;
+  --teal:#2dd4bf; --amber:#fbbf24; --red:#f87171;
+  --r:12px;
   --sat:env(safe-area-inset-bottom,0px);
+  --satT:env(safe-area-inset-top,0px);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{
-  background:radial-gradient(130% 80% at 50% -10%, #171331 0%, var(--bg) 58%) fixed, var(--bg);
-  color:var(--txt);
+  background:var(--bg); color:var(--txt);
   font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
   display:flex;flex-direction:column;height:100dvh;overflow:hidden;
   user-select:none;-webkit-user-select:none;
   text-size-adjust:100%;-webkit-text-size-adjust:100%;
 }
-/* ---------- top bar ---------- */
-#topbar{flex:none;display:flex;align-items:center;gap:10px;padding:10px 14px;
-  background:rgba(10,12,21,.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  border-bottom:1px solid var(--line);z-index:20}
-.brand{font-weight:900;font-size:17px;letter-spacing:.5px;
-  background:linear-gradient(90deg,var(--vio),var(--cy),var(--pk));
-  -webkit-background-clip:text;background-clip:text;color:transparent}
-.vtag{font-size:10px;font-weight:700;color:var(--dim);border:1px solid var(--line);
-  border-radius:20px;padding:2px 9px;letter-spacing:.5px}
-.sp{flex:1}
-#fps{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
-.icobtn{width:44px;height:44px;flex:none;border-radius:14px;font-size:20px;
-  background:var(--card);border:1px solid var(--line);color:var(--txt);
-  display:flex;align-items:center;justify-content:center;touch-action:manipulation;cursor:pointer}
+button{font:inherit;color:inherit}
 /* ---------- stage ---------- */
-#stage{position:relative;flex:1 1 32%;min-height:180px;background:#000;
-  border-bottom:1px solid var(--line)}
-#gl{position:absolute;inset:0;width:100%;height:100%;display:block;background:#000;touch-action:none}
-/* ---------- tab body: every tab scrolls natively ---------- */
-#tabbody{flex:1 1 54%;min-height:0;position:relative}
-.tscroll{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;
-  -webkit-overflow-scrolling:touch;touch-action:pan-y;
-  padding:12px 12px calc(22px + var(--sat));}
-.tscroll[hidden]{display:none!important}
-/* ---------- bottom tab bar ---------- */
-#tabbar{flex:none;display:flex;background:rgba(10,12,21,.94);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  border-top:1px solid var(--line);padding:6px 4px calc(6px + var(--sat));z-index:20}
-#tabbar button{flex:1;min-width:0;background:none;border:none;color:var(--dim);border-radius:14px;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
-  padding:8px 0 7px;min-height:62px;touch-action:manipulation;cursor:pointer}
-#tabbar button i{font-style:normal;font-size:23px;line-height:1.1}
-#tabbar button span{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}
-#tabbar button.on{color:#fff;background:linear-gradient(180deg,rgba(139,92,246,.28),rgba(34,211,238,.10))}
-#tabbar button.on i{background:linear-gradient(90deg,var(--vio),var(--cy));
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-  filter:drop-shadow(0 0 7px rgba(139,92,246,.85))}
-/* ---------- section titles ---------- */
-.sect{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-  color:var(--dim);margin:14px 2px 8px}
-.sect:first-child{margin-top:2px}
-/* ---------- layer chips ---------- */
-.lchips{display:flex;gap:8px}
-.lchip{flex:1;min-width:0;min-height:54px;border-radius:var(--r);font-weight:900;font-size:16px;
-  background:var(--card);border:1px solid var(--line);color:var(--txt);
-  touch-action:manipulation;cursor:pointer;position:relative;
-  display:flex;align-items:center;justify-content:center;gap:6px}
-.lchip .dot{width:8px;height:8px;border-radius:50%;background:#3a4160}
-.lchip.hasclip .dot{background:var(--cy);box-shadow:0 0 6px var(--cy)}
-.lchip.on{color:#fff;border-color:transparent;
-  background:linear-gradient(160deg,hsl(var(--h) 85% 48% / .55),hsl(var(--h) 90% 32% / .30));
-  box-shadow:0 0 16px hsl(var(--h) 90% 60% / .45)}
-/* ---------- clip pads & cards ---------- */
-.clipad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.clipbtn{min-height:70px;border-radius:var(--r);background:var(--card);
-  border:1px solid var(--line);color:var(--txt);font-weight:700;font-size:12px;
-  touch-action:manipulation;cursor:pointer;display:flex;align-items:center;justify-content:center;
-  text-align:center;padding:6px;line-height:1.25}
-.clipbtn.fired{border-color:var(--cy);color:#fff;
-  background:linear-gradient(160deg,rgba(139,92,246,.5),rgba(34,211,238,.28));
-  box-shadow:0 0 18px rgba(34,211,238,.5),inset 0 0 14px rgba(139,92,246,.3)}
-.clipbtn.empty{border-style:dashed;color:var(--dim);background:transparent;font-size:20px}
-.clipbtn.queued{outline:2px dashed var(--warn);outline-offset:-8px}
-.clipgrid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.clipcard{min-height:96px;border-radius:var(--r);background:var(--card);
-  border:1px solid var(--line);color:var(--txt);touch-action:manipulation;cursor:pointer;
-  display:flex;flex-direction:column;align-items:flex-start;justify-content:center;
-  padding:12px;text-align:left}
-.clipcard .cn{font-weight:800;font-size:15px}
-.clipcard .cs{font-size:11px;color:var(--dim);margin-top:2px}
-.clipcard.fired{border-color:var(--cy);
-  background:linear-gradient(160deg,rgba(139,92,246,.5),rgba(34,211,238,.28));
-  box-shadow:0 0 18px rgba(34,211,238,.5)}
-.clipcard.fired .cs{color:#dff}
+#stage{position:relative;flex:none;height:24dvh;min-height:170px;background:#000;border-bottom:1px solid var(--line)}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#hud{position:absolute;top:calc(6px + var(--satT));left:10px;right:10px;display:flex;align-items:center;gap:8px;z-index:5;pointer-events:none}
+#hud>*{pointer-events:auto}
+.brand{font-weight:900;font-size:15px;letter-spacing:.4px;color:var(--txt)}
+.brand em{font-style:normal;color:var(--teal)}
+.vtag{font-size:10px;font-weight:700;color:var(--dim);border:1px solid var(--line2);border-radius:20px;padding:2px 8px}
+.sp{flex:1}
+#fps{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+.icobtn{min-width:44px;min-height:44px;border-radius:12px;background:rgba(20,22,28,.85);
+  border:1px solid var(--line2);color:var(--txt);font-size:17px;touch-action:manipulation}
 /* ---------- transport ---------- */
-.trow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.tbtn2{min-height:48px;padding:10px 14px;font-size:13px;font-weight:800;
-  background:var(--card);border:1px solid var(--line);border-radius:14px;color:var(--txt);
-  touch-action:manipulation;cursor:pointer}
-.tbtn2.on{background:linear-gradient(160deg,var(--vio),#6d3ff0);border-color:transparent;color:#fff;
-  box-shadow:0 0 14px rgba(139,92,246,.55)}
-#btnTap{min-height:56px;padding:10px 26px;font-size:16px}
-#bpmBig{font-size:26px;font-weight:900;min-width:64px;text-align:center;
-  font-variant-numeric:tabular-nums;
-  background:linear-gradient(90deg,var(--cy),var(--pk));
-  -webkit-background-clip:text;background-clip:text;color:transparent}
-.tsm{font-size:10px;color:var(--dim);font-weight:700}
-#btnBlackout{min-height:56px;flex:1;font-size:14px;letter-spacing:1px}
-#btnBlackout.armed{background:linear-gradient(160deg,#f5a623,#e08300);border-color:transparent;color:#201503;
-  box-shadow:0 0 18px rgba(245,166,35,.6)}
-.ckrow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);
-  font-weight:700;min-height:44px}
-/* ---------- chunky sliders ---------- */
-.srow{margin:6px 0 10px}
-.srow .slab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
-.srow .slab label{font-size:13px;font-weight:700}
-.srow .sval{font-size:12px;color:var(--cy);font-variant-numeric:tabular-nums;font-weight:700}
-input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:44px;background:transparent;
-  touch-action:pan-y;cursor:pointer;display:block}
-input[type=range]::-webkit-slider-runnable-track{height:12px;border-radius:7px;
-  background:linear-gradient(90deg,var(--vio),var(--cy));
-  box-shadow:inset 0 2px 4px rgba(0,0,0,.55)}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:32px;height:32px;
-  margin-top:-10px;border-radius:50%;background:#fff;border:3px solid var(--vio);
-  box-shadow:0 0 14px rgba(139,92,246,.9)}
-input[type=range]::-moz-range-track{height:12px;border-radius:7px;
-  background:linear-gradient(90deg,var(--vio),var(--cy))}
-input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;
-  background:#fff;border:3px solid var(--vio);box-shadow:0 0 14px rgba(139,92,246,.9)}
-/* ---------- FX cards ---------- */
-.fxgroup{font-size:12px;font-weight:900;letter-spacing:.22em;color:var(--vio);
-  margin:18px 2px 8px;text-transform:uppercase;opacity:.9}
-.fxgroup:first-child{margin-top:2px}
-.fxcard{background:linear-gradient(180deg,var(--card2),var(--card));
-  border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:12px}
+#transport{flex:none;display:flex;gap:6px;align-items:center;overflow-x:auto;
+  padding:8px 10px;background:var(--panel);border-bottom:1px solid var(--line);
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+#transport::-webkit-scrollbar{display:none}
+.tbtn2{flex:none;min-width:52px;min-height:48px;padding:8px 10px;border-radius:10px;
+  background:var(--panel2);border:1px solid var(--line2);color:var(--txt);
+  font-weight:800;font-size:12px;touch-action:manipulation;white-space:nowrap}
+.tbtn2:active{background:#242832}
+.tbtn2.on{background:rgba(45,212,191,.18);border-color:var(--teal);color:var(--teal)}
+.tbtn2.armed{background:rgba(248,113,113,.16);border-color:var(--red);color:var(--red)}
+#bpmBig{flex:none;font-size:20px;font-weight:900;color:var(--txt);min-width:56px;text-align:center;
+  font-variant-numeric:tabular-nums}
+.bpmlab{flex:none;font-size:10px;color:var(--dim);font-weight:700}
+/* ---------- column bar ---------- */
+#colbar{flex:none;background:var(--panel);border-bottom:1px solid var(--line);padding:6px 10px}
+#colbtns{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+#colbtns::-webkit-scrollbar{display:none}
+.collab{flex:none;font-size:10px;font-weight:800;color:var(--dim);letter-spacing:.08em;align-self:center}
+.colbtn{flex:none;min-width:52px;min-height:44px;border-radius:10px;background:var(--panel2);
+  border:1px solid var(--line2);color:var(--dim);font-weight:800;font-size:13px;touch-action:manipulation}
+.colbtn.conn{background:rgba(45,212,191,.2);border-color:var(--teal);color:var(--teal);
+  box-shadow:0 0 12px rgba(45,212,191,.35)}
+.colbtn.queued{background:rgba(251,191,36,.16);border-color:var(--amber);color:var(--amber);
+  animation:qpulse 1s infinite}
+@keyframes qpulse{50%{box-shadow:0 0 14px rgba(251,191,36,.5)}}
+/* ---------- deck ---------- */
+#deckWrap{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  padding:8px 0 calc(8px + var(--sat));touch-action:pan-y}
+.lstrip{margin:0 10px 10px;border:1px solid var(--line);border-radius:var(--r);
+  border-left:4px solid hsl(var(--lhue,200) 85% 60%);background:var(--panel);overflow:hidden}
+.lstrip.sel{border-color:hsl(var(--lhue,200) 85% 60%)}
+.lhead{display:flex;align-items:center;gap:6px;padding:8px 10px 4px}
+.ltab{flex:none;min-width:48px;min-height:44px;border-radius:10px;font-weight:900;font-size:15px;
+  background:hsl(var(--lhue,200) 60% 22%);border:1px solid hsl(var(--lhue,200) 70% 45%);
+  color:#fff;touch-action:manipulation}
+.lsrc{flex:1;font-size:12px;color:var(--dim);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbtn{flex:none;min-width:40px;min-height:40px;border-radius:9px;background:var(--panel2);
+  border:1px solid var(--line2);color:var(--dim);font-weight:800;touch-action:manipulation}
+.tbtn.onB{background:rgba(251,191,36,.18);border-color:var(--amber);color:var(--amber)}
+.tbtn.onS{background:rgba(45,212,191,.18);border-color:var(--teal);color:var(--teal)}
+.tbtn.bClr{color:var(--dim)}
+.cstrip{display:flex;gap:8px;overflow-x:auto;padding:4px 10px 10px;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x pan-y}
+.cstrip::-webkit-scrollbar{display:none}
+.clip{flex:none;width:84px;border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:var(--panel2)}
+.clip.fired{border-color:var(--teal);box-shadow:0 0 12px rgba(45,212,191,.35)}
+.clip.selc{outline:2px solid var(--amber);outline-offset:-2px}
+.cbox{display:block;width:100%;min-height:58px;background:#101218;border:none;border-bottom:1px solid var(--line);
+  color:var(--txt);font-weight:800;font-size:12px;touch-action:manipulation;padding:6px 4px}
+.clip.fired .cbox{background:rgba(45,212,191,.14);color:var(--teal)}
+.clip.empty .cbox{color:var(--dim);border-bottom-style:dashed}
+.cname{display:block;width:100%;min-height:38px;background:none;border:none;color:var(--dim);
+  font-size:10px;font-weight:700;touch-action:manipulation;padding:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clip.selc .cname{color:var(--amber)}
+/* ---------- dock ---------- */
+#dock{flex:none;display:flex;background:var(--panel);border-top:1px solid var(--line);
+  padding:6px 4px calc(6px + var(--sat));z-index:20}
+#dock button{flex:1;min-height:58px;border:none;background:none;color:var(--dim);
+  font-size:10px;font-weight:800;letter-spacing:.04em;border-radius:10px;touch-action:manipulation}
+#dock button i{display:block;font-style:normal;font-size:19px;margin-bottom:2px}
+#dock button.on{color:var(--teal);background:rgba(45,212,191,.1)}
+/* ---------- bottom sheet ---------- */
+#sheetBack{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:44;opacity:0;pointer-events:none;transition:opacity .22s}
+#sheetBack.open{opacity:1;pointer-events:auto}
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:45;max-height:74dvh;display:flex;flex-direction:column;
+  background:var(--panel);border-top:1px solid var(--line2);border-radius:18px 18px 0 0;
+  transform:translateY(103%);transition:transform .25s ease;box-shadow:0 -12px 40px rgba(0,0,0,.5)}
+#sheet.open{transform:translateY(0)}
+#sheetGrab{flex:none;padding:10px;display:flex;align-items:center;gap:10px;touch-action:manipulation;cursor:pointer}
+#sheetGrab::before{content:"";position:absolute;left:50%;top:8px;transform:translateX(-50%);width:44px;height:4px;border-radius:2px;background:var(--line2)}
+#sheetTitle{font-weight:900;font-size:14px;letter-spacing:.06em;color:var(--txt);margin-left:4px}
+#sheetX{margin-left:auto;min-width:40px;min-height:40px;border-radius:10px;background:var(--panel2);
+  border:1px solid var(--line2);color:var(--dim);font-size:16px}
+#sheetBody{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  padding:4px 14px calc(20px + var(--sat));touch-action:pan-y}
+/* ---------- inspector ---------- */
+.inspHead{display:flex;align-items:center;gap:8px;margin:6px 0 10px}
+.inspId{font-weight:900;font-size:15px;letter-spacing:.03em}
+.badge{font-size:10px;font-weight:900;letter-spacing:.06em;padding:3px 9px;border-radius:20px}
+.badge.live{background:rgba(45,212,191,.18);color:var(--teal);border:1px solid var(--teal)}
+.badge.queue{background:rgba(251,191,36,.16);color:var(--amber);border:1px solid var(--amber);animation:qpulse 1s infinite}
+.pvwrap{border-radius:12px;overflow:hidden;border:1px solid var(--line2);background:#000;margin-bottom:12px}
+.pvwrap canvas{width:100%;height:auto;display:block;aspect-ratio:16/9}
+.secttl{font-size:11px;font-weight:900;letter-spacing:.08em;color:var(--dim);margin:14px 0 8px;text-transform:uppercase}
+.srcchips{display:flex;flex-wrap:wrap;gap:8px}
+.srcchip{flex:1 1 28%;min-height:52px;border-radius:12px;background:var(--panel2);border:1px solid var(--line2);
+  color:var(--txt);font-weight:800;font-size:13px;touch-action:manipulation}
+.srcchip.on{background:rgba(45,212,191,.16);border-color:var(--teal);color:var(--teal)}
+.inspParams{margin-top:4px}
+.prow{margin:10px 0}
+.pline{display:flex;align-items:center;gap:10px}
+.pline label{flex:none;width:76px;font-size:12px;color:var(--dim);font-weight:700}
+.pline input[type=range]{flex:1;min-height:44px;touch-action:pan-y}
+.pval{flex:none;min-width:52px;text-align:right;font-size:12px;color:var(--teal);font-variant-numeric:tabular-nums}
+.psub{display:flex;align-items:center;gap:8px;margin-top:2px;padding-left:86px}
+.mlab{font-size:10px;color:var(--dim)}
+.msel{flex:none;min-height:36px;background:var(--panel2);border:1px solid var(--line2);color:var(--txt);border-radius:8px;font-size:12px}
+.mdep{flex:1;min-height:36px}
+.inspAct{display:flex;gap:10px;margin:16px 0 6px}
+.abtn{flex:1;min-height:56px;border-radius:14px;font-weight:900;font-size:15px;border:1px solid var(--line2);
+  background:var(--panel2);color:var(--txt);touch-action:manipulation}
+.abtn.primary{background:rgba(45,212,191,.16);border-color:var(--teal);color:var(--teal)}
+.abtn.danger{color:var(--red);border-color:rgba(248,113,113,.4)}
+.segrow{display:flex;align-items:center;gap:10px;margin:10px 0}
+.seglab{flex:1;font-size:13px;font-weight:700}
+.segbtn{flex:1;min-height:52px;border-radius:12px;background:var(--panel2);border:1px solid var(--line2);
+  color:var(--txt);font-weight:800;touch-action:manipulation}
+.segbtn.on{background:rgba(45,212,191,.16);border-color:var(--teal);color:var(--teal)}
+.segrow input[type=checkbox]{width:28px;height:28px;accent-color:var(--teal)}
+.hint{font-size:12px;color:var(--dim);margin:8px 0}
+/* ---------- FX browser ---------- */
+.fxgroup{font-size:11px;font-weight:900;letter-spacing:.1em;color:var(--teal);margin:16px 0 8px;text-transform:uppercase}
+.fxcard{background:var(--panel2);border:1px solid var(--line2);border-radius:14px;padding:12px;margin-bottom:10px}
 .fxcard.offx{opacity:.55}
-.fxchead{display:flex;align-items:center;gap:12px;margin-bottom:4px}
-.fxname{font-weight:900;font-size:16px;flex:1}
-.fxname .sub{display:block;font-size:11px;font-weight:600;color:var(--dim);margin-top:1px}
-.fxswitch{width:64px;height:38px;flex:none;border-radius:22px;border:1px solid var(--line);
-  background:#0a0c14;position:relative;touch-action:manipulation;cursor:pointer}
-.fxswitch::after{content:'';position:absolute;top:3px;left:4px;width:30px;height:30px;border-radius:50%;
-  background:#3a4160;transition:left .15s,background .15s}
-.fxswitch.on{border-color:var(--cy);box-shadow:0 0 12px rgba(34,211,238,.45)}
-.fxswitch.on::after{left:28px;background:linear-gradient(160deg,var(--cy),var(--vio))}
-/* ---------- mix rows ---------- */
-.mixrow{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-  padding:10px 12px 4px;margin-bottom:10px}
-.mixhead{display:flex;align-items:center;gap:8px}
-.mixname{font-weight:900;font-size:15px;flex:1}
-.minibtn{min-width:44px;min-height:40px;border-radius:12px;font-size:12px;font-weight:800;
-  background:var(--card2);border:1px solid var(--line);color:var(--dim);
-  touch-action:manipulation;cursor:pointer}
-.minibtn.onB{background:var(--warn);border-color:var(--warn);color:#201503}
-.minibtn.onS{background:var(--ok);border-color:var(--ok);color:#06251a}
-.macroslid{margin:4px 0 8px}
-/* ---------- presets / settings ---------- */
-.prowcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-  padding:12px;margin-bottom:12px}
-input[type=text],select{background:#0a0c14;color:var(--txt);border:1px solid var(--line);
-  border-radius:12px;padding:10px 12px;font-size:14px;min-height:44px}
-input[type=text]{width:100%}
-select{max-width:100%}
-.btnrow{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
-.abtn{min-height:48px;padding:10px 18px;font-size:14px;font-weight:800;border-radius:14px;
-  background:linear-gradient(160deg,var(--vio),#6d3ff0);border:none;color:#fff;
-  touch-action:manipulation;cursor:pointer;box-shadow:0 4px 16px rgba(139,92,246,.35)}
-.gbtn{min-height:48px;padding:10px 16px;font-size:13px;font-weight:700;border-radius:14px;
-  background:var(--card2);border:1px solid var(--line);color:var(--txt);
-  touch-action:manipulation;cursor:pointer}
-.gbtn.on{background:linear-gradient(160deg,var(--vio),#6d3ff0);border-color:transparent;color:#fff}
-.dbtn{width:100%;min-height:52px;padding:12px 18px;font-size:14px;font-weight:800;border-radius:14px;
-  background:var(--card2);border:1px solid var(--line);color:var(--dim);
-  touch-action:manipulation;cursor:pointer;transition:background .2s,box-shadow .2s}
-.dbtn.armed{background:linear-gradient(160deg,var(--bad),#b91c1c);border-color:transparent;color:#fff;
-  box-shadow:0 4px 20px rgba(240,82,77,.45);animation:dbpulse 1s ease-in-out infinite}
-@keyframes dbpulse{50%{box-shadow:0 4px 30px rgba(240,82,77,.8)}}
-.hint{color:var(--dim);font-size:12px;margin:6px 2px}
-.dim{color:var(--dim)}
-.meterbar{display:flex;gap:6px;align-items:flex-end}
-.meter{width:26px;background:#0a0c14;border:1px solid var(--line);border-radius:6px;
-  position:relative;overflow:hidden;height:44px;flex:none}
-.meter i{position:absolute;bottom:0;left:0;right:0;height:0%;
-  background:linear-gradient(180deg,var(--pk),var(--vio))}
-/* ---------- columns ---------- */
-.colscroll{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;
-  scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
-.colscroll::-webkit-scrollbar{display:none}
-.colbtn{flex:0 0 60px;min-width:60px;min-height:52px;border-radius:14px;font-size:13px;font-weight:800;
-  background:var(--card);border:1px solid var(--line);color:var(--dim);
-  touch-action:manipulation;cursor:pointer}
-.colbtn.conn{background:linear-gradient(160deg,var(--cy),#0ea5c9);border-color:transparent;color:#04252c;
-  box-shadow:0 0 14px rgba(34,211,238,.55)}
-/* ---------- map tab (keep engine overlays working) ---------- */
+.fxchead{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.fxname{flex:1;font-weight:900;font-size:15px}
+.fxname .sub{display:block;font-size:11px;color:var(--dim);font-weight:600}
+.fxswitch{flex:none;width:62px;height:38px;border-radius:20px;background:#2a2e38;border:1px solid var(--line2);
+  position:relative;touch-action:manipulation}
+.fxswitch::after{content:"";position:absolute;top:3px;left:4px;width:28px;height:28px;border-radius:50%;background:#6b7280;transition:left .15s}
+.fxswitch.on{background:rgba(45,212,191,.25);border-color:var(--teal)}
+.fxswitch.on::after{left:26px;background:var(--teal)}
+.srow{margin:8px 0}
+.slab{display:flex;align-items:center;margin-bottom:2px}
+.slab label{flex:1;font-size:13px;font-weight:700}
+.sval{font-size:12px;color:var(--teal);font-variant-numeric:tabular-nums}
+.srow input[type=range]{width:100%;min-height:48px;touch-action:pan-y}
+/* ---------- mix / setup ---------- */
+.mixrow{background:var(--panel2);border:1px solid var(--line2);border-radius:14px;padding:10px 12px;margin-bottom:10px}
+.mixhead{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.mixname{flex:1;font-weight:900;font-size:14px}
+.minibtn{flex:none;min-width:44px;min-height:44px;border-radius:10px;background:var(--panel);
+  border:1px solid var(--line2);color:var(--dim);font-weight:900;touch-action:manipulation}
+.minibtn.onS{background:rgba(45,212,191,.18);border-color:var(--teal);color:var(--teal)}
+.minibtn.onB{background:rgba(251,191,36,.18);border-color:var(--amber);color:var(--amber)}
+.prowcard{background:var(--panel2);border:1px solid var(--line2);border-radius:14px;padding:12px;margin-bottom:10px}
+.btnrow{display:flex;gap:8px;margin:8px 0}
+.gbtn{flex:1;min-height:52px;border-radius:12px;background:var(--panel);border:1px solid var(--line2);
+  color:var(--txt);font-weight:800;font-size:13px;touch-action:manipulation}
+.txtin,.dsel{width:100%;min-height:52px;border-radius:12px;background:var(--panel);border:1px solid var(--line2);
+  color:var(--txt);font-size:14px;padding:0 12px;margin:4px 0}
+.trow{display:flex;align-items:center;gap:8px;margin:8px 0}
+.meter{flex:1;height:10px;background:#101218;border-radius:6px;overflow:hidden}
+.meter i{display:block;height:100%;width:0%;background:var(--teal)}
+.dim{font-size:12px;color:var(--dim)}
+.dbtn{width:100%;min-height:56px;border-radius:14px;background:var(--panel2);border:1px solid var(--line2);
+  color:var(--dim);font-weight:800;font-size:14px;touch-action:manipulation}
+.dbtn.armed{background:rgba(248,113,113,.16);border-color:var(--red);color:var(--red);animation:qpulse 1s infinite}
+/* ---------- toast ---------- */
+#toast{position:fixed;left:50%;bottom:calc(96px + var(--sat));transform:translateX(-50%) translateY(20px);
+  background:#1e2129;border:1px solid var(--line2);color:var(--txt);border-radius:12px;
+  padding:12px 18px;font-size:13px;font-weight:700;max-width:92vw;text-align:center;z-index:90;
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* ---------- map overlay (engine) ---------- */
 #mapWrap{position:absolute;inset:0;z-index:30;display:none;pointer-events:none}
 #mapWrap.on{display:block}
 #mapcv{position:absolute;inset:0;width:100%;height:100%;pointer-events:auto;touch-action:none}
@@ -210,161 +205,98 @@ select{max-width:100%}
 #handles.on{display:block}
 body.output.pins #handles{display:block!important}
 .chandle{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;
-  background:rgba(34,211,238,.18);border:3px dashed var(--cy);pointer-events:auto;touch-action:none;
+  background:rgba(45,212,191,.18);border:3px dashed var(--teal);pointer-events:auto;touch-action:none;
   color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;
   font-size:18px;text-shadow:0 1px 3px #000}
-.chandle.sel{background:rgba(139,92,246,.45);border-color:var(--vio)}
+.chandle.sel{background:rgba(45,212,191,.45);border-color:var(--teal)}
 .surfrow{display:flex;align-items:center;gap:8px;padding:8px;margin-bottom:8px;
-  background:var(--card);border:1px solid var(--line);border-radius:12px}
+  background:var(--panel2);border:1px solid var(--line2);border-radius:12px}
 .sname{flex:1;font-weight:800}
 .seg{display:flex;gap:8px;margin:8px 0}
 .seg button{flex:1;min-height:48px;border-radius:14px;font-weight:800;
-  background:var(--card);border:1px solid var(--line);color:var(--txt);
-  touch-action:manipulation;cursor:pointer}
-.seg button.on{background:linear-gradient(160deg,var(--vio),#6d3ff0);border-color:transparent;color:#fff}
+  background:var(--panel2);border:1px solid var(--line2);color:var(--txt);touch-action:manipulation}
+.seg button.on{background:rgba(45,212,191,.16);border-color:var(--teal);color:var(--teal)}
 .nudge{display:grid;grid-template-columns:repeat(3,56px);gap:6px;justify-content:center;margin:8px 0}
-.nudge button{min-height:52px;border-radius:12px;font-size:18px;background:var(--card2);
-  border:1px solid var(--line);color:var(--txt);touch-action:manipulation}
-details.cgrp{margin:8px 0;background:var(--card);border:1px solid var(--line);border-radius:12px}
-details.cgrp>summary{cursor:pointer;font-weight:800;font-size:13px;color:var(--cy);
-  padding:10px 12px;list-style:none}
+.nudge button{min-height:52px;border-radius:12px;font-size:18px;background:var(--panel2);
+  border:1px solid var(--line2);color:var(--txt);touch-action:manipulation}
+details.cgrp{margin:8px 0;background:var(--panel2);border:1px solid var(--line2);border-radius:12px}
+details.cgrp>summary{cursor:pointer;font-weight:800;font-size:13px;color:var(--teal);padding:10px 12px;list-style:none}
 details.cgrp>summary::-webkit-details-marker{display:none}
-.dsel{min-height:44px}
-/* ---------- floating bits ---------- */
-#clipmenu{position:fixed;z-index:95;display:none;background:#151a2e;max-height:70dvh;overflow-y:auto;
-  -webkit-overflow-scrolling:touch;border:1px solid var(--vio);border-radius:14px;
-  box-shadow:0 12px 40px rgba(0,0,0,.6);min-width:190px;padding:6px}
-#clipmenu button{display:block;width:100%;text-align:left;margin:2px 0;padding:12px;
-  background:none;border:none;border-radius:10px;color:var(--txt);font-size:14px;
-  touch-action:manipulation;cursor:pointer}
-#clipmenu button:active{background:rgba(139,92,246,.25)}
-#errbanner{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:200;display:none;
-  background:#2a0f14;border:1px solid var(--bad);color:#ffd9d9;border-radius:12px;
-  padding:10px 16px;font-size:13px;max-width:92vw}
-#errbanner.show{display:block}
+/* ---------- output mode / misc ---------- */
 #panelFab{position:fixed;bottom:calc(96px + var(--sat));right:14px;z-index:40;display:none;
   min-height:52px;padding:12px 20px;border-radius:26px;font-weight:800;
-  background:linear-gradient(160deg,var(--vio),#6d3ff0);border:none;color:#fff;
-  box-shadow:0 8px 24px rgba(139,92,246,.5);touch-action:manipulation}
-#btnExitOut{position:fixed;top:calc(12px + env(safe-area-inset-top));right:12px;z-index:60;display:none;
+  background:rgba(45,212,191,.2);border:1px solid var(--teal);color:var(--teal);
+  box-shadow:0 8px 24px rgba(0,0,0,.5);touch-action:manipulation}
+#btnExitOut{position:fixed;top:calc(12px + var(--satT));right:12px;z-index:60;display:none;
   width:52px;height:52px;border-radius:50%;font-size:20px;
-  background:rgba(10,12,21,.9);border:1px solid var(--line);color:var(--txt)}
-#btnOutPins{position:fixed;top:calc(12px + env(safe-area-inset-top));right:76px;z-index:60;display:none;
+  background:rgba(10,12,21,.9);border:1px solid var(--line2);color:var(--txt)}
+#btnOutPins{position:fixed;top:calc(12px + var(--satT));right:76px;z-index:60;display:none;
   width:52px;height:52px;border-radius:50%;font-size:20px;
-  background:rgba(10,12,21,.9);border:1px solid var(--line);color:var(--txt)}
-body.output #topbar,body.output #tabbody,body.output #tabbar,body.output #panelFab{display:none!important}
-body.output #stage{flex:1 1 100%}
+  background:rgba(10,12,21,.9);border:1px solid var(--line2);color:var(--txt)}
+body.output #transport,body.output #colbar,body.output #deckWrap,body.output #dock,
+body.output #sheet,body.output #sheetBack,body.output #panelFab{display:none!important}
+body.output #stage{flex:1 1 100%;height:auto;min-height:0}
 body.output #btnExitOut,body.output #btnOutPins{display:block}
-body.output.pins #btnOutPins{background:rgba(34,211,238,.5);border-color:var(--cy)}
+body.output.pins #btnOutPins{background:rgba(45,212,191,.4);border-color:var(--teal)}
+#errbanner{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:200;display:none;
+  background:#2a0f14;border:1px solid var(--red);color:#ffd9d9;border-radius:12px;
+  padding:10px 16px;font-size:13px;max-width:92vw}
+#errbanner.show{display:block}
 #plugcode{display:none}
+
 </style>
 </head>
 <body>
 <div id="errbanner"></div>
-<header id="topbar">
-  <span class="brand">&#9670; HoloMapper</span><span class="vtag">mobile</span>
-  <span class="sp"></span>
-  <span id="fps"></span>
-  <button id="btnOutput" class="icobtn" title="Projector output mode">&#x26F6;</button>
-</header>
 <div id="stage">
   <canvas id="gl"></canvas>
   <div id="mapWrap"><canvas id="mapcv"></canvas><div id="mhandle"></div></div>
   <div id="handles"></div>
+  <div id="hud">
+    <span class="brand">&#9670; HoloMapper <em>mobile</em></span>
+    <span class="vtag">v6</span>
+    <span class="sp"></span>
+    <span id="fps"></span>
+    <button id="btnOutput" class="icobtn" title="Projector output mode">&#x26F6;</button>
+  </div>
 </div>
-<main id="tabbody">
-  <section id="tabPlay" class="tscroll">
-    <div class="sect">Layer</div>
-    <div class="lchips" id="playLayers"></div>
-    <div class="sect">Clips &mdash; tap to fire</div>
-    <div class="clipad" id="playClips"></div>
-    <div class="sect">Transport</div>
-    <div class="trow">
-      <button id="btnTap" class="tbtn2">TAP</button>
-      <span id="bpmBig">120</span><span class="tsm">BPM</span>
-      <button id="btnHalf" class="tbtn2" title="Half tempo">&divide;2</button>
-      <button id="btnDouble" class="tbtn2" title="Double tempo">&times;2</button>
-    </div>
-    <div class="trow" style="margin-top:8px">
-      <button id="btnResync" class="tbtn2">SYNC</button>
-      <button id="btnPauseT" class="tbtn2">PAUSE</button>
-      <button id="btnQuant" class="tbtn2 on" title="Snap clip fires to the beat">QUANT</button>
-      <button id="btnBlackout" class="tbtn2">BLACKOUT</button>
-    </div>
-    <label class="ckrow"><input type="checkbox" id="ckBeatSync" style="width:22px;height:22px;accent-color:#8b5cf6"> Beat-sync layer speeds</label>
-    <div class="sect">Master fade</div>
-    <div class="srow"><div class="slab"><label>Master</label><span class="sval" id="masterVal">100%</span></div>
-      <input type="range" id="masterSl" min="0" max="1" step="0.001" value="1" data-ctrl="P.master"></div>
-  </section>
-  <section id="tabClips" class="tscroll" hidden>
-    <div class="sect">Columns &mdash; fire one clip per layer</div>
-    <div class="colscroll" id="colbtns"></div>
-    <div class="sect">Layer</div>
-    <div class="lchips" id="clipsLayers"></div>
-    <div class="sect">Clips &mdash; tap fires, hold to reassign</div>
-    <div class="clipgrid2" id="clipGrid"></div>
-  </section>
-  <section id="tabFx" class="tscroll" hidden>
-    <div class="sect">Post FX &mdash; tap a card to toggle</div>
-    <div id="fxHost"></div>
-  </section>
-  <section id="tabMix" class="tscroll" hidden>
-    <div class="sect">Layers</div>
-    <div id="mixLayers"></div>
-    <div class="sect">Macros &mdash; the fun knobs</div>
-    <div id="mixMacros"></div>
-    <div class="sect">Presets</div>
-    <div class="prowcard">
-      <input type="text" id="presetName" placeholder="preset name">
-      <div class="btnrow">
-        <button class="abtn" id="btnSavePreset">Save</button>
-        <select id="presetSel" style="flex:1"><option value="">-- presets --</option></select>
-      </div>
-      <div class="btnrow">
-        <button class="gbtn" id="btnLoadPreset">Load</button>
-        <button class="gbtn" id="btnDelPreset">Delete</button>
-      </div>
-    </div>
-    <div class="sect">Setup</div>
-    <div class="prowcard">
-      <div class="srow"><div class="slab"><label>Render resolution</label></div>
-        <select id="resSel">
-          <option value="480x270">480p &mdash; fastest</option>
-          <option value="960x540">540p</option>
-          <option value="1280x720">720p &mdash; sharpest</option>
-        </select></div>
-      <div class="btnrow">
-        <button class="gbtn" id="btnLearn2">MIDI Learn</button>
-        <button class="gbtn" id="btnAudio">Enable audio</button>
-      </div>
-      <div class="hint" id="midistat2">MIDI: not started</div>
-      <div class="trow">
-        <span class="meter"><i id="mBass"></i></span><span class="meter"><i id="mMid"></i></span><span class="meter"><i id="mHigh"></i></span>
-        <span id="audiostat" class="dim">audio off</span>
-      </div>
-      <div class="sect" style="margin-top:14px">Factory reset</div>
-      <button class="dbtn" id="btnResetAll">Reset everything to default</button>
-      <div class="hint" id="resetHint">Clears all settings, FX, clip assignments, and saved presets.</div>
-    </div>
-  </section>
-  <section id="tabMap" class="tscroll" hidden>
-    <div class="sect">Projection mapping &mdash; pin it from your phone</div>
-    <div id="mapUI"></div>
-  </section>
+<header id="transport">
+  <button id="btnTap" class="tbtn2">TAP</button>
+  <span id="bpmBig">120</span><span class="bpmlab">BPM</span>
+  <button id="btnHalf" class="tbtn2" title="Half tempo">&divide;2</button>
+  <button id="btnDouble" class="tbtn2" title="Double tempo">&times;2</button>
+  <button id="btnSync2" class="tbtn2" title="Resync beat clock">SYNC</button>
+  <button id="btnSync" class="tbtn2" title="Beat-sync layer speeds">B-SYNC</button>
+  <button id="btnQuant" class="tbtn2 on" title="Quantize clip fires to the beat">QUANT</button>
+  <button id="btnAuto" class="tbtn2" title="Autopilot: columns play left to right">AUTO</button>
+  <button id="btnPauseT" class="tbtn2">PAUSE</button>
+  <button id="btnBlackout" class="tbtn2">BLACK</button>
+</header>
+<div id="colbar">
+  <div id="colbtns"><span class="collab">COLUMNS</span></div>
+</div>
+<main id="deckWrap">
+  <div id="deck"></div>
 </main>
-<nav id="tabbar">
-  <button data-tab="Play" class="on"><i>&#9654;</i><span>Play</span></button>
-  <button data-tab="Clips"><i>&#9782;</i><span>Clips</span></button>
-  <button data-tab="Fx"><i>&#10022;</i><span>FX</span></button>
-  <button data-tab="Mix"><i>&#9681;</i><span>Mix</span></button>
-  <button data-tab="Map"><i>&#9672;</i><span>Map</span></button>
+<nav id="dock">
+  <button data-sheet="clip"><i>&#9670;</i><span>Clip</span></button>
+  <button data-sheet="fx"><i>&#10022;</i><span>FX</span></button>
+  <button data-sheet="mix"><i>&#9681;</i><span>Mix</span></button>
+  <button data-sheet="map"><i>&#9672;</i><span>Map</span></button>
+  <button data-sheet="setup"><i>&#9881;</i><span>Setup</span></button>
 </nav>
-<div id="clipmenu"></div>
+<div id="sheetBack"></div>
+<section id="sheet">
+  <div id="sheetGrab"><span id="sheetTitle">Clip</span><button id="sheetX" title="Close">&#x2715;</button></div>
+  <div id="sheetBody"></div>
+</section>
+<div id="toast"></div>
 <button id="panelFab">Panel</button>
 <button id="btnExitOut" title="Exit output mode">&#x2715;</button>
 <button id="btnOutPins" title="Edit corner pins in fullscreen">&#x1F4CD;</button>
 <textarea id="plugcode" rows="10" spellcheck="false"></textarea>
 <span id="plugerr" hidden></span><span id="plugok" hidden></span>
+
 <script>
 'use strict';
 /* =====================================================================
@@ -585,7 +517,7 @@ function defParam(id, label, defN, map, fmt){
 }
 const LAYER_NAMES = ['L1','L2','L3','L4'];
 const LAYER_HUES  = [0.02, 0.38, 0.62, 0.15];
-const LAYER_SRC   = ['Tunnel','Flow Field','Nebula','Plugin','Cloner 3D'];
+const LAYER_SRC   = ['Tunnel','Flow Field','Nebula','Plugin','Cloner 3D','Camera'];
 const BLENDS      = ['Normal','Add','Screen','Multiply','Overlay','Difference'];
 /* Cloner 3D option lists (shared by param defs and UI builders) */
 const CL_MODES=['Grid','Radial','Linear'];
@@ -613,9 +545,9 @@ const clTglFmt=v=>(v>=0.5?'on':'off');
    learn, macro assign, presets and the phone remote keep working. The render
    loop keeps reading S.layers[i].src; PARAM_HOOKS (registered in the deck
    section below) mirrors the param into it. */
-const SRC_DEF=[0, 0.5, 0.25, 0.75]; /* default src index /4 per layer */
+const SRC_DEF=[0, 0.4, 0.2, 0.6]; /* default src index /5 per layer -> [0,2,1,3] */
 for(let i=0;i<4;i++){
-  defParam('L'+i+'.src', LAYER_NAMES[i]+' Source', SRC_DEF[i], clDiscMap(5), clDiscFmt(LAYER_SRC));
+  defParam('L'+i+'.src', LAYER_NAMES[i]+' Source', SRC_DEF[i], clDiscMap(6), clDiscFmt(LAYER_SRC));
 }
 for(let i=0;i<4;i++){
   const c='L'+i+'.cl', LB=LAYER_NAMES[i]+' ';
@@ -847,7 +779,7 @@ function validClips(c){
   if(!Array.isArray(c)||c.length!==4) return null;
   for(let i=0;i<4;i++){
     if(!Array.isArray(c[i])||c[i].length!==8) return null;
-    for(let k=0;k<8;k++){ const v=c[i][k]; if(v!==null&&(typeof v!=='number'||v<0||v>4)) return null; }
+    for(let k=0;k<8;k++){ const v=c[i][k]; if(v!==null&&(typeof v!=='number'||v<0||v>5)) return null; }
   }
   return c;
 }
@@ -1454,6 +1386,18 @@ in vec2 v_uv;
 uniform sampler2D u_tex;
 void main(){ O = vec4(texture(u_tex,v_uv).rgb,1.0); }
 `;
+/* Camera source: video texture with optional horizontal flip (selfie mirror). */
+const SRC_CAM = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_flip;
+void main(){
+  vec2 uv = vec2(mix(v_uv.x, 1.0-v_uv.x, u_flip), v_uv.y);
+  O = vec4(texture(u_tex,uv).rgb,1.0);
+}
+`;
 
 </script>
 <script>
@@ -1522,15 +1466,15 @@ function quadDraw(){
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   gl.disableVertexAttribArray(0);
 }
-function makeTarget(w,h,depth){
+function makeTarget(w,h,depth,byte){
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  if(floatOK) gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,w,h,0,gl.RGBA,gl.HALF_FLOAT,null);
-  else        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,  w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  if(floatOK && !byte) gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,w,h,0,gl.RGBA,gl.HALF_FLOAT,null);
+  else                 gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,  w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
   const fb = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
@@ -1580,6 +1524,7 @@ function compileAll(){
     ['prism',   SRC_PRISM],
     ['grade',   SRC_GRADE],
     ['copy',    SRC_COPY],
+    ['cam',     SRC_CAM],
     ['bloombp', SRC_BLOOMBP],
     ['bloomblur',SRC_BLOOMBLUR],
     ['bloomadd',SRC_BLOOMADD]
@@ -2552,16 +2497,16 @@ function layerEnabled(i){
   const anySolo=S.layers.some(l=>l.solo);
   return !L.bypass && (!anySolo || L.solo);
 }
-function renderLayer(i,t){
-  const T=layerT[i];
+/* Render one source into any target. renderLayer() is the per-layer caller;
+   the preview monitor reuses this with the selected clip's source. */
+function renderSourceInto(sidx,i,t,T){
   gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
   gl.viewport(0,0,T.w,T.h);
-  if(S.layers[i].src===4){ renderCloner(i,t,T); return; }
+  if(sidx===4){ renderCloner(i,t,T); return; }
+  if(sidx===5){ renderCamera(i,t,T); return; }
   gl.clearColor(0,0,0,1);
   gl.clear(gl.COLOR_BUFFER_BIT);
-  if(!layerEnabled(i)) return;
-  const L=S.layers[i];
-  const prog=PROG[SRC_KEYS[L.src]];
+  const prog=PROG[SRC_KEYS[sidx]];
   if(!prog) return;
   const aud = eff('L'+i+'.audio')*eff('P.aamt');
   let sp = PARAMS['L'+i+'.speed'].map(eff('L'+i+'.speed'));
@@ -2578,6 +2523,17 @@ function renderLayer(i,t){
   gl.uniform1f(U(prog,'u_param1'),eff('L'+i+'.p1'));
   gl.uniform1f(U(prog,'u_param2'),eff('L'+i+'.p2'));
   quadDraw();
+}
+function renderLayer(i,t){
+  const T=layerT[i];
+  if(!layerEnabled(i)){
+    gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
+    gl.viewport(0,0,T.w,T.h);
+    gl.clearColor(0,0,0,1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    return;
+  }
+  renderSourceInto(S.layers[i].src,i,t,T);
 }
 function renderCombine(){
   const P=PROG.combine;
@@ -2741,7 +2697,8 @@ function pollAudio(){
   audioBeat*=0.94;
 }
 function updateMeters(){
-  $('mBass').style.height=Math.round(clamp(bassSm,0,1)*100)+'%';
+  const mb=$('mBass'); if(!mb) return;
+  mb.style.height=Math.round(clamp(bassSm,0,1)*100)+'%';
   $('mMid').style.height=Math.round(clamp(midSm,0,1)*100)+'%';
   $('mHigh').style.height=Math.round(clamp(highSm,0,1)*100)+'%';
 }
@@ -2775,7 +2732,7 @@ function setLearn(armed){
   learnArmed=armed;
   if(!armed) pendingCtrl=null;
   const _bl=$('btnLearn'); if(_bl) _bl.classList.toggle('on', armed);
-  $('btnLearn2').classList.toggle('on', armed);
+  const _bl2=$('btnLearn2'); if(_bl2) _bl2.classList.toggle('on', armed);
   if(armed) midiStatus('learn armed — click a slider, then wiggle a knob', true);
   else if(midiAccess) midiStatus(midiAccess.inputs.size+' device(s) ready');
 }
@@ -2901,7 +2858,7 @@ for(let i=0;i<4;i++){
   PARAM_HOOKS['L'+i+'.src']=[((ii)=>()=>{
     const pk='L'+ii+'.src';
     const v=(S.params[pk]!==undefined)?S.params[pk]:SRC_DEF[ii];
-    const ni=Math.min(4,Math.max(0,Math.round(v*4)));
+    const ni=Math.min(5,Math.max(0,Math.round(v*5)));
     const changed=ni!==S.layers[ii].src;
     S.layers[ii].src=ni;
     syncFiredToSrc(ii); syncDeckSel();
@@ -2947,7 +2904,7 @@ function fireClip(i,k){
   if(src===null||src===undefined) return;
   S.fired[i]=k;
   S.colFired=null; syncColumns();
-  setParam('L'+i+'.src', src/4);
+  setParam('L'+i+'.src', src/5);
 }
 function buildDeck(){
   const host=$('deck'); host.innerHTML='';
@@ -3443,8 +3400,8 @@ function applySnapshot(snap){
   /* source authority: new presets carry L{i}.src params; old ones only have layers[].src */
   for(let i=0;i<4;i++){
     const pk='L'+i+'.src';
-    if(snap.params && snap.params[pk]!==undefined) S.layers[i].src=Math.min(4,Math.max(0,Math.round(clamp(S.params[pk],0,1)*4)));
-    else { S.layers[i].src=Math.min(4,Math.max(0,S.layers[i].src|0)); S.params[pk]=S.layers[i].src/4; }
+    if(snap.params && snap.params[pk]!==undefined) S.layers[i].src=Math.min(5,Math.max(0,Math.round(clamp(S.params[pk],0,1)*5)));
+    else { S.layers[i].src=Math.min(5,Math.max(0,S.layers[i].src|0)); S.params[pk]=S.layers[i].src/5; }
     syncFiredToSrc(i);
   }
   S.postBypass=Object.assign({}, d.postBypass, snap.postBypass||{});
@@ -3765,87 +3722,235 @@ function positionOverlays(){ drawMapOverlay(); }
 </script>
 <script>
 'use strict';
-/* ================= HOLOMAPPER MOBILE v5 — touch-first shell =================
-   Phone-app idioms, not Resolume idioms. Bottom tab bar (Play/Clips/FX/Mix/Map),
-   big thumb targets, every content region scrolls natively with momentum.
-   The GL engine, sources, layers, firing, presets, mapping are untouched —
-   this block only re-skins and reorganizes the chrome around the phone.
-   Desktop stays the technical one; this one is for play. */
-
-/* ---- engine snapshot wrappers: include mapping + fired-column state ----
-   NOTE: distinct names required — a later `function snapshot()` would shadow
-   the engine's binding (latently broken since the v3 shell). */
-function snapshotFull(){
-  const s = snapshot(); /* engine's */
-  s.map = JSON.parse(JSON.stringify(S.map || defaultMap()));
-  s.colFired = (typeof S.colFired === 'number') ? S.colFired : null;
-  return s;
+/* ================= CAMERA SOURCE (engine) =================
+   getUserMedia -> hidden <video> -> per-frame texture upload, shared across
+   layers. Rear camera preferred; front/rear toggle in S.camFace. Permission
+   is requested the first time a Camera clip fires or is previewed; denial
+   shows a toast and renders a "NO CAMERA" slate (never black).
+   Requires HTTPS or localhost — file:// cannot use getUserMedia. */
+let camVideo=null, camTex=null, camSlateTex=null, camStream=null;
+let camState='off', camLastT=-1, camReq=null, camFaceLive=null;
+for(let _ci=0;_ci<4;_ci++){
+  defParam('L'+_ci+'.camFlip', LAYER_NAMES[_ci]+' Cam Flip', 0, v=>v, v=>(v>=0.5?'on':'off'));
 }
-function applySnapshotFull(snap){
-  applySnapshot(snap); /* engine's */
-  S.map = (snap.map && Array.isArray(snap.map.surfaces) && snap.map.surfaces.length)
-    ? snap.map : defaultMap();
-  if(MUI.selSurf >= S.map.surfaces.length) MUI.selSurf = 0;
-  if(typeof snap.colFired === 'number') S.colFired = snap.colFired;
-  buildMapTarget(); refitCanvas(); buildMapUI(); positionOverlays();
-  saveState();
+async function ensureCamera(){
+  const wantFace=S.camFace||'environment';
+  if(camState==='live'&&camFaceLive===wantFace) return true;
+  if(camState==='requesting') return camReq;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    camState='denied';
+    v6Toast('Camera needs HTTPS or localhost — serve this page securely (GitHub Pages is fine).');
+    return null;
+  }
+  if(camStream){ try{ camStream.getTracks().forEach(tr=>tr.stop()); }catch(e){} camStream=null; camState='off'; }
+  camState='requesting';
+  camReq=(async()=>{
+    try{
+      camStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:wantFace},audio:false});
+      if(!camVideo){ camVideo=document.createElement('video'); camVideo.muted=true; camVideo.playsInline=true; camVideo.setAttribute('playsinline',''); }
+      camVideo.srcObject=camStream;
+      await camVideo.play();
+      if(!camTex){
+        camTex=gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D,camTex);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      }
+      camFaceLive=wantFace; camState='live'; camLastT=-1;
+      v6Toast(wantFace==='user'?'Front camera live':'Rear camera live');
+      return true;
+    }catch(err){
+      camState='denied';
+      v6Toast('Camera access denied — allow it in the browser to use the Camera source.');
+      return null;
+    }
+  })();
+  return camReq;
 }
-/* ---- hide tab UI for full-canvas corner reach (mapping) ---- */
-function setSheetHidden(hide){
-  $('tabbody').style.display = hide ? 'none' : '';
-  $('tabbar').style.display = hide ? 'none' : '';
-  $('panelFab').style.display = hide ? 'block' : 'none';
-  setTimeout(refitCanvas, 60);
+function pumpCamera(){
+  if(camState!=='live'||!camVideo||!camTex) return;
+  if(camVideo.readyState<2||camVideo.currentTime===camLastT) return;
+  camLastT=camVideo.currentTime;
+  gl.bindTexture(gl.TEXTURE_2D,camTex);
+  try{ gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,camVideo); }
+  catch(e){ /* transient upload failure — keep last good frame */ }
 }
-
-/* ---- tabs ---- */
-function showTab(name){
-  MUI.tab = name;
-  document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
-  ['Play','Clips','Fx','Mix','Map'].forEach(t=>{ $('tab'+t).hidden = (t!==name); });
-  const isMap = (name==='Map');
-  $('mapWrap').classList.toggle('on', isMap);
-  $('handles').classList.toggle('on', isMap);
-  if(isMap) buildMapUI();
-  positionOverlays();
+function camSlate(){
+  if(camSlateTex) return camSlateTex;
+  const c=document.createElement('canvas'); c.width=480; c.height=270;
+  const g=c.getContext('2d');
+  g.fillStyle='#14161c'; g.fillRect(0,0,480,270);
+  g.strokeStyle='#2dd4bf'; g.lineWidth=3; g.strokeRect(12,12,456,246);
+  g.fillStyle='#e8eaee'; g.font='bold 34px sans-serif'; g.textAlign='center';
+  g.fillText('NO CAMERA',240,120);
+  g.fillStyle='#878b94'; g.font='15px sans-serif';
+  g.fillText(camState==='denied'?'camera access denied — allow it in the browser':'tap a Camera clip to enable',240,152);
+  const t=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+  camSlateTex=t; return t;
 }
-
-/* ---- layer chips (shared by Play + Clips tabs) ---- */
-function layerChipRow(host){
-  if(!host) return; host.innerHTML='';
-  for(let i=0;i<4;i++){
-    const b=el('button','lchip'+(S.selLayer===i?' on':''));
-    b.style.setProperty('--h', Math.round(LAYER_HUES[i]*360));
-    const has=S.fired[i]!==null&&S.fired[i]!==undefined;
-    if(has) b.classList.add('hasclip');
-    b.innerHTML='<span class="dot"></span>L'+(i+1);
-    b.title='Select layer '+(i+1);
-    b.addEventListener('click',()=>mSelectLayer(i));
-    host.appendChild(b);
+function renderCamera(i,t,T){
+  if(camState==='off') ensureCamera();
+  pumpCamera();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
+  gl.viewport(0,0,T.w,T.h);
+  if(camState==='live'&&camVideo&&camVideo.readyState>=2&&camTex){
+    const P=PROG.cam;
+    if(!P) return;
+    gl.useProgram(P); setTex(P,'u_tex',0,camTex);
+    gl.uniform1f(U(P,'u_flip'), eff('L'+i+'.camFlip')>=0.5?1:0);
+    quadDraw();
+  }else{
+    const P=PROG.copy;
+    if(!P) return;
+    gl.useProgram(P); setTex(P,'u_tex',0,camSlate());
+    quadDraw();
   }
 }
-function mSelectLayer(i){
-  S.selLayer=i; S.sel={kind:'layer', i:i};
-  syncNewUI(); saveState();
-}
-/* selectClip/selectLayer overrides: selection without tab-hopping */
-function selectLayer(i){ mSelectLayer(i); }
-function selectClip(i,k){
-  S.selLayer=i; S.sel={kind:'clip', i:i, c:k};
-  syncNewUI(); saveState();
+
+/* ================= HOLOMAPPER MOBILE v6 — desktop-paradigm deck shell ========
+   The desktop instrument (deck, columns, transport, inspector, macros),
+   fitted for a phone: big touch targets, horizontal strip scrolling, bottom
+   sheets instead of side panels, desktop's semantic-color language
+   (teal = live, amber = queued/armed, red = destructive).
+   Engine blocks above are untouched — this only re-skins the chrome. */
+
+/* ---- toast ---- */
+let toastT=0;
+function v6Toast(msg,ms){
+  const t=$('toast'); if(!t) return;
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'), ms||2600);
 }
 
-/* ---- clip firing with beat quantize ---- */
-let pendingFire=null, lastBeatIdx=-1;
-function mFire(i,k){
+/* ---- bottom sheet system ---- */
+let sheetOpen=null;
+function openSheet(name){
+  if(sheetOpen==='map'&&name!=='map'){
+    $('mapWrap').classList.remove('on'); $('handles').classList.remove('on');
+  }
+  sheetOpen=name;
+  document.querySelectorAll('#dock button').forEach(b=>b.classList.toggle('on', b.dataset.sheet===name));
+  const sh=$('sheet'), back=$('sheetBack');
+  if(!name){ sh.classList.remove('open'); back.classList.remove('open'); return; }
+  buildSheet(name);
+  sh.classList.add('open'); back.classList.add('open');
+}
+function buildSheet(name){
+  const body=$('sheetBody'); if(!body) return; body.innerHTML='';
+  $('sheetTitle').textContent={clip:'Clip',fx:'FX',mix:'Mix',map:'Map',setup:'Setup'}[name]||'';
+  if(name==='clip') buildInspector(body);
+  else if(name==='fx') buildFxBrowser(body);
+  else if(name==='mix') buildMixSheet(body);
+  else if(name==='map'){
+    const host=document.createElement('div'); host.id='mapUI'; body.appendChild(host);
+    buildMapUI();
+    $('mapWrap').classList.add('on'); $('handles').classList.add('on');
+    positionOverlays();
+  }
+  else if(name==='setup') buildSetupSheet(body);
+}
+function closeSheet(){ openSheet(null); }
+
+/* ---- selection (v6 overrides: no tab switching, inspector is a sheet) ---- */
+function selectLayer(i){
+  S.selLayer=i; S.sel={kind:'layer', i:i};
+  syncDeckSel(); saveState();
+}
+function selectClip(i,k,open){
+  S.selLayer=i; S.sel={kind:'clip', i:i, c:k};
+  syncDeckSel(); saveState();
+  if(open!==false) openSheet('clip'); else if(sheetOpen==='clip') buildSheet('clip');
+}
+function vFire(i,k){
   const src=S.clips[i][k];
   if(src===null||src===undefined) return;
   S.selLayer=i; S.sel={kind:'clip', i:i, c:k};
   if(MUI.quant && S.bpm>0){ pendingFire={i:i,k:k}; }
-  else { fireClip(i,k); }
+  else fireClip(i,k);
   syncNewUI(); saveState();
 }
-/* ---- columns: fire one clip per layer ---- */
+let pendingFire=null, lastBeatIdx=-1, pendingCol=null;
+function fireColumn(k){
+  if(MUI.quant && S.bpm>0){ pendingCol=k; }
+  else{
+    for(let i=0;i<4;i++){
+      const src=S.clips[i][k];
+      if(src!==null&&src!==undefined) fireClip(i,k);
+    }
+    S.colFired=k;
+  }
+  syncNewUI(); saveState();
+}
+function syncColumns(){
+  document.querySelectorAll('#colbtns .colbtn').forEach((b,k)=>{
+    b.classList.toggle('conn', S.colFired===k);
+    b.classList.toggle('queued', pendingCol===k);
+  });
+}
+/* autopilot: advance one column per bar (4 beats), L -> R */
+function v6AutoTick(beatIdx){
+  if(!S.autopilot) return;
+  const bar=Math.floor(beatIdx/4);
+  if(bar!==MUI.apLastBar){
+    MUI.apLastBar=bar;
+    const k=(typeof S.colFired==='number')?((S.colFired+1)%8):0;
+    fireColumn(k);
+  }
+}
+
+/* ---- deck ---- */
+function clipLabel(src){ return src===null?'':LAYER_SRC[src].split(' ')[0]; }
+function buildDeck(){
+  const host=$('deck'); if(!host) return; host.innerHTML='';
+  for(let i=0;i<4;i++){
+    const L=S.layers[i];
+    const st=el('div','lstrip'+((S.sel&&S.sel.kind==='layer'&&S.sel.i===i)?' sel':''));
+    st.style.setProperty('--lhue', Math.round(LAYER_HUES[i]*360));
+    st.dataset.i=i;
+    const head=el('div','lhead');
+    const tab=el('button','ltab','L'+(i+1));
+    tab.title='Select layer '+(i+1);
+    tab.addEventListener('click',()=>selectLayer(i));
+    head.appendChild(tab);
+    const snm=el('span','lsrc',LAYER_SRC[L.src]||'');
+    head.appendChild(snm);
+    const bB=el('button','tbtn bByp'+(L.bypass?' onB':''),'B'); bB.title='Bypass layer';
+    bB.addEventListener('click',()=>{ toggleBypass(i); });
+    const bS=el('button','tbtn bSolo'+(L.solo?' onS':''),'S'); bS.title='Solo layer';
+    bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); syncDeckSel(); });
+    const bX=el('button','tbtn bClr','\u2715'); bX.title='Clear layer';
+    bX.addEventListener('click',()=>{ L.bypass=true; S.fired[i]=null; S.colFired=null; saveState(); syncDeckSel(); });
+    head.appendChild(bB); head.appendChild(bS); head.appendChild(bX);
+    st.appendChild(head);
+    const strip=el('div','cstrip');
+    for(let k=0;k<8;k++){
+      const src=S.clips[i][k];
+      const c=el('div','clip'+(src===null?' empty':'')+((S.fired[i]===k)?' fired':'')+((S.sel&&S.sel.kind==='clip'&&S.sel.i===i&&S.sel.c===k)?' selc':''));
+      c.dataset.i=i; c.dataset.k=k;
+      const box=el('button','cbox',src===null?'+':clipLabel(src));
+      box.title=src===null?'Empty slot':('Fire '+LAYER_SRC[src]+' (quantized)');
+      box.setAttribute('data-ctrl','clip'+i+'.'+k);
+      CTRLS['clip'+i+'.'+k]={set:((ii,kk)=>v=>{ if(v>=0.5) vFire(ii,kk); })(i,k), label:'Fire '+LAYER_NAMES[i]+' clip '+(k+1)};
+      box.addEventListener('click',()=>vFire(i,k));
+      const nm=el('button','cname',(k+1)+' \u00B7 '+(src===null?'empty':LAYER_SRC[src]));
+      nm.title='Select clip — opens the inspector';
+      nm.addEventListener('click',()=>selectClip(i,k,true));
+      c.appendChild(box); c.appendChild(nm);
+      strip.appendChild(c);
+    }
+    st.appendChild(strip);
+    host.appendChild(st);
+  }
+  syncDeckSel();
+}
 function buildColumns(){
   const host=$('colbtns'); if(!host) return; host.innerHTML='';
   for(let k=0;k<8;k++){
@@ -3857,90 +3962,127 @@ function buildColumns(){
     host.appendChild(b);
   }
 }
-function fireColumn(k){
-  for(let i=0;i<4;i++){
-    const src=S.clips[i][k];
-    if(src!==null&&src!==undefined) fireClip(i,k);
-  }
-  S.colFired=k; syncColumns(); syncNewUI(); saveState();
+
+/* ---- transport ---- */
+function refreshTransport(){
+  const b=$('bpmBig'); if(b) b.textContent=S.bpm;
+  const q=$('btnQuant'); if(q) q.classList.toggle('on', !!MUI.quant);
+  const a=$('btnAuto'); if(a) a.classList.toggle('on', !!S.autopilot);
+  const p=$('btnPauseT'); if(p) p.classList.toggle('on', !!S.paused);
+  const bo=$('btnBlackout'); if(bo) bo.classList.toggle('armed', !!S.blackout);
+  const sy=$('btnSync'); if(sy) sy.classList.toggle('on', !!S.beatSync);
 }
-function syncColumns(){
-  document.querySelectorAll('#colbtns .colbtn').forEach((b,k)=>b.classList.toggle('conn', S.colFired===k));
+function setAutopilot(on){
+  S.autopilot=!!on;
+  if(S.autopilot) MUI.apLastBar=Math.floor(lastBeatIdx/4);
+  refreshTransport(); saveState();
+  v6Toast(S.autopilot?'Autopilot on — columns play left to right':'Autopilot off');
+}
+function togglePauseT(){
+  S.paused=!S.paused;
+  refreshTransport(); saveState();
 }
 
-/* ---- clip pads & grids ---- */
-function buildClipPad(){
-  const host=$('playClips'); if(!host) return; host.innerHTML='';
-  const i=S.selLayer;
-  for(let k=0;k<8;k++){
-    const src=S.clips[i][k];
-    const c=el('button','clipbtn'+(src===null?' empty':'')+((S.fired[i]===k)?' fired':''),
-      src===null?'+':LAYER_SRC[src].split(' ')[0]);
-    if(pendingFire&&pendingFire.i===i&&pendingFire.k===k) c.classList.add('queued');
-    c.addEventListener('click',()=>mFire(i,k));
-    c.addEventListener('contextmenu',(e)=>{ e.preventDefault(); showClipMenu(e.clientX,e.clientY,i,k); });
-    host.appendChild(c);
-  }
-}
-function buildClipGrid(){
-  const host=$('clipGrid'); if(!host) return; host.innerHTML='';
-  const i=S.selLayer;
-  for(let k=0;k<8;k++){
-    const src=S.clips[i][k];
-    const c=el('button','clipcard'+(src===null?' empty':'')+((S.fired[i]===k)?' fired':''));
-    c.innerHTML='<span class="cn">C'+(k+1)+'</span><span class="cs">'+
-      (src===null?'empty — hold to assign':LAYER_SRC[src])+'</span>';
-    c.addEventListener('click',()=>mFire(i,k));
-    c.addEventListener('contextmenu',(e)=>{ e.preventDefault(); showClipMenu(e.clientX,e.clientY,i,k); });
-    host.appendChild(c);
-  }
-}
-/* ---- master UI sync (overrides the deck-oriented originals) ---- */
+/* ---- master UI sync: deck highlights + transport + live sheets ---- */
 function syncNewUI(){
-  layerChipRow($('playLayers')); layerChipRow($('clipsLayers'));
-  buildClipPad(); buildClipGrid(); syncColumns();
+  syncDeckSel();
+  refreshTransport();
+  if(sheetOpen==='clip') buildSheet('clip');
+  else if(sheetOpen==='fx') buildSheet('fx');
+  else if(sheetOpen==='mix') buildSheet('mix');
 }
-function syncDeckSel(){ syncNewUI(); }
-function buildDeck(){ syncNewUI(); }
-/* ---- safe overrides: kept engine code (applySnapshot, bindMidi) still calls
-   these v4 builders; point them at the v5 UI instead of dead DOM ids ---- */
-function buildPostFx(){ buildFxCards(); }
-function buildMaster(){ /* master slider lives on the Play tab; synced in afterPresetLoad */ }
-function buildPerform(){ /* perform mode retired in mobile v5 */ }
+/* kept-engine overrides route here */
+function buildPostFx(){ if(sheetOpen==='fx') buildSheet('fx'); }
+function buildMaster(){}
+function buildPerform(){}
+function buildDashKnobs(){ if(sheetOpen==='mix') buildSheet('mix'); }
 function renderMidiList(){
-  const n=S.midi.length, s=$('midistat2');
-  if(s && !learnArmed) s.textContent='MIDI: '+n+' binding'+(n===1?'':'s');
+  const s=$('midistat'); if(s&&!learnArmed) s.textContent='MIDI: '+S.midi.length+' binding'+(S.midi.length===1?'':'s');
 }
-function buildDashKnobs(){ buildMixMacros(); } /* v4 dials -> v5 big macro sliders */
-
-/* ---- chunky touch sliders ---- */
-function mBigSlider(parent, pid, label){
-  const def=PARAMS[pid]; if(!def) return null;
-  const wrap=el('div','srow');
-  const slab=el('div','slab');
-  slab.appendChild(el('label',null,label||def.label));
-  const vv=el('span','sval',def.fmt((S.params[pid]!==undefined)?S.params[pid]:def.def));
-  slab.appendChild(vv); wrap.appendChild(slab);
-  const sl=document.createElement('input');
-  sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001;
-  sl.value=(S.params[pid]!==undefined)?S.params[pid]:def.def;
-  sl.setAttribute('data-ctrl',pid); sl.title=def.label;
-  sl.addEventListener('input',()=>{
-    setParam(pid,parseFloat(sl.value),sl);
-    vv.textContent=def.fmt(parseFloat(sl.value));
+function syncTopToggles(){ refreshTransport(); }
+function buildProps(){ if(sheetOpen==='clip') buildSheet('clip'); }
+/* mapping sheet visibility (called by the kept map UI) */
+function setSheetHidden(hide){
+  ['topbar','colbar','deckWrap','dock','sheet','sheetBack'].forEach(id=>{
+    const n=$(id); if(n) n.style.display=hide?'none':'';
   });
-  CTRLS[pid]={set:v=>{ setParam(pid,v); }, label:def.label};
-  wrap.appendChild(sl); parent.appendChild(wrap);
-  return sl;
+  const f=$('panelFab'); if(f) f.style.display=hide?'block':'none';
+  setTimeout(refitCanvas,60);
 }
 
-/* ---- FX tab: big toggle cards, 1–2 chunky sliders each, grouped like
-   Prism Cam (Warp / Time / Color / Look / Motion).
-   Engine: Trails / Kaleido / RGB Split / Color-grade / Strobe (own passes)
-   + 23 Prism Cam FX ported from Jaiye's Prism Cam
-   (github.com/Dawnjaiye/Dawnjaiye) in the single SRC_PRISM pass.
-   Desktop's newer Mirror / Auto Mask / Colorize / Bloom are NOT in this
-   engine — porting them is a separate engine task. */
+/* ---- clip inspector (bottom sheet) ---- */
+function selClipInfo(){
+  const s=S.sel;
+  if(s&&s.kind==='clip') return {i:s.i, k:s.c};
+  if(typeof S.fired[S.selLayer]==='number') return {i:S.selLayer, k:S.fired[S.selLayer]};
+  return {i:S.selLayer, k:0};
+}
+function buildInspector(body){
+  const {i,k}=selClipInfo();
+  const src=S.clips[i][k];
+  const head=el('div','inspHead');
+  head.appendChild(el('span','inspId','CLIP '+LAYER_NAMES[i]+' \u00B7 C'+(k+1)));
+  if(S.fired[i]===k) head.appendChild(el('span','badge live','FIRED'));
+  if(pendingFire&&pendingFire.i===i&&pendingFire.k===k) head.appendChild(el('span','badge queue','QUEUED'));
+  body.appendChild(head);
+  /* preview */
+  const pv=el('div','pvwrap');
+  const cv=document.createElement('canvas'); cv.id='pvCanvas'; cv.width=192; cv.height=108;
+  pv.appendChild(cv); body.appendChild(pv);
+  /* source chips */
+  body.appendChild(el('div','secttl','Source'));
+  const chips=el('div','srcchips');
+  LAYER_SRC.forEach((s,si)=>{
+    const b=el('button','srcchip'+(src===si?' on':''),s);
+    b.addEventListener('click',()=>{
+      S.clips[i][k]=si; saveState(); buildDeck(); buildInspector(body);
+      if(si===5) ensureCamera();
+    });
+    chips.appendChild(b);
+  });
+  body.appendChild(chips);
+  /* params */
+  body.appendChild(el('div','secttl','Parameters'));
+  const par=el('div','inspParams');
+  if(src===null||src===undefined){
+    par.appendChild(el('div','hint','Empty slot — pick a source above.'));
+  }else if(src===5){
+    const fr=el('div','segrow');
+    const bR=el('button','segbtn'+(S.camFace!=='user'?' on':''),'Rear');
+    const bF=el('button','segbtn'+(S.camFace==='user'?' on':''),'Front');
+    bR.addEventListener('click',()=>{ S.camFace='environment'; saveState(); ensureCamera(); buildInspector(body); });
+    bF.addEventListener('click',()=>{ S.camFace='user'; saveState(); ensureCamera(); buildInspector(body); });
+    fr.appendChild(el('span','seglab','Camera')); fr.appendChild(bR); fr.appendChild(bF);
+    par.appendChild(fr);
+    const fl=el('div','segrow');
+    const fck=document.createElement('input'); fck.type='checkbox';
+    fck.checked=eff('L'+i+'.camFlip')>=0.5; fck.id='camFlipCk';
+    fck.addEventListener('change',()=>{ setParam('L'+i+'.camFlip', fck.checked?1:0); });
+    fl.appendChild(el('span','seglab','Mirror flip')); fl.appendChild(fck);
+    par.appendChild(fl);
+    par.appendChild(el('div','hint','First use asks for camera permission. Needs HTTPS — GitHub Pages works, file:// does not.'));
+  }else{
+    const p='L'+i+'.';
+    paramRow(par,p+'speed','Speed'); paramRow(par,p+'hue','Hue');
+    paramRow(par,p+'p1','Param 1'); paramRow(par,p+'p2','Param 2');
+    paramRow(par,p+'audio','Audio');
+    if(src===4) par.appendChild(el('div','hint','Cloner 3D — full controls live on desktop.'));
+  }
+  body.appendChild(par);
+  /* actions */
+  const act=el('div','inspAct');
+  const bf=el('button','abtn primary','Fire clip');
+  bf.addEventListener('click',()=>{ vFire(i,k); });
+  const bc=el('button','abtn danger','Clear slot');
+  bc.addEventListener('click',()=>{
+    S.clips[i][k]=null; if(S.fired[i]===k) S.fired[i]=null;
+    saveState(); buildDeck(); buildInspector(body);
+  });
+  act.appendChild(bf); act.appendChild(bc);
+  body.appendChild(act);
+}
+
+/* ---- FX browser (bottom sheet): all 29, grouped like Prism Cam ---- */
 const FXDEFS=[
   {group:'Warp', key:'kaleido', name:'Kaleido', sub:'kaleidoscope', params:[['P.kseg','Slices'],['P.kang','Spin']]},
   {group:'Warp', key:'px_swirl', name:'Swirl', sub:'twist warp', params:[['P.px_swirl','Swirl']]},
@@ -3972,44 +4114,54 @@ const FXDEFS=[
   {group:'Motion', key:'px_rays', name:'Rays', sub:'light rays', params:[['P.px_rays','Rays']]},
   {group:'Motion', key:'px_shake', name:'Shake', sub:'camera shake', params:[['P.px_shake','Shake']]},
 ];
-function buildFxCards(){
-  const host=$('fxHost'); if(!host) return; host.innerHTML='';
+function bigSlider(parent,pid,label){
+  const def=PARAMS[pid]; if(!def) return null;
+  const wrap=el('div','srow');
+  const slab=el('div','slab');
+  slab.appendChild(el('label',null,label||def.label));
+  const vv=el('span','sval',def.fmt((S.params[pid]!==undefined)?S.params[pid]:def.def));
+  slab.appendChild(vv); wrap.appendChild(slab);
+  const sl=document.createElement('input');
+  sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001;
+  sl.value=(S.params[pid]!==undefined)?S.params[pid]:def.def;
+  sl.setAttribute('data-ctrl',pid); sl.title=def.label+' — MIDI-learnable';
+  sl.addEventListener('input',()=>{ setParam(pid,parseFloat(sl.value),sl); vv.textContent=def.fmt(parseFloat(sl.value)); });
+  CTRLS[pid]={set:v=>setParam(pid,v), label:def.label};
+  wrap.appendChild(sl); parent.appendChild(wrap);
+  return sl;
+}
+function buildFxBrowser(body){
   let lastGroup=null;
   FXDEFS.forEach(fx=>{
-    if(fx.group!==lastGroup){
-      lastGroup=fx.group;
-      const gh=el('div','fxgroup'); gh.textContent=fx.group;
-      host.appendChild(gh);
-    }
+    if(fx.group!==lastGroup){ lastGroup=fx.group; body.appendChild(el('div','fxgroup',fx.group)); }
     const card=el('div','fxcard');
     const head=el('div','fxchead');
     const nm=el('div','fxname'); nm.innerHTML=fx.name+'<span class="sub">'+fx.sub+'</span>';
     head.appendChild(nm);
-    const sw=el('button','fxswitch','');
-    sw.setAttribute('aria-label','Toggle '+fx.name);
     let on;
     if(fx.strobe) on=!!S.strobeOn;
     else if(fx.key) on=!S.postBypass[fx.key];
     else on=true;
-    sw.classList.toggle('on', on);
-    if(!fx.key && !fx.strobe) sw.style.display='none'; /* grade: always-on, no fake switch */
-    else{
-      card.classList.toggle('offx', !on);
+    if(fx.key||fx.strobe){
+      const sw=el('button','fxswitch'+(on?' on':''),'');
+      sw.setAttribute('aria-label','Toggle '+fx.name);
+      card.classList.toggle('offx',!on);
       sw.addEventListener('click',()=>{
         if(fx.strobe) S.strobeOn=!S.strobeOn;
         else S.postBypass[fx.key]=!S.postBypass[fx.key];
-        saveState(); buildFxCards();
+        saveState(); buildSheet('fx');
       });
+      head.appendChild(sw);
     }
-    head.appendChild(sw); card.appendChild(head);
-    fx.params.forEach(([pid,lab])=>mBigSlider(card,pid,lab));
-    host.appendChild(card);
+    card.appendChild(head);
+    fx.params.forEach(([pid,lab])=>bigSlider(card,pid,lab));
+    body.appendChild(card);
   });
 }
 
-/* ---- Mix tab ---- */
-function buildMixLayers(){
-  const host=$('mixLayers'); if(!host) return; host.innerHTML='';
+/* ---- Mix sheet: layers + 8 macros + master ---- */
+function buildMixSheet(body){
+  body.appendChild(el('div','secttl','Layers'));
   for(let i=0;i<4;i++){
     const L=S.layers[i];
     const row=el('div','mixrow');
@@ -4017,77 +4169,240 @@ function buildMixLayers(){
     const nm=el('span','mixname','Layer '+(i+1));
     nm.style.color='hsl('+Math.round(LAYER_HUES[i]*360)+' 90% 70%)';
     head.appendChild(nm);
-    const bS=el('button','minibtn'+(L.solo?' onS':''),'S'); bS.title='Solo layer '+(i+1);
-    bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); buildMixLayers(); syncNewUI(); });
-    const bB=el('button','minibtn'+(L.bypass?' onB':''),'B'); bB.title='Bypass layer '+(i+1);
-    bB.addEventListener('click',()=>{ toggleBypass(i); buildMixLayers(); });
+    const bS=el('button','minibtn'+(L.solo?' onS':''),'S'); bS.title='Solo';
+    bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); buildSheet('mix'); syncDeckSel(); });
+    const bB=el('button','minibtn'+(L.bypass?' onB':''),'B'); bB.title='Bypass';
+    bB.addEventListener('click',()=>{ toggleBypass(i); buildSheet('mix'); });
     head.appendChild(bS); head.appendChild(bB); row.appendChild(head);
-    mBigSlider(row,'L'+i+'.op','Opacity');
-    host.appendChild(row);
+    bigSlider(row,'L'+i+'.op','Opacity');
+    body.appendChild(row);
   }
-}
-function buildMixMacros(){
-  const host=$('mixMacros'); if(!host) return; host.innerHTML='';
+  body.appendChild(el('div','secttl','Macros'));
   for(let m=0;m<8;m++){
-    const wrap=el('div','srow macroslid');
+    const wrap=el('div','srow');
     const slab=el('div','slab');
-    slab.appendChild(el('label',null,'M'+(m+1)+' · '+S.macros[m].label));
+    slab.appendChild(el('label',null,'M'+(m+1)+' \u00B7 '+S.macros[m].label));
     const vv=el('span','sval',Math.round(S.macros[m].val*100)+'%');
     slab.appendChild(vv); wrap.appendChild(slab);
     const sl=document.createElement('input');
     sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001; sl.value=S.macros[m].val;
-    sl.setAttribute('data-ctrl','macro'+m); sl.title='Macro '+(m+1);
-    sl.addEventListener('input',()=>{
-      setMacro(m,parseFloat(sl.value),sl);
-      vv.textContent=Math.round(S.macros[m].val*100)+'%';
-    });
-    CTRLS['macro'+m]={set:v=>{ setMacro(m,v); }, label:'Macro '+(m+1)+' '+S.macros[m].label};
-    wrap.appendChild(sl); host.appendChild(wrap);
+    sl.setAttribute('data-ctrl','macro'+m); sl.title='Macro '+(m+1)+' — MIDI-learnable';
+    sl.addEventListener('input',()=>{ setMacro(m,parseFloat(sl.value),sl); vv.textContent=Math.round(S.macros[m].val*100)+'%'; });
+    CTRLS['macro'+m]={set:v=>setMacro(m,v), label:'Macro '+(m+1)+' '+S.macros[m].label};
+    wrap.appendChild(sl); body.appendChild(wrap);
   }
+  body.appendChild(el('div','secttl','Master'));
+  bigSlider(body,'P.master','Master fade');
 }
 
-/* ---- presets ---- */
-function wirePresets(){
+/* ---- Setup sheet: presets, MIDI, audio, resolution, plugin, reset ---- */
+function buildSetupSheet(body){
+  body.appendChild(el('div','secttl','Presets'));
+  const pr=el('div','prowcard');
+  const nm=document.createElement('input');
+  nm.id='presetName'; nm.placeholder='preset name'; nm.className='txtin';
+  pr.appendChild(nm);
+  const brow=el('div','btnrow');
+  const bS=el('button','gbtn','Save'); bS.id='btnSavePreset';
+  const bL=el('button','gbtn','Load'); bL.id='btnLoadPreset';
+  const bD=el('button','gbtn','Delete'); bD.id='btnDelPreset';
+  brow.appendChild(bS); brow.appendChild(bL); brow.appendChild(bD);
+  pr.appendChild(brow);
+  const sel=document.createElement('select'); sel.id='presetSel'; sel.className='dsel';
+  pr.appendChild(sel); body.appendChild(pr);
+  body.appendChild(el('div','secttl','Setup'));
+  const st=el('div','prowcard');
+  const rrow=el('div','srow'); const rlab=el('div','slab');
+  rlab.appendChild(el('label',null,'Render resolution')); rrow.appendChild(rlab);
+  const rs=document.createElement('select'); rs.id='resSel'; rs.className='dsel';
+  [['480x270','480p — fastest'],['960x540','540p'],['1280x720','720p — sharpest']].forEach(([v,l])=>rs.appendChild(new Option(l,v)));
+  rs.value=S.res;
+  rs.addEventListener('change',()=>{ S.res=rs.value; buildTargets(); buildMapTarget(); refitCanvas(); saveState(); });
+  rrow.appendChild(rs); st.appendChild(rrow);
+  const brow2=el('div','btnrow');
+  const bM=el('button','gbtn','MIDI Learn'); bM.id='btnLearn';
+  bM.addEventListener('click',()=>setLearn(!learnArmed));
+  const bA=el('button','gbtn','Enable audio'); bA.id='btnAudio';
+  bA.addEventListener('click',toggleAudio);
+  brow2.appendChild(bM); brow2.appendChild(bA); st.appendChild(brow2);
+  st.appendChild(el('div','hint','MIDI: '+(S.midi.length)+' bindings — arm Learn, then tap a control and wiggle a knob.'));
+  const mrow=el('div','trow');
+  mrow.innerHTML='<span class="meter"><i id="mBass"></i></span><span class="meter"><i id="mMid"></i></span><span class="meter"><i id="mHigh"></i></span><span id="audiostat" class="dim">audio off</span>';
+  st.appendChild(mrow);
+  body.appendChild(st);
+  body.appendChild(el('div','secttl','Factory reset'));
+  const rb=el('button','dbtn','Reset everything to default'); rb.id='btnResetAll';
+  body.appendChild(rb);
+  body.appendChild(el('div','hint','Clears all settings, FX, clip assignments, and saved presets.'));
+  wireSetupSheet();
+}
+function wireSetupSheet(){
   $('btnSavePreset').addEventListener('click',()=>{
     const nm=$('presetName').value.trim();
-    if(!nm){ showErr('Name the preset first.'); setTimeout(()=>$('errbanner').classList.remove('show'),3000); return; }
+    if(!nm){ v6Toast('Name the preset first.'); return; }
     const p=getPresets(); p[nm]=snapshotFull(); setPresets(p);
-    $('presetName').value=''; refreshPresetSel(); saveState();
+    $('presetName').value=''; saveState(); v6Toast('Preset saved: '+nm);
   });
   $('btnLoadPreset').addEventListener('click',()=>{
     const n=$('presetSel').value; if(!n) return;
-    const p=getPresets(); if(p[n]){ applySnapshotFull(p[n]); afterPresetLoad(); }
+    const p=getPresets(); if(p[n]){ applySnapshotFull(p[n]); afterPresetLoad(); v6Toast('Preset loaded: '+n); }
   });
   $('btnDelPreset').addEventListener('click',()=>{
     const n=$('presetSel').value; if(!n) return;
-    const p=getPresets(); delete p[n]; setPresets(p); refreshPresetSel();
+    const p=getPresets(); delete p[n]; setPresets(p);
   });
   refreshPresetSel();
+  let resetArmT=0;
+  const rb=$('btnResetAll');
+  const disarm=()=>{ resetArmT=0; rb.classList.remove('armed'); rb.textContent='Reset everything to default'; };
+  rb.addEventListener('click',e=>{
+    e.stopPropagation();
+    if(!resetArmT){
+      resetArmT=Date.now(); rb.classList.add('armed');
+      rb.textContent='TAP AGAIN TO CONFIRM \u2014 clears everything';
+      setTimeout(()=>{ if(resetArmT&&Date.now()-resetArmT>=5000) disarm(); },5100);
+    }else{
+      try{ [LS_STATE,LS_MIDI,LS_PRESETS,'holomapper.mobile.seen'].forEach(k=>localStorage.removeItem(k)); }catch(err){}
+      location.reload();
+    }
+  });
+  document.addEventListener('pointerdown',e=>{
+    if(resetArmT&&!(e.target&&e.target.closest&&e.target.closest('#btnResetAll'))) disarm();
+  },true);
 }
-/* refresh all UI after a preset load */
+/* preset load refresh for v6 */
 function afterPresetLoad(){
-  buildColumns(); syncNewUI();
-  buildFxCards(); buildMixLayers(); buildMixMacros();
-  buildMapUI(); refreshPresetSel();
+  buildDeck(); buildColumns(); syncNewUI();
+  buildMapUI(); positionOverlays();
   if($('resSel')) $('resSel').value=S.res;
-  if($('bpmBig')) $('bpmBig').textContent=S.bpm;
-  const mv=(S.params['P.master']!==undefined)?S.params['P.master']:1;
-  if($('masterSl')) $('masterSl').value=mv;
-  if($('masterVal')) $('masterVal').textContent=Math.round(mv*100)+'%';
-  if($('ckBeatSync')) $('ckBeatSync').checked=!!S.beatSync;
-  if($('btnBlackout')) $('btnBlackout').classList.toggle('armed', !!S.blackout);
-  if($('btnPauseT')) $('btnPauseT').classList.toggle('on', !!S.paused);
-  positionOverlays();
+  refreshTransport(); renderMidiList();
 }
-
-/* ---- transport ---- */
-function resyncBeat(){ tStart=performance.now()/1000; }
-function togglePauseT(){
-  S.paused=!S.paused;
-  $('btnPauseT').classList.toggle('on', !!S.paused);
+function snapshotFull(){
+  const s=snapshot();
+  s.map=JSON.parse(JSON.stringify(S.map||defaultMap()));
+  s.colFired=(typeof S.colFired==='number')?S.colFired:null;
+  return s;
+}
+function applySnapshotFull(snap){
+  applySnapshot(snap);
+  S.map=(snap.map&&Array.isArray(snap.map.surfaces)&&snap.map.surfaces.length)?snap.map:defaultMap();
+  if(MUI.selSurf>=S.map.surfaces.length) MUI.selSurf=0;
+  if(typeof snap.colFired==='number') S.colFired=snap.colFired;
+  buildMapTarget(); refitCanvas(); buildMapUI(); positionOverlays();
   saveState();
 }
 
+/* ---- preview monitor: selected clip rendered small, ~10fps ---- */
+let pvT=null, pvFrame=0;
+const pvPx=new Uint8Array(192*108*4);
+function buildPreview(){
+  try{ pvT=makeTarget(192,108,0,true); }catch(e){ pvT=null; } /* 8-bit: readPixels RGBA/UNSIGNED_BYTE is illegal on RGBA16F */
+}
+function v6PreviewTick(){
+  if(sheetOpen!=='clip'||!pvT||!pvT.ok) return;
+  if((pvFrame++%6)!==0) return;
+  const cv=$('pvCanvas'); if(!cv) return;
+  const {i,k}=selClipInfo();
+  const src=S.clips[i][k];
+  if(src===null||src===undefined) return;
+  renderSourceInto(src,i,performance.now()/1000,pvT);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,pvT.fb);
+  gl.readPixels(0,0,192,108,gl.RGBA,gl.UNSIGNED_BYTE,pvPx);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  const g=cv.getContext('2d');
+  const img=g.createImageData(192,108);
+  for(let y=0;y<108;y++){
+    const so=(107-y)*192*4, do_=y*192*4;
+    img.data.set(pvPx.subarray(so,so+192*4),do_);
+  }
+  g.putImageData(img,0,0);
+}
+/* per-frame v6 extras: quantized column fires, autopilot, preview */
+function v6LoopExtra(beatIdx){
+  if(pendingCol!==null&&(!MUI.quant||beatIdx!==lastBeatIdx)){
+    const k=pendingCol; pendingCol=null;
+    for(let i=0;i<4;i++){ const src=S.clips[i][k]; if(src!==null&&src!==undefined) fireClip(i,k); }
+    S.colFired=k; syncNewUI();
+  }
+  v6AutoTick(beatIdx);
+  v6PreviewTick();
+}
+
+function resyncBeat(){ tStart=performance.now()/1000; }
+/* ================= WIRING v6 ================= */
+function wireV6(){
+  document.querySelectorAll('#dock button').forEach(b=>b.addEventListener('click',()=>{
+    const n=b.dataset.sheet;
+    openSheet(sheetOpen===n?null:n);
+  }));
+  $('sheetGrab').addEventListener('click',closeSheet);
+  $('sheetBack').addEventListener('click',closeSheet);
+  /* transport */
+  $('btnTap').addEventListener('click',tapTempo);
+  $('btnHalf').addEventListener('click',()=>{ S.bpm=clamp(Math.round(S.bpm/2),40,240); refreshTransport(); saveState(); });
+  $('btnDouble').addEventListener('click',()=>{ S.bpm=clamp(Math.round(S.bpm*2),40,240); refreshTransport(); saveState(); });
+  $('btnSync2').addEventListener('click',resyncBeat);
+  $('btnSync').addEventListener('click',()=>{ S.beatSync=!S.beatSync; refreshTransport(); saveState(); });
+  $('btnQuant').addEventListener('click',()=>{ MUI.quant=!MUI.quant; refreshTransport(); saveState(); });
+  $('btnAuto').addEventListener('click',()=>setAutopilot(!S.autopilot));
+  $('btnPauseT').addEventListener('click',togglePauseT);
+  $('btnBlackout').addEventListener('click',()=>{ S.blackout=!S.blackout; refreshTransport(); saveState(); });
+  $('panelFab').addEventListener('click',()=>setSheetHidden(false));
+  wireOutput();
+  /* MIDI learn: pointerdown capture so the tap selects without moving the slider */
+  document.addEventListener('pointerdown',e=>{
+    if(!learnArmed) return;
+    const t=e.target&&e.target.closest?e.target.closest('[data-ctrl]'):null;
+    if(!t) return;
+    e.preventDefault(); e.stopPropagation();
+    pendingCtrl=t.getAttribute('data-ctrl');
+    const c=CTRLS[pendingCtrl];
+    midiStatus('wiggle a knob for "'+(c?c.label:pendingCtrl)+'"\u2026', true);
+  },true);
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeSheet(); } });
+  let rzT=0;
+  const onView=()=>{ clearTimeout(rzT); rzT=setTimeout(refitCanvas,120); };
+  window.addEventListener('resize',onView);
+  window.addEventListener('orientationchange',()=>setTimeout(refitCanvas,400));
+  if(window.visualViewport) window.visualViewport.addEventListener('resize',onView);
+}
+
+/* ================= INIT v6 ================= */
+function init(){
+  S.blackout=false; S.paused=false;
+  MUI.quant=true; MUI.sheet=null; MUI.apLastBar=-1;
+  if(!S.camFace) S.camFace='environment';
+  try{
+    if(!localStorage.getItem('holomapper.mobile.seen')){
+      S.res='960x540';
+      localStorage.setItem('holomapper.mobile.seen','1');
+    }
+  }catch(e){}
+  if(!validClips(S.clips)) S.clips=defaultClips();
+  if(!Array.isArray(S.fired)||S.fired.length!==4) S.fired=[null,null,null,null];
+  if(typeof S.colFired!=='number') S.colFired=null;
+  if(!S.sel||typeof S.sel.i!=='number') S.sel={kind:'layer', i:0};
+  if(typeof S.selLayer!=='number') S.selLayer=0;
+  for(let i=0;i<4;i++){ S.params['L'+i+'.src']=S.layers[i].src/5; syncFiredToSrc(i); }
+  if(!S.map||!Array.isArray(S.map.surfaces)||!S.map.surfaces.length) S.map=defaultMap();
+  if(MUI.selSurf>=S.map.surfaces.length) MUI.selSurf=0;
+  if($('mhandle')) $('mhandle').style.pointerEvents='none';
+  buildDeck(); buildColumns(); syncNewUI();
+  $('plugcode').value=S.pluginCode||'';
+  wireV6();
+  if(!initGL()) return;
+  initQuad();
+  if(!compileAll()) return;
+  if(!compileMapProg()) return;
+  buildTargets(); buildMapTarget(); buildPreview();
+  compilePlugin(true);
+  initMidi();
+  refitCanvas();
+  if(canvas.width<2||canvas.height<2){ showErr('This viewer gives the page no screen space — open in Chrome.'); return; }
+  requestAnimationFrame(loop);
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+else init();
 /* ================= MAP UI (kept from v4 — the phone's superpower) ================= */
 function sliderRow(parent, label, v01, onInput, fmt){
   const wrap = el('div', 'prow'); const line = el('div', 'pline');
@@ -4355,6 +4670,7 @@ function loop(){
     }
   }
   lastBeatIdx=beatIdx;
+  v6LoopExtra(beatIdx);
   beatPulse=Math.max(pulse,audioBeat);
   evalModulators(t);
   for(let i=0;i<4;i++) renderLayer(i,t);
@@ -4372,141 +4688,6 @@ function loop(){
     updateMeters();
   }
 }
-
-/* ================= WIRING ================= */
-function wireNew(){
-  document.querySelectorAll('#tabbar button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
-  $('panelFab').addEventListener('click', ()=>setSheetHidden(false));
-  /* transport */
-  $('btnTap').addEventListener('click', tapTempo);
-  $('btnHalf').addEventListener('click', ()=>{
-    S.bpm=clamp(Math.round(S.bpm/2),40,240);
-    $('bpmBig').textContent=S.bpm; saveState();
-  });
-  $('btnDouble').addEventListener('click', ()=>{
-    S.bpm=clamp(Math.round(S.bpm*2),40,240);
-    $('bpmBig').textContent=S.bpm; saveState();
-  });
-  $('btnResync').addEventListener('click', resyncBeat);
-  $('btnPauseT').addEventListener('click', togglePauseT);
-  $('btnQuant').addEventListener('click', ()=>{
-    MUI.quant=!MUI.quant;
-    $('btnQuant').classList.toggle('on', MUI.quant); saveState();
-  });
-  $('btnBlackout').addEventListener('click', ()=>{
-    S.blackout=!S.blackout;
-    $('btnBlackout').classList.toggle('armed', S.blackout);
-    saveState();
-  });
-  $('ckBeatSync').addEventListener('change', e=>{ S.beatSync=e.target.checked; saveState(); });
-  const msl=$('masterSl');
-  msl.addEventListener('input', ()=>{
-    setParam('P.master', parseFloat(msl.value), msl);
-    $('masterVal').textContent=Math.round(parseFloat(msl.value)*100)+'%';
-  });
-  CTRLS['P.master']={set:v=>setParam('P.master',v), label:'Master'};
-  wirePresets();
-  $('btnLearn2').addEventListener('click', ()=>setLearn(!learnArmed));
-  $('btnAudio').addEventListener('click', toggleAudio);
-  $('resSel').addEventListener('change', ()=>{
-    S.res=$('resSel').value; buildTargets(); buildMapTarget(); refitCanvas(); saveState();
-  });
-  /* Factory reset: two-step confirm. First tap arms (red, pulsing), second tap
-     within 5s clears every persisted key and reloads to true factory defaults. */
-  let resetArmT=0;
-  const disarmReset=()=>{
-    const b=$('btnResetAll'); if(!b||!resetArmT) return;
-    resetArmT=0; b.classList.remove('armed');
-    b.textContent='Reset everything to default';
-  };
-  $('btnResetAll').addEventListener('click', e=>{
-    e.stopPropagation();
-    if(!resetArmT){
-      resetArmT=Date.now();
-      const b=$('btnResetAll');
-      b.classList.add('armed');
-      b.textContent='TAP AGAIN TO CONFIRM \u2014 clears everything';
-      setTimeout(()=>{ if(resetArmT && Date.now()-resetArmT>=5000) disarmReset(); },5100);
-    }else{
-      try{
-        [LS_STATE,LS_MIDI,LS_PRESETS,'holomapper.mobile.seen']
-          .forEach(k=>localStorage.removeItem(k));
-      }catch(err){/* private mode — reload still resets the session */}
-      location.reload();
-    }
-  });
-  document.addEventListener('pointerdown', e=>{
-    if(resetArmT && !(e.target&&e.target.closest&&e.target.closest('#btnResetAll')))
-      disarmReset();
-  }, true);
-  wireHandles(); wireMask(); wireOutput();
-  document.addEventListener('click', e=>{
-    const m=$('clipmenu');
-    if(m&&m.style.display==='block'&&!m.contains(e.target)) hideClipMenu();
-  });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ hideClipMenu(); } });
-  /* MIDI learn: pointerdown capture so the tap selects without moving the slider */
-  document.addEventListener('pointerdown', e=>{
-    if(!learnArmed) return;
-    const t=e.target && e.target.closest ? e.target.closest('[data-ctrl]') : null;
-    if(!t) return;
-    e.preventDefault(); e.stopPropagation();
-    pendingCtrl=t.getAttribute('data-ctrl');
-    const c=CTRLS[pendingCtrl];
-    midiStatus('wiggle a knob for "'+(c?c.label:pendingCtrl)+'"\u2026', true);
-  }, true);
-  let rzT=0;
-  const onView=()=>{ clearTimeout(rzT); rzT=setTimeout(refitCanvas,120); };
-  window.addEventListener('resize', onView);
-  window.addEventListener('orientationchange', ()=>setTimeout(refitCanvas,400));
-  if(window.visualViewport) window.visualViewport.addEventListener('resize', onView);
-}
-
-/* ================= INIT ================= */
-function init(){
-  S.blackout=false; S.paused=false;
-  MUI.quant=true; MUI.tab='Play';
-  try{
-    if(!localStorage.getItem('holomapper.mobile.seen')){
-      S.res='960x540';
-      localStorage.setItem('holomapper.mobile.seen','1');
-    }
-  }catch(e){}
-  if(!validClips(S.clips)) S.clips=defaultClips();
-  if(!Array.isArray(S.fired)||S.fired.length!==4) S.fired=[null,null,null,null];
-  if(typeof S.colFired!=='number') S.colFired=null;
-  if(!S.sel||typeof S.sel.i!=='number') S.sel={kind:'layer', i:0};
-  if(typeof S.selLayer!=='number') S.selLayer=0;
-  for(let i=0;i<4;i++){ S.params['L'+i+'.src']=S.layers[i].src/4; syncFiredToSrc(i); }
-  if(!S.map || !Array.isArray(S.map.surfaces) || !S.map.surfaces.length) S.map=defaultMap();
-  if(MUI.selSurf >= S.map.surfaces.length) MUI.selSurf=0;
-  if($('mhandle')) $('mhandle').style.pointerEvents='none'; /* visual only; resize via mapcv proximity */
-  buildColumns(); syncNewUI();
-  buildFxCards(); buildMixLayers(); buildMixMacros();
-  $('plugcode').value=S.pluginCode||'';
-  $('resSel').value=S.res;
-  $('bpmBig').textContent=S.bpm;
-  $('btnBlackout').classList.toggle('armed', !!S.blackout);
-  $('btnPauseT').classList.toggle('on', !!S.paused);
-  $('btnQuant').classList.toggle('on', !!MUI.quant);
-  $('ckBeatSync').checked=!!S.beatSync;
-  const mv=(S.params['P.master']!==undefined)?S.params['P.master']:1;
-  $('masterSl').value=mv; $('masterVal').textContent=Math.round(mv*100)+'%';
-  showTab('Play');
-  wireNew();
-  if(!initGL()) return;
-  initQuad();
-  if(!compileAll()) return;
-  if(!compileMapProg()) return;
-  buildTargets(); buildMapTarget();
-  compilePlugin(true);
-  initMidi();
-  refitCanvas();
-  if(canvas.width<2||canvas.height<2){ showErr('This viewer gives the page no screen space — open in Chrome.'); return; }
-  requestAnimationFrame(loop);
-}
-if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
-else init();
 
 </script>
 </body>
