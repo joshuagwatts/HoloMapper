@@ -70,8 +70,16 @@ button{font:inherit;color:inherit}
 /* ---------- deck ---------- */
 #deckWrap{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
   padding:8px 0 calc(8px + var(--sat));touch-action:pan-y}
-.lstrip{margin:0 10px 10px;border:1px solid var(--line);border-radius:var(--r);
+.lstrip{margin:0 10px 10px;border:1px solid var(--line);border-radius:var(--r);display:flex;
   border-left:4px solid hsl(var(--lhue,200) 85% 60%);background:var(--panel);overflow:hidden}
+/* Resolume-style V fader + mix mode on the strip's left edge */
+.lfad{flex:none;width:56px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:8px 2px 6px;border-right:1px solid var(--line)}
+.vfader{flex:1;min-height:104px;width:30px;writing-mode:vertical-lr;direction:rtl;margin:0;
+  touch-action:pan-x;cursor:ns-resize}
+.fval{font-size:9px;font-weight:800;color:var(--dim);line-height:1}
+.lfad .lbsel{max-width:52px;font-size:9px;padding:0 1px}
+.lbody{flex:1;min-width:0;display:flex;flex-direction:column}
 .lstrip.sel{border-color:hsl(var(--lhue,200) 85% 60%)}
 .lhead{display:flex;align-items:center;gap:6px;padding:8px 10px 4px}
 .ltab{flex:none;min-width:48px;min-height:44px;border-radius:10px;font-weight:900;font-size:15px;
@@ -3915,6 +3923,21 @@ function buildDeck(){
     const st=el('div','lstrip'+((S.sel&&S.sel.kind==='layer'&&S.sel.i===i)?' sel':''));
     st.style.setProperty('--lhue', Math.round(LAYER_HUES[i]*360));
     st.dataset.i=i;
+    /* Resolume-style V fader + mix mode on the strip's left edge */
+    const fad=el('div','lfad');
+    const fop=document.createElement('input');
+    fop.type='range'; fop.min=0; fop.max=1; fop.step=0.001; fop.className='vfader';
+    fop.value=(S.params['L'+i+'.op']!==undefined)?S.params['L'+i+'.op']:1;
+    fop.setAttribute('data-ctrl','L'+i+'.op');
+    fop.title=LAYER_NAMES[i]+' Opacity';
+    const ffv=el('span','fval',Math.round(parseFloat(fop.value)*100)+'%');
+    fop.addEventListener('input',()=>{ setParam('L'+i+'.op',parseFloat(fop.value),fop); ffv.textContent=Math.round(parseFloat(fop.value)*100)+'%'; });
+    CTRLS['L'+i+'.op']={set:v=>setParam('L'+i+'.op',v), label:LAYER_NAMES[i]+' Opacity'};
+    SYNC_FN['L'+i+'.op']=(elm,v)=>{ elm.value=v; const fvs=elm.parentElement.querySelector('.fval'); if(fvs) fvs.textContent=Math.round(v*100)+'%'; };
+    const fbs=document.createElement('select'); fbs.className='lbsel'; fbs.title='Mix mode (blend)';
+    BLENDS.forEach((b,bi)=>fbs.appendChild(new Option(b,bi))); fbs.value=L.blend;
+    fbs.addEventListener('change',()=>{ L.blend=parseInt(fbs.value,10); saveState(); });
+    fad.appendChild(fop); fad.appendChild(ffv); fad.appendChild(fbs);
     const head=el('div','lhead');
     const tab=el('button','ltab','L'+(i+1));
     tab.title='Select layer '+(i+1);
@@ -3929,7 +3952,8 @@ function buildDeck(){
     const bX=el('button','tbtn bClr','\u2715'); bX.title='Clear layer';
     bX.addEventListener('click',()=>{ L.bypass=true; S.fired[i]=null; S.colFired=null; saveState(); syncDeckSel(); });
     head.appendChild(bB); head.appendChild(bS); head.appendChild(bX);
-    st.appendChild(head);
+    const lbody=el('div','lbody');
+    lbody.appendChild(head);
     const strip=el('div','cstrip');
     for(let k=0;k<8;k++){
       const src=S.clips[i][k];
@@ -3946,7 +3970,8 @@ function buildDeck(){
       c.appendChild(box); c.appendChild(nm);
       strip.appendChild(c);
     }
-    st.appendChild(strip);
+    lbody.appendChild(strip);
+    st.appendChild(fad); st.appendChild(lbody);
     host.appendChild(st);
   }
   syncDeckSel();

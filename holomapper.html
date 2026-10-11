@@ -133,7 +133,13 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .coltab:hover{color:var(--txt)}
 #deck{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;padding:4px 8px 8px;gap:3px}
 .lstrip{flex:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
-  display:grid;grid-template-columns:196px minmax(0,1fr)}
+  display:grid;grid-template-columns:54px 196px minmax(0,1fr)}
+/* Resolume-style V fader + mix mode on the strip's left edge */
+.lfad{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 3px 6px;
+  border-right:1px solid var(--line);min-height:0}
+.vfader{flex:1;min-height:96px;width:28px;writing-mode:vertical-lr;direction:rtl;cursor:ns-resize;margin:0}
+.fval{font-size:9px;font-weight:800;color:var(--dim);line-height:1}
+.lfad .lbsel{max-width:48px;font-size:9px;padding:0 1px}
 .lstrip.sel{border-color:var(--sel)}
 .lgut{padding:4px 6px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:3px;min-width:0}
 .lrow1{display:flex;align-items:center;gap:4px}
@@ -3500,10 +3506,26 @@ function buildDeck(){
     st.dataset.i=i;
     /* clicking deck background (not a clip) dismisses the clip inspector */
     st.addEventListener('click',(e)=>{ if(!e.target.closest('.clip')) closeClipInspector(); });
+    /* Resolume-style V fader + mix mode on the strip's left edge */
+    const fad=el('div','lfad');
+    const op=document.createElement('input');
+    op.type='range'; op.min=0; op.max=1; op.step=0.001; op.className='vfader';
+    op.value=(S.params['L'+i+'.op']!==undefined)?S.params['L'+i+'.op']:1;
+    op.setAttribute('data-ctrl','L'+i+'.op');
+    op.title=LAYER_NAMES[i]+' Opacity \u2014 click while MIDI Learn is armed to map';
+    const fv=el('span','fval',Math.round(parseFloat(op.value)*100)+'%');
+    op.addEventListener('input',()=>{ setParam('L'+i+'.op',parseFloat(op.value),op); fv.textContent=Math.round(parseFloat(op.value)*100)+'%'; });
+    CTRLS['L'+i+'.op']={set:v=>setParam('L'+i+'.op',v), label:LAYER_NAMES[i]+' Opacity'};
+    SYNC_FN['L'+i+'.op']=(elm,v)=>{ elm.value=v; const fvs=elm.parentElement.querySelector('.fval'); if(fvs) fvs.textContent=Math.round(v*100)+'%'; };
+    const bs=document.createElement('select'); bs.className='lbsel'; bs.title='Mix mode (blend)';
+    BLENDS.forEach((b,bi)=>bs.appendChild(new Option(b,bi))); bs.value=L.blend;
+    bs.addEventListener('change',()=>{ L.blend=parseInt(bs.value,10); saveState(); });
+    fad.appendChild(op); fad.appendChild(fv); fad.appendChild(bs);
+    st.appendChild(fad);
     const gut=el('div','lgut');
     const r1=el('div','lrow1');
     const nm=el('button','lname','L'+(i+1));
-    nm.title='Select layer (key '+(i+1)+') — double-click opens the node graph';
+    nm.title='Select layer (key '+(i+1)+') \u2014 double-click opens the node graph';
     nm.addEventListener('click',()=>selectLayer(i));
     nm.addEventListener('dblclick',(e)=>{ e.stopPropagation(); if(typeof openNodes==='function') openNodes(i); });
     const bX=el('button','tbtn bClr'+(L.ejected?' onB':''),'X'); bX.title='Eject layer clip';
@@ -3513,19 +3535,7 @@ function buildDeck(){
     const bS=el('button','tbtn bSolo'+(L.solo?' onS':''),'S'); bS.title='Solo layer';
     bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); syncDeckSel(); });
     r1.appendChild(nm); r1.appendChild(bX); r1.appendChild(bB); r1.appendChild(bS);
-    const r2=el('div','lrow2');
-    const op=document.createElement('input');
-    op.type='range'; op.min=0; op.max=1; op.step=0.001; op.className='lop';
-    op.value=(S.params['L'+i+'.op']!==undefined)?S.params['L'+i+'.op']:1;
-    op.setAttribute('data-ctrl','L'+i+'.op');
-    op.title=LAYER_NAMES[i]+' Opacity \u2014 click while MIDI Learn is armed to map';
-    op.addEventListener('input',()=>setParam('L'+i+'.op',parseFloat(op.value),op));
-    CTRLS['L'+i+'.op']={set:v=>setParam('L'+i+'.op',v), label:LAYER_NAMES[i]+' Opacity'};
-    const bs=document.createElement('select'); bs.className='lbsel'; bs.title='Blend mode';
-    BLENDS.forEach((b,bi)=>bs.appendChild(new Option(b,bi))); bs.value=L.blend;
-    bs.addEventListener('change',()=>{ L.blend=parseInt(bs.value,10); saveState(); });
-    r2.appendChild(op); r2.appendChild(bs);
-    gut.appendChild(r1); gut.appendChild(r2);
+    gut.appendChild(r1);
     st.appendChild(gut);
     const grid=el('div','clipgrid');
     for(let k=0;k<8;k++){
