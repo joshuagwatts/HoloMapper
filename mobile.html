@@ -5,498 +5,354 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
 <title>HoloMapper Mobile</title>
 <style>
-/* ============ HoloMapper v1 - dark gig-ready UI ============ */
+/* ============ HoloMapper Mobile v5 — touch-first, HoloWatts energy ============
+   Phone-app idioms: bottom tab bar, big thumb targets, native momentum
+   scrolling. The desktop stays the technical one; this one is for play. */
 :root{
-  --bg:#08090c; --panel:#10131a; --panel2:#151a23; --line:#232b38;
-  --txt:#e2e8f2; --dim:#8b95a8; --acc:#8b5cf6; --acc2:#22d3ee;
-  --warn:#f5a623; --bad:#f0524d; --ok:#34d399; --r:8px;
+  --bg:#07080d; --bg2:#0a0c15;
+  --card:#121524; --card2:#181c31;
+  --line:#262c49;
+  --txt:#f0f2ff; --dim:#8f96bb;
+  --vio:#8b5cf6; --cy:#22d3ee; --pk:#f472b6;
+  --ok:#34d399; --warn:#f5a623; --bad:#f0524d;
+  --r:16px;
+  --sat:env(safe-area-inset-bottom,0px);
 }
-*{box-sizing:border-box;margin:0;padding:0}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
-body{background:var(--bg);color:var(--txt);
-  font:12px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
-  overflow:hidden;user-select:none}
-#app{display:grid;grid-template-rows:auto minmax(0,1fr) 66px;height:100vh}
-#topbar{display:flex;align-items:center;gap:8px;padding:4px 10px;flex-wrap:wrap;
-  background:var(--panel);border-bottom:1px solid var(--line);min-height:46px;grid-row:1}
-#main{grid-row:2}
-#dashbar{grid-row:3}
-#topbar{display:flex;align-items:center;gap:8px;padding:0 10px;
-  background:var(--panel);border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden}
-.brand{font-weight:800;font-size:15px;letter-spacing:.5px;
-  background:linear-gradient(90deg,var(--acc),var(--acc2));
-  -webkit-background-clip:text;background-clip:text;color:transparent}
-.vtag{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
-.sp{flex:1}
-button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
-  border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
-button:hover{border-color:var(--acc);color:#fff}
-button.on{background:var(--acc);border-color:var(--acc);color:#fff}
-button.warn-on{background:var(--warn);border-color:var(--warn);color:#111}
-button:disabled{opacity:.4;cursor:default}
-input[type=range]{accent-color:var(--acc);width:100%;height:18px;cursor:pointer}
-input[type=text]{background:#0b0e13;color:var(--txt);border:1px solid var(--line);
-  border-radius:6px;padding:4px 8px;font-size:12px;width:130px}
-select{background:#0b0e13;color:var(--txt);border:1px solid var(--line);
-  border-radius:6px;padding:3px 4px;font-size:11px;max-width:100%}
-label.ck{display:flex;align-items:center;gap:6px;cursor:pointer}
-input[type=checkbox]{accent-color:var(--acc);width:14px;height:14px}
-#main{display:grid;grid-template-columns:476px minmax(0,1fr) 352px;min-height:0}
-body.hideL #main{grid-template-columns:0 minmax(0,1fr) 352px}
-body.hideR #main{grid-template-columns:476px minmax(0,1fr) 0}
-body.hideL.hideR #main{grid-template-columns:0 minmax(0,1fr) 0}
-body.hideL #left,body.hideR #right{display:none}
-#left,#right{background:var(--panel);overflow-y:auto;overflow-x:hidden;min-height:0}
-#left{border-right:1px solid var(--line);grid-column:1}
-#right{border-left:1px solid var(--line);grid-column:3}
-#stage{grid-column:2}
-#stage{position:relative;min-width:0;min-height:0;background:#000;
-  display:flex;align-items:center;justify-content:center}
-#gl{width:100%;height:100%;object-fit:contain;display:block;background:#000}
-
-
-/* layer cards */
-.card{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);margin:8px;padding:8px}
-.card.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
-.chead{display:flex;align-items:center;gap:6px;margin-bottom:4px}
-.lname{font-weight:800;font-size:13px;color:var(--acc2);cursor:pointer;min-width:26px;text-align:center}
-.srcsel{flex:1;min-width:0}
-.tbtn{padding:3px 8px;font-size:11px;font-weight:700}
-.tbtn.onB{background:var(--warn);border-color:var(--warn);color:#111}
-.tbtn.onS{background:var(--ok);border-color:var(--ok);color:#111}
-.cbody.collapsed{display:none}
-.blendrow{display:flex;align-items:center;gap:6px;margin:2px 0 4px;color:var(--dim);font-size:11px}
-/* param rows: slider line + macro assign line */
-.prow{margin:5px 0}
-.pline{display:grid;grid-template-columns:58px minmax(0,1fr) 36px;gap:6px;align-items:center}
-.pline label{color:var(--dim);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pval{font-size:11px;color:var(--txt);text-align:right;font-variant-numeric:tabular-nums}
-.psub{display:grid;grid-template-columns:58px minmax(0,1fr) minmax(0,1fr);gap:6px;align-items:center;margin-top:1px}
-.psub .mlab{color:#5b6474;font-size:10px}
-.msel{font-size:10px;padding:2px}
-.mdep{height:12px}
-/* right panel sections */
-details.sec{border-bottom:1px solid var(--line)}
-details.sec>summary{padding:9px 12px;cursor:pointer;font-weight:700;font-size:12px;
-  list-style:none;display:flex;justify-content:space-between;align-items:center;background:var(--panel)}
-details.sec>summary::-webkit-details-marker{display:none}
-details.sec>summary:hover{color:var(--acc2)}
-details.sec>summary .x{color:var(--dim);font-weight:400;font-size:10px}
-.secbody{padding:4px 12px 12px}
-.fxhead{display:flex;align-items:center;gap:8px;margin:10px 0 2px;font-weight:700}
-.fxhead .byp{margin-left:auto;font-size:10px;color:var(--dim)}
-.macrorow{display:grid;grid-template-columns:66px minmax(0,1fr) 36px;gap:6px;align-items:center;margin:6px 0}
-.macrolab{background:#0b0e13;border:1px solid var(--line);border-radius:6px;color:var(--acc2);
-  font-weight:700;font-size:11px;padding:3px 6px;width:66px;text-align:center}
-.midrow{display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid var(--line);font-size:11px}
-.midrow .ml{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.midrow .cc{color:var(--acc2);font-variant-numeric:tabular-nums}
-#plugcode{width:100%;height:220px;background:#07090d;color:#c9f2ff;border:1px solid var(--line);
-  border-radius:6px;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  padding:8px;resize:vertical;user-select:text;white-space:pre}
-#plugerr{color:var(--bad);font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;
-  white-space:pre-wrap;margin-top:6px;max-height:120px;overflow:auto}
-#plugok{color:var(--ok);font-size:11px;margin-top:6px}
-/* cloner 3d */
-.clonerbox{margin-top:6px;border-top:1px dashed var(--line);padding-top:4px}
-details.cgrp{margin:4px 0}
-details.cgrp>summary{cursor:pointer;font-weight:700;font-size:11px;color:var(--acc2);
-  padding:3px 0;list-style:none}
-details.cgrp>summary::-webkit-details-marker{display:none}
-details.cgrp>summary:before{content:'\25B8  ';color:var(--dim)}
-details.cgrp[open]>summary:before{content:'\25BE  '}
-.csub{padding-left:8px;border-left:2px solid var(--line);margin:2px 0 6px 2px}
-.dsel{min-width:104px}
-.ckrow{display:inline-flex;align-items:center}
-.reroll{padding:2px 10px;font-size:10px;margin:2px 0}
-
-
-/* status bar */
-#statusbar{display:flex;align-items:center;gap:10px;padding:0 10px;background:var(--panel);
-  border-top:1px solid var(--line);font-size:11px;white-space:nowrap;overflow:hidden}
-#statusbar .grp{display:flex;align-items:center;gap:6px}
-#statusbar .sep{width:1px;height:18px;background:var(--line)}
-#bpm{font-weight:800;font-size:14px;color:var(--acc2);min-width:46px;font-variant-numeric:tabular-nums}
-#midistat{color:var(--dim);max-width:300px;overflow:hidden;text-overflow:ellipsis}
-#midistat.armed{color:var(--warn);font-weight:700}
-.meters{display:flex;gap:3px;align-items:flex-end;height:16px}
-.meter{width:8px;background:#1c2230;border-radius:2px;position:relative;height:16px;overflow:hidden}
-.meter>i{position:absolute;bottom:0;left:0;right:0;background:var(--ok);height:0%}
-.meter:nth-child(2)>i{background:var(--warn)}
-.meter:nth-child(3)>i{background:var(--acc2)}
-#fps{color:var(--dim);font-variant-numeric:tabular-nums}
-/* overlays */
-#help{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;z-index:50;
-  align-items:center;justify-content:center}
-#help.show{display:flex}
-#help .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;
-  padding:22px 28px;max-width:460px;max-height:84vh;overflow:auto}
-#help h2{margin-bottom:12px;color:var(--acc2)}
-#help table{border-collapse:collapse;width:100%}
-#help td{padding:4px 8px;border-bottom:1px solid var(--line)}
-#help td.k{color:var(--acc2);font-weight:700;white-space:nowrap;width:110px}
-#pair{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;z-index:50;
-  align-items:center;justify-content:center}
-#pair.show{display:flex}
-#pair .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;
-  padding:22px 28px;max-width:420px;text-align:center}
-#pair h2{margin-bottom:10px;color:var(--acc2)}
-#pairqr{display:flex;justify-content:center;margin:12px 0;min-height:40px}
-#pairqr img,#pairqr canvas,#pairqr table{border:8px solid #fff;border-radius:8px}
-#errbanner{position:fixed;top:52px;left:50%;transform:translateX(-50%);z-index:60;display:none;
-  background:#2a1214;border:1px solid var(--bad);color:#ffd7d7;border-radius:8px;
-  padding:10px 16px;max-width:82%;font-size:12px;white-space:pre-wrap}
-#errbanner.show{display:block}
-#ctxlost{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;z-index:70;
-  align-items:center;justify-content:center;flex-direction:column;gap:14px}
-#ctxlost.show{display:flex}
-/* ---------- Resolume-style deck ---------- */
-#deck{padding:8px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
-.lstrip{background:#101319;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
-.lstrip.sel{border-color:var(--acc)}
-.lhead{display:flex;align-items:center;gap:6px;padding:6px 8px;background:#151a24}
-.ltab{width:8px;align-self:stretch;border-radius:4px;background:hsl(var(--lhue,200),70%,55%)}
-.lname{font-weight:800;font-size:13px;min-width:30px;text-align:center;cursor:pointer;border:none;background:none;color:var(--txt);padding:2px 4px;border-radius:4px}
-.lname:hover{background:#232b3d}
-.lhead .tbtn.onS{background:#2a4a3a;border-color:#3fa46a;color:#bdf0d2}
-.lhead .tbtn.onB{background:#4a2a2a;border-color:#c46a6a;color:#f0bdbd}
-.lop{flex:1;min-width:40px}
-.lbsel{max-width:92px}
-.clipgrid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;padding:8px}
-.clip{aspect-ratio:1/1;min-height:46px;border-radius:6px;background:#1a2030;border:1px solid #2a3348;
-  color:var(--dim);font-size:9px;font-weight:700;cursor:pointer;display:flex;align-items:center;
-  justify-content:center;text-align:center;padding:2px;line-height:1.15;user-select:none}
-.clip:hover{border-color:var(--acc);color:var(--txt)}
-.clip.fired{border-color:var(--acc2);color:#fff;background:#1c2a3e;box-shadow:0 0 10px rgba(94,234,212,.35)}
-.clip.selc{outline:2px solid var(--acc);outline-offset:-2px}
-.clip.empty{border-style:dashed;opacity:.55;font-size:14px}
-#clipmenu{position:fixed;z-index:200;background:#161b26;border:1px solid var(--acc);border-radius:8px;
-  padding:4px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
-#clipmenu button{display:block;width:100%;text-align:left;background:none;border:none;color:var(--txt);
-  padding:8px 10px;font-size:12px;cursor:pointer;border-radius:5px}
-#clipmenu button:hover{background:#232b3d}
-/* ---------- properties panel ---------- */
-#propsel{border-bottom:1px solid var(--line);padding:8px;max-height:46vh;overflow-y:auto}
-.phead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.ptitle{font-weight:800;font-size:13px;color:var(--acc2);letter-spacing:.06em}
-.psec .plab{font-size:11px;color:var(--dim);display:block;margin:6px 0 2px}
-/* ---------- bottom dashboard ---------- */
-#dashbar{display:flex;align-items:center;gap:10px;padding:4px 12px;background:var(--panel);
-  border-top:1px solid var(--line);min-height:0;overflow:hidden}
-#dashmacros{display:flex;gap:10px;flex:1;align-items:center;min-width:0}
-.dmacro{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
-.dmacrolab{width:40px;flex:none;background:transparent;border:1px solid transparent;border-radius:4px;
-  color:var(--acc2);font-size:11px;font-weight:700;text-align:center;padding:2px}
-.dmacrolab:hover{border-color:var(--line)}
-.dmacro input[type=range]{flex:1;min-width:30px}
-.dmacro .pval{min-width:34px;text-align:right}
-#btnBlackout.armed{background:#5a1d1d;border-color:#e05a5a;color:#ffd7d7}
-.tgrp{display:flex;align-items:center;gap:6px}
-.tlab{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
-#masterSl{width:90px}
-.dim{color:var(--dim);font-size:11px}
-/* perform mode */
-#performbar{display:none;position:absolute;left:0;right:0;bottom:0;z-index:20;
-  background:rgba(10,12,16,.93);border-top:1px solid var(--line);padding:10px 14px}
-body.perform #topbar,body.perform #left,body.perform #right,body.perform #dashbar{display:none}
-body.perform #main{grid-template-columns:0 minmax(0,1fr) 0}
-body.perform #performbar{display:block}
-.pmacros{display:grid;grid-template-columns:repeat(8,minmax(0,1fr)) 120px;gap:10px;align-items:center}
-.pmacro{text-align:center;min-width:0}
-.pmacro .ml{font-size:11px;font-weight:700;color:var(--acc2);margin-bottom:2px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pexit{color:var(--dim);font-size:10px;text-align:center}
-/* v1.2 modulator curve editor */
-.modcv{width:100%;height:104px;background:#0b0e16;border:1px solid var(--line);
-  border-radius:6px;cursor:crosshair;touch-action:none;display:block;margin:4px 0}
-.mbtn{padding:3px 9px;font-size:10px;margin:2px 3px 2px 0;border:1px solid var(--line);
-  background:var(--panel2);color:var(--txt);border-radius:5px;cursor:pointer}
-.mbtn:hover{border-color:var(--acc)}
-.mbtn.on{border-color:var(--acc);color:var(--acc)}
-.tgrow{display:grid;grid-template-columns:minmax(0,1fr) 90px 22px;gap:6px;align-items:center;margin:3px 0}
-.tgrow input[type=range]{min-width:0}
-.tgx{background:none;border:none;color:var(--dim);font-size:13px;cursor:pointer;padding:2px}
-.tgx:hover{color:#ff7b7b}
-.modrow{display:flex;gap:6px;align-items:center;margin:4px 0;flex-wrap:wrap}
-.modrow .dsel{min-width:0}
-::-webkit-scrollbar{width:9px;height:9px}
-::-webkit-scrollbar-thumb{background:#2a3342;border-radius:5px}
-::-webkit-scrollbar-track{background:transparent}
-.hint{color:var(--dim);font-size:11px;margin:6px 0}
-.krow{display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap}
-
-
-/* ================= v4 — Resolume-faithful mobile shell =================
-   Primary reference: Joshua's Resolume Arena 7.1.0 screenshot
-   (research/resolume-arena-7.1.0-reference.webp).
-   Near-black panels, teal (#2dd4bf) active accents, dense 10-11px labels.
-   Paradigm kept: clip grid hero → transport bar → tabbed property panels. */
-:root{ --teal:#2dd4bf; --teal-dk:#0d2b26; }
-html,body{height:100%;}
-body{display:flex;flex-direction:column;height:100dvh;overflow:hidden;
-  text-size-adjust:100%;-webkit-text-size-adjust:100%;background:#0b0d10;}
-/* ---- topbar ---- */
-#topbar{flex:none;display:flex;align-items:center;gap:8px;padding:6px 10px;
-  background:#0c0e12;border-bottom:1px solid #1c222c;white-space:nowrap;
-  overflow-x:auto;scrollbar-width:none;}
-#topbar::-webkit-scrollbar{display:none;}
-#topbar>*{flex:none;}
-#topbar .brand{font-size:14px;}
-#topbar .vtag{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:1px 6px;}
-#masterSl{width:70px;}
-#topbar .tbtn{padding:6px 10px;font-size:12px;}
-#fps{font-size:10px;color:var(--dim);min-width:44px;text-align:right;font-variant-numeric:tabular-nums;}
-/* ---- stage = output monitor ---- */
-#stage{position:relative;flex:1 1 auto;min-height:120px;background:#000;}
-#gl{position:absolute;inset:0;width:100%;height:100%;display:block;background:#000;touch-action:none;}
-/* ---- panel ---- */
-#panel{flex:none;height:58dvh;min-height:340px;display:flex;flex-direction:column;
-  background:#0e1013;border-top:1px solid #20262f;}
-/* grid scroll zone: column headers + layer rows scroll together */
-#gridscroll{flex:none;overflow-x:auto;scrollbar-width:none;background:#0c0e12;
-  border-bottom:1px solid #1c222c;}
-#gridscroll::-webkit-scrollbar{display:none;}
-#colrow{display:flex;gap:4px;padding:7px 8px 4px;min-width:max-content;align-items:center;}
-.gspacer{flex:none;width:88px;}
-#colbtns{display:flex;gap:4px;}
-.colbtn{flex:0 0 52px;min-width:52px;padding:6px 0;font-size:10px;font-weight:700;text-align:center;
-  background:#14171d;border:1px solid #222a35;border-radius:5px;color:#8f99a9;touch-action:manipulation;}
-.colbtn.conn{background:var(--teal);border-color:var(--teal);color:#052723;
-  box-shadow:0 0 8px rgba(45,212,191,.45);}
-#deck{padding:3px 8px 7px;min-width:max-content;}
-.lstrip{display:flex;align-items:stretch;gap:4px;margin-bottom:5px;}
-.lstrip:last-child{margin-bottom:0;}
-.lgut{flex:none;width:88px;display:flex;flex-direction:column;gap:3px;background:#111318;
-  border:1px solid #1e242e;border-radius:6px;padding:4px 5px;}
-.lgut .lrow1{display:flex;align-items:center;gap:3px;}
-.ltab{font-size:10px;font-weight:800;padding:3px 6px;border-radius:4px;background:#1a1f28;
-  color:#cfd6e2;border:1px solid #28303d;flex:1;text-align:center;}
-.lstrip.sel .ltab{background:var(--teal);border-color:var(--teal);color:#052723;}
-.lstrip.sel{border-color:rgba(45,212,191,.45)!important;}
-.tbtn{padding:3px 5px;font-size:9px;font-weight:800;border-radius:4px;background:#1a1f28;
-  border:1px solid #28303d;color:#aeb7c6;min-width:20px;text-align:center;}
-.tbtn.onB{background:#f5a623;border-color:#f5a623;color:#201503;}
-.tbtn.onS{background:#f5d90a;border-color:#f5d90a;color:#201503;}
-.lgut .lop{width:100%;height:20px;accent-color:var(--teal);margin:0;}
-.clipgrid{display:flex;gap:4px;}
-.clip{flex:0 0 52px;min-width:52px;min-height:50px;font-size:9px;font-weight:600;border-radius:5px;
-  background:#13151b;border:1px solid #212835;color:#8f99a9;
-  display:flex;align-items:center;justify-content:center;text-align:center;padding:2px;
-  touch-action:manipulation;line-height:1.2;}
-.clip.empty{border-style:dashed;color:#454f60;background:#0e1013;}
-.clip.fired{border-color:var(--teal);color:#e6fffa;background:var(--teal-dk);
-  box-shadow:0 0 9px rgba(45,212,191,.5);}
-.clip.selc{outline:2px solid #fff;}
-/* transport bar */
-#transport{flex:none;display:flex;align-items:center;gap:6px;padding:7px 10px;
-  background:#0c0e12;border-bottom:1px solid #1c222c;overflow-x:auto;scrollbar-width:none;}
-#transport::-webkit-scrollbar{display:none;}
-#transport>*{flex:none;}
-#btnTap2{padding:8px 18px;font-weight:800;font-size:13px;background:#1a1f28;
-  border:1px solid #2c3542;border-radius:6px;color:#e2e8f2;}
-#bpmBig{font-size:17px;font-weight:800;color:var(--teal);min-width:36px;text-align:center;
-  font-variant-numeric:tabular-nums;}
-.tsm{font-size:10px;color:#69707f;}
-.tbtn2{padding:8px 11px;font-size:12px;font-weight:700;background:#1a1f28;
-  border:1px solid #2c3542;border-radius:6px;color:#c6cdd9;}
-.tbtn2.on{background:var(--teal);border-color:var(--teal);color:#052723;}
-#btnBlackout2{padding:8px 14px;font-weight:800;background:#1a1f28;
-  border:1px solid #2c3542;border-radius:6px;color:#e2e8f2;}
-#btnBlackout2.armed{background:var(--warn);border-color:var(--warn);color:#111;}
-@media (max-width:480px){
-  #transport{gap:5px;padding:7px 8px;}
-  #btnTap2{padding:8px 12px;font-size:12px;}
-  .tbtn2{padding:8px 8px;font-size:11px;}
-  #btnBlackout2{padding:8px 10px;font-size:12px;}
-  #bpmBig{font-size:15px;min-width:30px;}
-  .tsm{display:none;}
+body{
+  background:radial-gradient(130% 80% at 50% -10%, #171331 0%, var(--bg) 58%) fixed, var(--bg);
+  color:var(--txt);
+  font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+  display:flex;flex-direction:column;height:100dvh;overflow:hidden;
+  user-select:none;-webkit-user-select:none;
+  text-size-adjust:100%;-webkit-text-size-adjust:100%;
 }
-.ck.sm{font-size:10px;color:#69707f;display:flex;align-items:center;gap:4px;white-space:nowrap;}
-/* panel tabs */
-#ptabs{flex:none;display:flex;background:#0c0e12;}
-#ptabs button{flex:1;padding:9px 0;font-weight:700;font-size:10px;text-transform:uppercase;
-  letter-spacing:.6px;background:none;border:none;border-radius:0;color:#6d7686;
-  border-bottom:2px solid transparent;}
-#ptabs button.on{color:var(--teal);border-bottom-color:var(--teal);}
-#pbody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
-.ptab{padding:4px 10px 24px;}
-.ptab[hidden]{display:none!important;}
-/* collapsible sections (Resolume ▸) */
-details.rsec{border-bottom:1px solid #181d25;}
-details.rsec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:7px;
-  padding:10px 2px;font-size:11px;font-weight:700;text-transform:uppercase;
-  letter-spacing:1px;color:#aeb7c6;}
-details.rsec>summary::-webkit-details-marker{display:none;}
-details.rsec>summary::before{content:'▸';color:var(--teal);font-size:12px;flex:none;}
-details.rsec[open]>summary::before{content:'▾';}
-.rbody{padding:2px 2px 12px;}
-/* teal param rows */
-.prow{margin:8px 0;}
-.pline{display:flex;align-items:center;gap:8px;}
-.pline label{flex:0 0 88px;font-size:11px;color:#98a1b1;}
-.pline input[type=range]{flex:1;height:26px;accent-color:var(--teal);}
-.pval{flex:0 0 54px;text-align:right;font-size:11px;color:var(--teal);font-variant-numeric:tabular-nums;}
-select.dsel{background:#0b0e13;color:#e2e8f2;border:1px solid #2a3240;border-radius:6px;
-  padding:6px 8px;font-size:12px;max-width:100%;}
-/* dashboard knobs (Resolume's 8-knob dashboard) */
-#dashknobs{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 6px;padding:8px 2px;}
-.dknob{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;}
-.kdial{width:58px;height:58px;border-radius:50%;touch-action:none;position:relative;flex:none;
-  background:conic-gradient(var(--teal) calc(var(--v,0.5)*1turn), #1b2029 0);}
-.kdial::after{content:'';position:absolute;inset:8px;border-radius:50%;background:#0e1013;}
-.kptr{position:absolute;inset:0;z-index:1;pointer-events:none;}
-.kptr::before{content:'';position:absolute;left:50%;top:5px;width:3px;height:13px;margin-left:-1.5px;
-  background:var(--teal);border-radius:2px;transform-origin:1.5px 24px;
-  transform:rotate(calc(var(--v,0.5)*270deg - 135deg));}
-.klab{font-size:10px;color:#98a1b1;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.kval{font-size:10px;color:var(--teal);font-variant-numeric:tabular-nums;}
-/* fx stack rows */
-.fxhead{display:flex;align-items:center;gap:8px;padding:9px 2px 5px;font-size:12px;font-weight:700;color:#cfd6e2;}
-.fxhead .byp{margin-left:auto;font-size:10px;padding:4px 10px;font-weight:800;border-radius:4px;}
-.fxhead .byp.off{color:var(--amber);border-color:var(--amber);}
-/* clip menu popup */
-#clipmenu{position:fixed;z-index:95;display:none;background:#151a23;
-  border:1px solid #2a3240;border-radius:8px;padding:6px;min-width:170px;
-  box-shadow:0 8px 24px rgba(0,0,0,.5);}
-#clipmenu button{display:block;width:100%;text-align:left;margin:2px 0;padding:9px 10px;
-  background:none;border:none;font-size:12px;}
-/* mapping overlays live inside #stage */
-#mapWrap{position:absolute;inset:0;z-index:30;display:none;pointer-events:none;}
-#mapWrap.on{display:block;}
-#mapcv{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
-#handles{position:absolute;inset:0;z-index:31;display:none;pointer-events:none;}
-#handles.on{display:block;}
-body.output.pins #handles{display:block!important;}
-.chandle{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;
-  background:rgba(45,212,191,.18);border:3px solid var(--teal);pointer-events:auto;
-  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;
-  color:#fff;touch-action:none;text-shadow:0 1px 3px #000;}
-.chandle.sel{background:rgba(45,212,191,.4);}
-#mhandle{position:absolute;width:48px;height:48px;margin:-24px 0 0 -24px;border-radius:8px;
-  background:rgba(45,212,191,.25);border:3px dashed var(--teal);pointer-events:auto;touch-action:none;display:none;}
-.surfrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1b2230;}
-.surfrow .sname{flex:1;font-weight:700;font-size:13px;}
-.seg{display:flex;gap:8px;margin:8px 0;}
-.seg button{flex:1;padding:10px 0;font-size:12px;}
-.meter{width:26px;background:#1b2029;border-radius:6px;position:relative;overflow:hidden;height:40px;flex:none;}
-.meter>i{position:absolute;bottom:0;left:0;right:0;background:var(--teal);height:0%;}
-/* output mode */
-#btnExitOut{position:fixed;top:calc(10px + env(safe-area-inset-top));right:10px;z-index:60;display:none;
-  width:52px;height:52px;border-radius:50%;background:rgba(20,20,30,.55);color:#fff;font-size:20px;
-  border:1px solid rgba(255,255,255,.25);}
-#btnOutPins{position:fixed;top:calc(10px + env(safe-area-inset-top));right:72px;z-index:60;display:none;
-  width:52px;height:52px;border-radius:50%;background:rgba(20,20,30,.55);color:#fff;font-size:20px;
-  border:1px solid rgba(255,255,255,.25);touch-action:manipulation;}
-body.output #topbar,body.output #panel{display:none!important;}
-body.output #handles{display:none!important;}
-body.output.pins #handles{display:block!important;}
-body.output #btnExitOut{display:block;}
-body.output #btnOutPins{display:block;}
-body.output.pins #btnOutPins{background:rgba(45,212,191,.6);border-color:var(--teal);}
-body.output #stage{position:fixed;inset:0;z-index:40;}
-/* perform mode */
-#btnExitPerform{position:fixed;top:calc(10px + env(safe-area-inset-top));left:10px;z-index:60;display:none;
-  width:52px;height:52px;border-radius:50%;background:rgba(20,20,30,.55);color:#fff;font-size:20px;
-  border:1px solid rgba(255,255,255,.25);}
-body.perform #topbar,body.perform #panel{display:none;}
-body.perform #btnExitPerform{display:block;}
-/* panel hide (map corner reach) */
-#panelFab{position:fixed;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:60;display:none;
-  padding:12px 16px;border-radius:24px;background:#151a23;border:1px solid var(--teal);
-  font-weight:700;color:var(--teal);}
-/* errbanner */
-#errbanner{position:fixed;top:calc(60px + env(safe-area-inset-top));left:10px;right:10px;z-index:70;display:none;
-  background:#3a1d1d;border:1px solid var(--bad);color:#ffd7d7;border-radius:12px;padding:12px;font-size:13px;}
-#errbanner.show{display:block;}
-#plugcode{width:100%;background:#0b0e13;color:var(--txt);border:1px solid var(--line);
-  border-radius:6px;font-family:monospace;font-size:11px;padding:8px;}
-#plugerr{color:var(--bad);font-size:11px;white-space:pre-wrap;}
-#plugok{color:var(--ok);font-size:11px;}
-.midrow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px;}
-.midrow .ml{flex:1;}
-.midrow .cc{color:var(--dim);}
-.trow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0;}
-.hint{color:var(--dim);font-size:11px;margin:6px 0}
-.krow{display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap}
-
+/* ---------- top bar ---------- */
+#topbar{flex:none;display:flex;align-items:center;gap:10px;padding:10px 14px;
+  background:rgba(10,12,21,.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);z-index:20}
+.brand{font-weight:900;font-size:17px;letter-spacing:.5px;
+  background:linear-gradient(90deg,var(--vio),var(--cy),var(--pk));
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.vtag{font-size:10px;font-weight:700;color:var(--dim);border:1px solid var(--line);
+  border-radius:20px;padding:2px 9px;letter-spacing:.5px}
+.sp{flex:1}
+#fps{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
+.icobtn{width:44px;height:44px;flex:none;border-radius:14px;font-size:20px;
+  background:var(--card);border:1px solid var(--line);color:var(--txt);
+  display:flex;align-items:center;justify-content:center;touch-action:manipulation;cursor:pointer}
+/* ---------- stage ---------- */
+#stage{position:relative;flex:1 1 32%;min-height:180px;background:#000;
+  border-bottom:1px solid var(--line)}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block;background:#000;touch-action:none}
+/* ---------- tab body: every tab scrolls natively ---------- */
+#tabbody{flex:1 1 54%;min-height:0;position:relative}
+.tscroll{position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;touch-action:pan-y;
+  padding:12px 12px calc(22px + var(--sat));}
+.tscroll[hidden]{display:none!important}
+/* ---------- bottom tab bar ---------- */
+#tabbar{flex:none;display:flex;background:rgba(10,12,21,.94);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-top:1px solid var(--line);padding:6px 4px calc(6px + var(--sat));z-index:20}
+#tabbar button{flex:1;min-width:0;background:none;border:none;color:var(--dim);border-radius:14px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  padding:8px 0 7px;min-height:62px;touch-action:manipulation;cursor:pointer}
+#tabbar button i{font-style:normal;font-size:23px;line-height:1.1}
+#tabbar button span{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase}
+#tabbar button.on{color:#fff;background:linear-gradient(180deg,rgba(139,92,246,.28),rgba(34,211,238,.10))}
+#tabbar button.on i{background:linear-gradient(90deg,var(--vio),var(--cy));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 7px rgba(139,92,246,.85))}
+/* ---------- section titles ---------- */
+.sect{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--dim);margin:14px 2px 8px}
+.sect:first-child{margin-top:2px}
+/* ---------- layer chips ---------- */
+.lchips{display:flex;gap:8px}
+.lchip{flex:1;min-width:0;min-height:54px;border-radius:var(--r);font-weight:900;font-size:16px;
+  background:var(--card);border:1px solid var(--line);color:var(--txt);
+  touch-action:manipulation;cursor:pointer;position:relative;
+  display:flex;align-items:center;justify-content:center;gap:6px}
+.lchip .dot{width:8px;height:8px;border-radius:50%;background:#3a4160}
+.lchip.hasclip .dot{background:var(--cy);box-shadow:0 0 6px var(--cy)}
+.lchip.on{color:#fff;border-color:transparent;
+  background:linear-gradient(160deg,hsl(var(--h) 85% 48% / .55),hsl(var(--h) 90% 32% / .30));
+  box-shadow:0 0 16px hsl(var(--h) 90% 60% / .45)}
+/* ---------- clip pads & cards ---------- */
+.clipad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.clipbtn{min-height:70px;border-radius:var(--r);background:var(--card);
+  border:1px solid var(--line);color:var(--txt);font-weight:700;font-size:12px;
+  touch-action:manipulation;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  text-align:center;padding:6px;line-height:1.25}
+.clipbtn.fired{border-color:var(--cy);color:#fff;
+  background:linear-gradient(160deg,rgba(139,92,246,.5),rgba(34,211,238,.28));
+  box-shadow:0 0 18px rgba(34,211,238,.5),inset 0 0 14px rgba(139,92,246,.3)}
+.clipbtn.empty{border-style:dashed;color:var(--dim);background:transparent;font-size:20px}
+.clipbtn.queued{outline:2px dashed var(--warn);outline-offset:-8px}
+.clipgrid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.clipcard{min-height:96px;border-radius:var(--r);background:var(--card);
+  border:1px solid var(--line);color:var(--txt);touch-action:manipulation;cursor:pointer;
+  display:flex;flex-direction:column;align-items:flex-start;justify-content:center;
+  padding:12px;text-align:left}
+.clipcard .cn{font-weight:800;font-size:15px}
+.clipcard .cs{font-size:11px;color:var(--dim);margin-top:2px}
+.clipcard.fired{border-color:var(--cy);
+  background:linear-gradient(160deg,rgba(139,92,246,.5),rgba(34,211,238,.28));
+  box-shadow:0 0 18px rgba(34,211,238,.5)}
+.clipcard.fired .cs{color:#dff}
+/* ---------- transport ---------- */
+.trow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tbtn2{min-height:48px;padding:10px 14px;font-size:13px;font-weight:800;
+  background:var(--card);border:1px solid var(--line);border-radius:14px;color:var(--txt);
+  touch-action:manipulation;cursor:pointer}
+.tbtn2.on{background:linear-gradient(160deg,var(--vio),#6d3ff0);border-color:transparent;color:#fff;
+  box-shadow:0 0 14px rgba(139,92,246,.55)}
+#btnTap{min-height:56px;padding:10px 26px;font-size:16px}
+#bpmBig{font-size:26px;font-weight:900;min-width:64px;text-align:center;
+  font-variant-numeric:tabular-nums;
+  background:linear-gradient(90deg,var(--cy),var(--pk));
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.tsm{font-size:10px;color:var(--dim);font-weight:700}
+#btnBlackout{min-height:56px;flex:1;font-size:14px;letter-spacing:1px}
+#btnBlackout.armed{background:linear-gradient(160deg,#f5a623,#e08300);border-color:transparent;color:#201503;
+  box-shadow:0 0 18px rgba(245,166,35,.6)}
+.ckrow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);
+  font-weight:700;min-height:44px}
+/* ---------- chunky sliders ---------- */
+.srow{margin:6px 0 10px}
+.srow .slab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
+.srow .slab label{font-size:13px;font-weight:700}
+.srow .sval{font-size:12px;color:var(--cy);font-variant-numeric:tabular-nums;font-weight:700}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:44px;background:transparent;
+  touch-action:pan-y;cursor:pointer;display:block}
+input[type=range]::-webkit-slider-runnable-track{height:12px;border-radius:7px;
+  background:linear-gradient(90deg,var(--vio),var(--cy));
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.55)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:32px;height:32px;
+  margin-top:-10px;border-radius:50%;background:#fff;border:3px solid var(--vio);
+  box-shadow:0 0 14px rgba(139,92,246,.9)}
+input[type=range]::-moz-range-track{height:12px;border-radius:7px;
+  background:linear-gradient(90deg,var(--vio),var(--cy))}
+input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;
+  background:#fff;border:3px solid var(--vio);box-shadow:0 0 14px rgba(139,92,246,.9)}
+/* ---------- FX cards ---------- */
+.fxcard{background:linear-gradient(180deg,var(--card2),var(--card));
+  border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.fxcard.offx{opacity:.55}
+.fxchead{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+.fxname{font-weight:900;font-size:16px;flex:1}
+.fxname .sub{display:block;font-size:11px;font-weight:600;color:var(--dim);margin-top:1px}
+.fxswitch{width:64px;height:38px;flex:none;border-radius:22px;border:1px solid var(--line);
+  background:#0a0c14;position:relative;touch-action:manipulation;cursor:pointer}
+.fxswitch::after{content:'';position:absolute;top:3px;left:4px;width:30px;height:30px;border-radius:50%;
+  background:#3a4160;transition:left .15s,background .15s}
+.fxswitch.on{border-color:var(--cy);box-shadow:0 0 12px rgba(34,211,238,.45)}
+.fxswitch.on::after{left:28px;background:linear-gradient(160deg,var(--cy),var(--vio))}
+/* ---------- mix rows ---------- */
+.mixrow{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  padding:10px 12px 4px;margin-bottom:10px}
+.mixhead{display:flex;align-items:center;gap:8px}
+.mixname{font-weight:900;font-size:15px;flex:1}
+.minibtn{min-width:44px;min-height:40px;border-radius:12px;font-size:12px;font-weight:800;
+  background:var(--card2);border:1px solid var(--line);color:var(--dim);
+  touch-action:manipulation;cursor:pointer}
+.minibtn.onB{background:var(--warn);border-color:var(--warn);color:#201503}
+.minibtn.onS{background:var(--ok);border-color:var(--ok);color:#06251a}
+.macroslid{margin:4px 0 8px}
+/* ---------- presets / settings ---------- */
+.prowcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  padding:12px;margin-bottom:12px}
+input[type=text],select{background:#0a0c14;color:var(--txt);border:1px solid var(--line);
+  border-radius:12px;padding:10px 12px;font-size:14px;min-height:44px}
+input[type=text]{width:100%}
+select{max-width:100%}
+.btnrow{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.abtn{min-height:48px;padding:10px 18px;font-size:14px;font-weight:800;border-radius:14px;
+  background:linear-gradient(160deg,var(--vio),#6d3ff0);border:none;color:#fff;
+  touch-action:manipulation;cursor:pointer;box-shadow:0 4px 16px rgba(139,92,246,.35)}
+.gbtn{min-height:48px;padding:10px 16px;font-size:13px;font-weight:700;border-radius:14px;
+  background:var(--card2);border:1px solid var(--line);color:var(--txt);
+  touch-action:manipulation;cursor:pointer}
+.gbtn.on{background:linear-gradient(160deg,var(--vio),#6d3ff0);border-color:transparent;color:#fff}
+.hint{color:var(--dim);font-size:12px;margin:6px 2px}
+.dim{color:var(--dim)}
+.meterbar{display:flex;gap:6px;align-items:flex-end}
+.meter{width:26px;background:#0a0c14;border:1px solid var(--line);border-radius:6px;
+  position:relative;overflow:hidden;height:44px;flex:none}
+.meter i{position:absolute;bottom:0;left:0;right:0;height:0%;
+  background:linear-gradient(180deg,var(--pk),var(--vio))}
+/* ---------- columns ---------- */
+.colscroll{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+.colscroll::-webkit-scrollbar{display:none}
+.colbtn{flex:0 0 60px;min-width:60px;min-height:52px;border-radius:14px;font-size:13px;font-weight:800;
+  background:var(--card);border:1px solid var(--line);color:var(--dim);
+  touch-action:manipulation;cursor:pointer}
+.colbtn.conn{background:linear-gradient(160deg,var(--cy),#0ea5c9);border-color:transparent;color:#04252c;
+  box-shadow:0 0 14px rgba(34,211,238,.55)}
+/* ---------- map tab (keep engine overlays working) ---------- */
+#mapWrap{position:absolute;inset:0;z-index:30;display:none;pointer-events:none}
+#mapWrap.on{display:block}
+#mapcv{position:absolute;inset:0;width:100%;height:100%;pointer-events:auto;touch-action:none}
+#mhandle{position:absolute;pointer-events:none}
+#handles{position:absolute;inset:0;z-index:31;display:none;pointer-events:none}
+#handles.on{display:block}
+body.output.pins #handles{display:block!important}
+.chandle{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;
+  background:rgba(34,211,238,.18);border:3px dashed var(--cy);pointer-events:auto;touch-action:none;
+  color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;
+  font-size:18px;text-shadow:0 1px 3px #000}
+.chandle.sel{background:rgba(139,92,246,.45);border-color:var(--vio)}
+.surfrow{display:flex;align-items:center;gap:8px;padding:8px;margin-bottom:8px;
+  background:var(--card);border:1px solid var(--line);border-radius:12px}
+.sname{flex:1;font-weight:800}
+.seg{display:flex;gap:8px;margin:8px 0}
+.seg button{flex:1;min-height:48px;border-radius:14px;font-weight:800;
+  background:var(--card);border:1px solid var(--line);color:var(--txt);
+  touch-action:manipulation;cursor:pointer}
+.seg button.on{background:linear-gradient(160deg,var(--vio),#6d3ff0);border-color:transparent;color:#fff}
+.nudge{display:grid;grid-template-columns:repeat(3,56px);gap:6px;justify-content:center;margin:8px 0}
+.nudge button{min-height:52px;border-radius:12px;font-size:18px;background:var(--card2);
+  border:1px solid var(--line);color:var(--txt);touch-action:manipulation}
+details.cgrp{margin:8px 0;background:var(--card);border:1px solid var(--line);border-radius:12px}
+details.cgrp>summary{cursor:pointer;font-weight:800;font-size:13px;color:var(--cy);
+  padding:10px 12px;list-style:none}
+details.cgrp>summary::-webkit-details-marker{display:none}
+.dsel{min-height:44px}
+/* ---------- floating bits ---------- */
+#clipmenu{position:fixed;z-index:95;display:none;background:#151a2e;max-height:70dvh;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;border:1px solid var(--vio);border-radius:14px;
+  box-shadow:0 12px 40px rgba(0,0,0,.6);min-width:190px;padding:6px}
+#clipmenu button{display:block;width:100%;text-align:left;margin:2px 0;padding:12px;
+  background:none;border:none;border-radius:10px;color:var(--txt);font-size:14px;
+  touch-action:manipulation;cursor:pointer}
+#clipmenu button:active{background:rgba(139,92,246,.25)}
+#errbanner{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:200;display:none;
+  background:#2a0f14;border:1px solid var(--bad);color:#ffd9d9;border-radius:12px;
+  padding:10px 16px;font-size:13px;max-width:92vw}
+#errbanner.show{display:block}
+#panelFab{position:fixed;bottom:calc(96px + var(--sat));right:14px;z-index:40;display:none;
+  min-height:52px;padding:12px 20px;border-radius:26px;font-weight:800;
+  background:linear-gradient(160deg,var(--vio),#6d3ff0);border:none;color:#fff;
+  box-shadow:0 8px 24px rgba(139,92,246,.5);touch-action:manipulation}
+#btnExitOut{position:fixed;top:calc(12px + env(safe-area-inset-top));right:12px;z-index:60;display:none;
+  width:52px;height:52px;border-radius:50%;font-size:20px;
+  background:rgba(10,12,21,.9);border:1px solid var(--line);color:var(--txt)}
+#btnOutPins{position:fixed;top:calc(12px + env(safe-area-inset-top));right:76px;z-index:60;display:none;
+  width:52px;height:52px;border-radius:50%;font-size:20px;
+  background:rgba(10,12,21,.9);border:1px solid var(--line);color:var(--txt)}
+body.output #topbar,body.output #tabbody,body.output #tabbar,body.output #panelFab{display:none!important}
+body.output #stage{flex:1 1 100%}
+body.output #btnExitOut,body.output #btnOutPins{display:block}
+body.output.pins #btnOutPins{background:rgba(34,211,238,.5);border-color:var(--cy)}
+#plugcode{display:none}
 </style>
 </head>
 <body>
 <div id="errbanner"></div>
 <header id="topbar">
-  <span class="brand">&#9670; HoloMapper</span><span class="vtag">v4</span>
-  <span class="tgrp"><input type="range" id="masterSl" min="0" max="1" step="0.001" value="1" data-ctrl="P.master" title="Master output"></span>
-  <select id="resSel" title="Internal render resolution">
-    <option value="480x270">480p</option>
-    <option value="960x540" selected>540p</option>
-    <option value="1280x720">720p</option>
-  </select>
-  <button id="btnPerform" class="tbtn" title="Perform mode">PERFORM</button>
-  <button id="btnOutput" class="tbtn" title="Projector output mode">&#x26F6;</button>
+  <span class="brand">&#9670; HoloMapper</span><span class="vtag">mobile</span>
+  <span class="sp"></span>
   <span id="fps"></span>
+  <button id="btnOutput" class="icobtn" title="Projector output mode">&#x26F6;</button>
 </header>
 <div id="stage">
   <canvas id="gl"></canvas>
   <div id="mapWrap"><canvas id="mapcv"></canvas><div id="mhandle"></div></div>
   <div id="handles"></div>
 </div>
-<div id="panel">
-  <div id="gridscroll">
-    <div id="colrow"><span class="gspacer"></span><div id="colbtns"></div></div>
-    <div id="deck"></div>
-  </div>
-  <div id="transport">
-    <button id="btnTap2">TAP</button>
-    <span id="bpmBig">120</span><span class="tsm">BPM</span>
-    <button id="btnHalf" class="tbtn2" title="Half tempo">/2</button>
-    <button id="btnDouble" class="tbtn2" title="Double tempo">*2</button>
-    <button id="btnResync" class="tbtn2" title="Resync beat phase">RESYNC</button>
-    <button id="btnPauseT" class="tbtn2" title="Pause transport">PAUSE</button>
-    <button id="btnBlackout2">BLACKOUT</button>
-    <label class="ck sm" title="Snap layer speeds to beat divisions"><input type="checkbox" id="ckBeatSync">Sync</label>
-  </div>
-  <div id="ptabs">
-    <button data-tab="Comp" class="on">Composition</button>
-    <button data-tab="Layer">Layer</button>
-    <button data-tab="Clip">Clip</button>
-    <button data-tab="Fx">FX</button>
-    <button data-tab="Map">Map</button>
-  </div>
-  <div id="pbody">
-    <div id="tabComp" class="ptab"><div id="compUI"></div></div>
-    <div id="tabLayer" class="ptab" hidden><div id="layerProps"></div></div>
-    <div id="tabClip" class="ptab" hidden><div id="clipProps"></div></div>
-    <div id="tabFx" class="ptab" hidden>
-      <details class="rsec" open><summary>Post FX chain</summary><div class="rbody"><div id="postfx"></div></div></details>
-      <details class="rsec"><summary>Master</summary><div class="rbody"><div id="master"></div></div></details>
-      <details class="rsec"><summary>Shader plugin</summary><div class="rbody">
-        <textarea id="plugcode" rows="10" spellcheck="false"></textarea>
-        <div class="trow"><button id="btnCompile">Compile</button><button id="btnPlugDefault">Default</button><span id="plugok"></span></div>
-        <div id="plugerr"></div>
-      </div></details>
-      <details class="rsec"><summary>Audio</summary><div class="rbody">
-        <div class="trow">
-          <button id="btnAudio">Enable audio</button>
-          <span class="meter"><i id="mBass"></i></span><span class="meter"><i id="mMid"></i></span><span class="meter"><i id="mHigh"></i></span>
-          <span id="audiostat" class="dim">audio off</span>
-        </div>
-      </div></details>
-      <details class="rsec"><summary>MIDI <span id="midiCount"></span></summary><div class="rbody">
-        <div class="trow"><button id="btnLearn2">MIDI Learn</button><button id="btnMidiClear">Clear all</button></div>
-        <div id="midistat2" class="hint"></div>
-        <div id="midilist"></div>
-      </div></details>
+<main id="tabbody">
+  <section id="tabPlay" class="tscroll">
+    <div class="sect">Layer</div>
+    <div class="lchips" id="playLayers"></div>
+    <div class="sect">Clips &mdash; tap to fire</div>
+    <div class="clipad" id="playClips"></div>
+    <div class="sect">Transport</div>
+    <div class="trow">
+      <button id="btnTap" class="tbtn2">TAP</button>
+      <span id="bpmBig">120</span><span class="tsm">BPM</span>
+      <button id="btnHalf" class="tbtn2" title="Half tempo">&divide;2</button>
+      <button id="btnDouble" class="tbtn2" title="Double tempo">&times;2</button>
     </div>
-    <div id="tabMap" class="ptab" hidden><div id="mapUI"></div></div>
-  </div>
-</div>
+    <div class="trow" style="margin-top:8px">
+      <button id="btnResync" class="tbtn2">SYNC</button>
+      <button id="btnPauseT" class="tbtn2">PAUSE</button>
+      <button id="btnQuant" class="tbtn2 on" title="Snap clip fires to the beat">QUANT</button>
+      <button id="btnBlackout" class="tbtn2">BLACKOUT</button>
+    </div>
+    <label class="ckrow"><input type="checkbox" id="ckBeatSync" style="width:22px;height:22px;accent-color:#8b5cf6"> Beat-sync layer speeds</label>
+    <div class="sect">Master fade</div>
+    <div class="srow"><div class="slab"><label>Master</label><span class="sval" id="masterVal">100%</span></div>
+      <input type="range" id="masterSl" min="0" max="1" step="0.001" value="1" data-ctrl="P.master"></div>
+  </section>
+  <section id="tabClips" class="tscroll" hidden>
+    <div class="sect">Columns &mdash; fire one clip per layer</div>
+    <div class="colscroll" id="colbtns"></div>
+    <div class="sect">Layer</div>
+    <div class="lchips" id="clipsLayers"></div>
+    <div class="sect">Clips &mdash; tap fires, hold to reassign</div>
+    <div class="clipgrid2" id="clipGrid"></div>
+  </section>
+  <section id="tabFx" class="tscroll" hidden>
+    <div class="sect">Post FX &mdash; tap a card to toggle</div>
+    <div id="fxHost"></div>
+  </section>
+  <section id="tabMix" class="tscroll" hidden>
+    <div class="sect">Layers</div>
+    <div id="mixLayers"></div>
+    <div class="sect">Macros &mdash; the fun knobs</div>
+    <div id="mixMacros"></div>
+    <div class="sect">Presets</div>
+    <div class="prowcard">
+      <input type="text" id="presetName" placeholder="preset name">
+      <div class="btnrow">
+        <button class="abtn" id="btnSavePreset">Save</button>
+        <select id="presetSel" style="flex:1"><option value="">-- presets --</option></select>
+      </div>
+      <div class="btnrow">
+        <button class="gbtn" id="btnLoadPreset">Load</button>
+        <button class="gbtn" id="btnDelPreset">Delete</button>
+      </div>
+    </div>
+    <div class="sect">Setup</div>
+    <div class="prowcard">
+      <div class="srow"><div class="slab"><label>Render resolution</label></div>
+        <select id="resSel">
+          <option value="480x270">480p &mdash; fastest</option>
+          <option value="960x540">540p</option>
+          <option value="1280x720">720p &mdash; sharpest</option>
+        </select></div>
+      <div class="btnrow">
+        <button class="gbtn" id="btnLearn2">MIDI Learn</button>
+        <button class="gbtn" id="btnAudio">Enable audio</button>
+      </div>
+      <div class="hint" id="midistat2">MIDI: not started</div>
+      <div class="trow">
+        <span class="meter"><i id="mBass"></i></span><span class="meter"><i id="mMid"></i></span><span class="meter"><i id="mHigh"></i></span>
+        <span id="audiostat" class="dim">audio off</span>
+      </div>
+    </div>
+  </section>
+  <section id="tabMap" class="tscroll" hidden>
+    <div class="sect">Projection mapping &mdash; pin it from your phone</div>
+    <div id="mapUI"></div>
+  </section>
+</main>
+<nav id="tabbar">
+  <button data-tab="Play" class="on"><i>&#9654;</i><span>Play</span></button>
+  <button data-tab="Clips"><i>&#9782;</i><span>Clips</span></button>
+  <button data-tab="Fx"><i>&#10022;</i><span>FX</span></button>
+  <button data-tab="Mix"><i>&#9681;</i><span>Mix</span></button>
+  <button data-tab="Map"><i>&#9672;</i><span>Map</span></button>
+</nav>
 <div id="clipmenu"></div>
-<div id="pmacros" hidden></div>
 <button id="panelFab">Panel</button>
 <button id="btnExitOut" title="Exit output mode">&#x2715;</button>
 <button id="btnOutPins" title="Edit corner pins in fullscreen">&#x1F4CD;</button>
-<button id="btnExitPerform" title="Exit perform mode">&#x2715;</button>
-
+<textarea id="plugcode" rows="10" spellcheck="false"></textarea>
+<span id="plugerr" hidden></span><span id="plugok" hidden></span>
 <script>
 'use strict';
 /* =====================================================================
@@ -3658,18 +3514,16 @@ function positionOverlays(){ drawMapOverlay(); }
 </script>
 <script>
 'use strict';
-/* ================= HOLOMAPPER MOBILE v4 — Resolume-faithful shell =================
-   Primary reference: Joshua's Resolume Arena 7.1.0 screenshot
-   (research/resolume-arena-7.1.0-reference.webp).
-   Engine blocks above are verbatim from holomapper.html (v1.2).
-   Shell: topbar, column headers + clip grid (hero), transport bar,
-   tabbed panels (Composition/Layer/Clip/FX/Map), output mode. */
+/* ================= HOLOMAPPER MOBILE v5 — touch-first shell =================
+   Phone-app idioms, not Resolume idioms. Bottom tab bar (Play/Clips/FX/Mix/Map),
+   big thumb targets, every content region scrolls natively with momentum.
+   The GL engine, sources, layers, firing, presets, mapping are untouched —
+   this block only re-skins and reorganizes the chrome around the phone.
+   Desktop stays the technical one; this one is for play. */
 
 /* ---- engine snapshot wrappers: include mapping + fired-column state ----
-   NOTE: these MUST have distinct names. A later `function snapshot()`
-   declaration would shadow the engine's binding at script-instantiation time,
-   so `const snapshotEngine = snapshot` self-captures -> infinite recursion
-   (this exact pattern was latently broken since the v3 shell). */
+   NOTE: distinct names required — a later `function snapshot()` would shadow
+   the engine's binding (latently broken since the v3 shell). */
 function snapshotFull(){
   const s = snapshot(); /* engine's */
   s.map = JSON.parse(JSON.stringify(S.map || defaultMap()));
@@ -3685,9 +3539,10 @@ function applySnapshotFull(snap){
   buildMapTarget(); refitCanvas(); buildMapUI(); positionOverlays();
   saveState();
 }
-/* ---- panel hide (map corner reach) ---- */
+/* ---- hide tab UI for full-canvas corner reach (mapping) ---- */
 function setSheetHidden(hide){
-  $('panel').style.display = hide ? 'none' : '';
+  $('tabbody').style.display = hide ? 'none' : '';
+  $('tabbar').style.display = hide ? 'none' : '';
   $('panelFab').style.display = hide ? 'block' : 'none';
   setTimeout(refitCanvas, 60);
 }
@@ -3695,23 +3550,53 @@ function setSheetHidden(hide){
 /* ---- tabs ---- */
 function showTab(name){
   MUI.tab = name;
-  document.querySelectorAll('#ptabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
-  $('tabComp').hidden = name!=='Comp';
-  $('tabLayer').hidden = name!=='Layer';
-  $('tabClip').hidden = name!=='Clip';
-  $('tabFx').hidden = name!=='Fx';
-  $('tabMap').hidden = name!=='Map';
-  $('mapWrap').classList.toggle('on', name==='Map');
-  $('handles').classList.toggle('on', name==='Map');
-  if(name==='Layer') buildProps('layerProps','layer');
-  if(name==='Clip') buildProps('clipProps','clip');
-  if(name==='Map') buildMapUI();
+  document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
+  ['Play','Clips','Fx','Mix','Map'].forEach(t=>{ $('tab'+t).hidden = (t!==name); });
+  const isMap = (name==='Map');
+  $('mapWrap').classList.toggle('on', isMap);
+  $('handles').classList.toggle('on', isMap);
+  if(isMap) buildMapUI();
   positionOverlays();
 }
 
-/* ---- columns: fire one clip per layer (Resolume column trigger) ---- */
+/* ---- layer chips (shared by Play + Clips tabs) ---- */
+function layerChipRow(host){
+  if(!host) return; host.innerHTML='';
+  for(let i=0;i<4;i++){
+    const b=el('button','lchip'+(S.selLayer===i?' on':''));
+    b.style.setProperty('--h', Math.round(LAYER_HUES[i]*360));
+    const has=S.fired[i]!==null&&S.fired[i]!==undefined;
+    if(has) b.classList.add('hasclip');
+    b.innerHTML='<span class="dot"></span>L'+(i+1);
+    b.title='Select layer '+(i+1);
+    b.addEventListener('click',()=>mSelectLayer(i));
+    host.appendChild(b);
+  }
+}
+function mSelectLayer(i){
+  S.selLayer=i; S.sel={kind:'layer', i:i};
+  syncNewUI(); saveState();
+}
+/* selectClip/selectLayer overrides: selection without tab-hopping */
+function selectLayer(i){ mSelectLayer(i); }
+function selectClip(i,k){
+  S.selLayer=i; S.sel={kind:'clip', i:i, c:k};
+  syncNewUI(); saveState();
+}
+
+/* ---- clip firing with beat quantize ---- */
+let pendingFire=null, lastBeatIdx=-1;
+function mFire(i,k){
+  const src=S.clips[i][k];
+  if(src===null||src===undefined) return;
+  S.selLayer=i; S.sel={kind:'clip', i:i, c:k};
+  if(MUI.quant && S.bpm>0){ pendingFire={i:i,k:k}; }
+  else { fireClip(i,k); }
+  syncNewUI(); saveState();
+}
+/* ---- columns: fire one clip per layer ---- */
 function buildColumns(){
-  const host=$('colbtns'); host.innerHTML='';
+  const host=$('colbtns'); if(!host) return; host.innerHTML='';
   for(let k=0;k<8;k++){
     const b=el('button','colbtn'+(S.colFired===k?' conn':''),'C'+(k+1));
     b.title='Fire column '+(k+1)+' — one clip per layer';
@@ -3726,10 +3611,189 @@ function fireColumn(k){
     const src=S.clips[i][k];
     if(src!==null&&src!==undefined) fireClip(i,k);
   }
-  S.colFired=k; syncColumns(); saveState();
+  S.colFired=k; syncColumns(); syncNewUI(); saveState();
 }
 function syncColumns(){
   document.querySelectorAll('#colbtns .colbtn').forEach((b,k)=>b.classList.toggle('conn', S.colFired===k));
+}
+
+/* ---- clip pads & grids ---- */
+function buildClipPad(){
+  const host=$('playClips'); if(!host) return; host.innerHTML='';
+  const i=S.selLayer;
+  for(let k=0;k<8;k++){
+    const src=S.clips[i][k];
+    const c=el('button','clipbtn'+(src===null?' empty':'')+((S.fired[i]===k)?' fired':''),
+      src===null?'+':LAYER_SRC[src].split(' ')[0]);
+    if(pendingFire&&pendingFire.i===i&&pendingFire.k===k) c.classList.add('queued');
+    c.addEventListener('click',()=>mFire(i,k));
+    c.addEventListener('contextmenu',(e)=>{ e.preventDefault(); showClipMenu(e.clientX,e.clientY,i,k); });
+    host.appendChild(c);
+  }
+}
+function buildClipGrid(){
+  const host=$('clipGrid'); if(!host) return; host.innerHTML='';
+  const i=S.selLayer;
+  for(let k=0;k<8;k++){
+    const src=S.clips[i][k];
+    const c=el('button','clipcard'+(src===null?' empty':'')+((S.fired[i]===k)?' fired':''));
+    c.innerHTML='<span class="cn">C'+(k+1)+'</span><span class="cs">'+
+      (src===null?'empty — hold to assign':LAYER_SRC[src])+'</span>';
+    c.addEventListener('click',()=>mFire(i,k));
+    c.addEventListener('contextmenu',(e)=>{ e.preventDefault(); showClipMenu(e.clientX,e.clientY,i,k); });
+    host.appendChild(c);
+  }
+}
+/* ---- master UI sync (overrides the deck-oriented originals) ---- */
+function syncNewUI(){
+  layerChipRow($('playLayers')); layerChipRow($('clipsLayers'));
+  buildClipPad(); buildClipGrid(); syncColumns();
+}
+function syncDeckSel(){ syncNewUI(); }
+function buildDeck(){ syncNewUI(); }
+/* ---- safe overrides: kept engine code (applySnapshot, bindMidi) still calls
+   these v4 builders; point them at the v5 UI instead of dead DOM ids ---- */
+function buildPostFx(){ buildFxCards(); }
+function buildMaster(){ /* master slider lives on the Play tab; synced in afterPresetLoad */ }
+function buildPerform(){ /* perform mode retired in mobile v5 */ }
+function renderMidiList(){
+  const n=S.midi.length, s=$('midistat2');
+  if(s && !learnArmed) s.textContent='MIDI: '+n+' binding'+(n===1?'':'s');
+}
+function buildDashKnobs(){ buildMixMacros(); } /* v4 dials -> v5 big macro sliders */
+
+/* ---- chunky touch sliders ---- */
+function mBigSlider(parent, pid, label){
+  const def=PARAMS[pid]; if(!def) return null;
+  const wrap=el('div','srow');
+  const slab=el('div','slab');
+  slab.appendChild(el('label',null,label||def.label));
+  const vv=el('span','sval',def.fmt((S.params[pid]!==undefined)?S.params[pid]:def.def));
+  slab.appendChild(vv); wrap.appendChild(slab);
+  const sl=document.createElement('input');
+  sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001;
+  sl.value=(S.params[pid]!==undefined)?S.params[pid]:def.def;
+  sl.setAttribute('data-ctrl',pid); sl.title=def.label;
+  sl.addEventListener('input',()=>{
+    setParam(pid,parseFloat(sl.value),sl);
+    vv.textContent=def.fmt(parseFloat(sl.value));
+  });
+  CTRLS[pid]={set:v=>{ setParam(pid,v); }, label:def.label};
+  wrap.appendChild(sl); parent.appendChild(wrap);
+  return sl;
+}
+
+/* ---- FX tab: big toggle cards, 1–2 chunky sliders each ----
+   NOTE: the mobile engine (v1.2-era) ships Trails / Kaleido / RGB Split /
+   Color-grade / Strobe. Desktop's newer Mirror / Auto Mask / Colorize /
+   Bloom are NOT in this engine — porting them is a separate engine task. */
+const FXDEFS=[
+  {key:'feedback', name:'Trails',    sub:'feedback melt',      params:[['P.trails','Amount'],['P.zoom','Zoom']]},
+  {key:'kaleido',  name:'Kaleido',   sub:'kaleidoscope',       params:[['P.kseg','Slices'],['P.kang','Spin']]},
+  {key:'glitch',   name:'RGB Split', sub:'glitchy color split',params:[['P.gamt','Amount']]},
+  {key:null,       name:'Color',     sub:'grade',              params:[['P.sat','Saturation'],['P.con','Contrast']]},
+  {key:'strobe',   name:'Strobe',    sub:'flash', strobe:true, params:[['P.srate','Rate']]},
+];
+function buildFxCards(){
+  const host=$('fxHost'); if(!host) return; host.innerHTML='';
+  FXDEFS.forEach(fx=>{
+    const card=el('div','fxcard');
+    const head=el('div','fxchead');
+    const nm=el('div','fxname'); nm.innerHTML=fx.name+'<span class="sub">'+fx.sub+'</span>';
+    head.appendChild(nm);
+    const sw=el('button','fxswitch','');
+    sw.setAttribute('aria-label','Toggle '+fx.name);
+    let on;
+    if(fx.strobe) on=!!S.strobeOn;
+    else if(fx.key) on=!S.postBypass[fx.key];
+    else on=true;
+    sw.classList.toggle('on', on);
+    if(!fx.key && !fx.strobe) sw.style.display='none'; /* grade: always-on, no fake switch */
+    else{
+      card.classList.toggle('offx', !on);
+      sw.addEventListener('click',()=>{
+        if(fx.strobe) S.strobeOn=!S.strobeOn;
+        else S.postBypass[fx.key]=!S.postBypass[fx.key];
+        saveState(); buildFxCards();
+      });
+    }
+    head.appendChild(sw); card.appendChild(head);
+    fx.params.forEach(([pid,lab])=>mBigSlider(card,pid,lab));
+    host.appendChild(card);
+  });
+}
+
+/* ---- Mix tab ---- */
+function buildMixLayers(){
+  const host=$('mixLayers'); if(!host) return; host.innerHTML='';
+  for(let i=0;i<4;i++){
+    const L=S.layers[i];
+    const row=el('div','mixrow');
+    const head=el('div','mixhead');
+    const nm=el('span','mixname','Layer '+(i+1));
+    nm.style.color='hsl('+Math.round(LAYER_HUES[i]*360)+' 90% 70%)';
+    head.appendChild(nm);
+    const bS=el('button','minibtn'+(L.solo?' onS':''),'S'); bS.title='Solo layer '+(i+1);
+    bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); buildMixLayers(); syncNewUI(); });
+    const bB=el('button','minibtn'+(L.bypass?' onB':''),'B'); bB.title='Bypass layer '+(i+1);
+    bB.addEventListener('click',()=>{ toggleBypass(i); buildMixLayers(); });
+    head.appendChild(bS); head.appendChild(bB); row.appendChild(head);
+    mBigSlider(row,'L'+i+'.op','Opacity');
+    host.appendChild(row);
+  }
+}
+function buildMixMacros(){
+  const host=$('mixMacros'); if(!host) return; host.innerHTML='';
+  for(let m=0;m<8;m++){
+    const wrap=el('div','srow macroslid');
+    const slab=el('div','slab');
+    slab.appendChild(el('label',null,'M'+(m+1)+' · '+S.macros[m].label));
+    const vv=el('span','sval',Math.round(S.macros[m].val*100)+'%');
+    slab.appendChild(vv); wrap.appendChild(slab);
+    const sl=document.createElement('input');
+    sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001; sl.value=S.macros[m].val;
+    sl.setAttribute('data-ctrl','macro'+m); sl.title='Macro '+(m+1);
+    sl.addEventListener('input',()=>{
+      setMacro(m,parseFloat(sl.value),sl);
+      vv.textContent=Math.round(S.macros[m].val*100)+'%';
+    });
+    CTRLS['macro'+m]={set:v=>{ setMacro(m,v); }, label:'Macro '+(m+1)+' '+S.macros[m].label};
+    wrap.appendChild(sl); host.appendChild(wrap);
+  }
+}
+
+/* ---- presets ---- */
+function wirePresets(){
+  $('btnSavePreset').addEventListener('click',()=>{
+    const nm=$('presetName').value.trim();
+    if(!nm){ showErr('Name the preset first.'); setTimeout(()=>$('errbanner').classList.remove('show'),3000); return; }
+    const p=getPresets(); p[nm]=snapshotFull(); setPresets(p);
+    $('presetName').value=''; refreshPresetSel(); saveState();
+  });
+  $('btnLoadPreset').addEventListener('click',()=>{
+    const n=$('presetSel').value; if(!n) return;
+    const p=getPresets(); if(p[n]){ applySnapshotFull(p[n]); afterPresetLoad(); }
+  });
+  $('btnDelPreset').addEventListener('click',()=>{
+    const n=$('presetSel').value; if(!n) return;
+    const p=getPresets(); delete p[n]; setPresets(p); refreshPresetSel();
+  });
+  refreshPresetSel();
+}
+/* refresh all UI after a preset load */
+function afterPresetLoad(){
+  buildColumns(); syncNewUI();
+  buildFxCards(); buildMixLayers(); buildMixMacros();
+  buildMapUI(); refreshPresetSel();
+  if($('resSel')) $('resSel').value=S.res;
+  if($('bpmBig')) $('bpmBig').textContent=S.bpm;
+  const mv=(S.params['P.master']!==undefined)?S.params['P.master']:1;
+  if($('masterSl')) $('masterSl').value=mv;
+  if($('masterVal')) $('masterVal').textContent=Math.round(mv*100)+'%';
+  if($('ckBeatSync')) $('ckBeatSync').checked=!!S.beatSync;
+  if($('btnBlackout')) $('btnBlackout').classList.toggle('armed', !!S.blackout);
+  if($('btnPauseT')) $('btnPauseT').classList.toggle('on', !!S.paused);
+  positionOverlays();
 }
 
 /* ---- transport ---- */
@@ -3740,92 +3804,7 @@ function togglePauseT(){
   saveState();
 }
 
-/* ---- dashboard knobs (Resolume's 8-knob dashboard) ---- */
-function buildDashKnobs(){
-  const host=$('dashknobs'); if(!host) return; host.innerHTML='';
-  for(let m=0;m<8;m++){
-    const d=el('div','dknob');
-    const dial=el('div','kdial');
-    dial.style.setProperty('--v', S.macros[m].val);
-    dial.setAttribute('data-knob','macro'+m);
-    dial.setAttribute('data-ctrl','macro'+m);
-    dial.title='Macro '+(m+1)+' '+S.macros[m].label+' — drag vertically; double-tap resets';
-    const ptr=el('div','kptr'); dial.appendChild(ptr);
-    let sy=0, sv=0, dragging=false;
-    const setV=v=>{ setMacro(m,v,dial); dial.style.setProperty('--v', S.macros[m].val); };
-    dial.addEventListener('pointerdown',e=>{
-      dragging=true; sy=e.clientY; sv=S.macros[m].val;
-      try{ dial.setPointerCapture(e.pointerId); }catch(_){}
-      e.preventDefault();
-    });
-    dial.addEventListener('pointermove',e=>{
-      if(!dragging) return;
-      setV(sv+(sy-e.clientY)/160);
-    });
-    const up=()=>{ dragging=false; };
-    dial.addEventListener('pointerup',up);
-    dial.addEventListener('pointercancel',up);
-    dial.addEventListener('dblclick',()=>setV(0.5));
-    CTRLS['macro'+m]={set:v=>{ setMacro(m,v); dial.style.setProperty('--v', S.macros[m].val); },
-      label:'Macro '+(m+1)+' '+S.macros[m].label};
-    d.appendChild(dial);
-    d.appendChild(el('div','klab',S.macros[m].label));
-    const vv=el('div','kval',Math.round(S.macros[m].val*100)+'%');
-    vv.setAttribute('data-val','macro'+m); d.appendChild(vv);
-    host.appendChild(d);
-  }
-}
-
-/* ---- composition tab ---- */
-function buildCompUI(){
-  const host=$('compUI'); host.innerHTML='';
-  const d1=document.createElement('details'); d1.className='rsec'; d1.open=true;
-  const s1=document.createElement('summary'); s1.textContent='Dashboard'; d1.appendChild(s1);
-  const rb1=el('div','rbody'); const dk=el('div'); dk.id='dashknobs'; rb1.appendChild(dk);
-  d1.appendChild(rb1); host.appendChild(d1);
-  buildDashKnobs();
-  const d2=document.createElement('details'); d2.className='rsec';
-  const s2=document.createElement('summary'); s2.textContent='Presets'; d2.appendChild(s2);
-  const rb2=el('div','rbody'); const row=el('div','trow');
-  const nm=document.createElement('input'); nm.type='text'; nm.id='presetName'; nm.placeholder='preset name';
-  const bs=el('button','tbtn','Save'); bs.id='btnSavePreset';
-  const se=document.createElement('select'); se.id='presetSel'; se.title='Load a saved preset';
-  const bl=el('button','tbtn','Load'); bl.id='btnLoadPreset';
-  const bd=el('button','tbtn','Del'); bd.id='btnDelPreset';
-  row.append(nm,bs,se,bl,bd); rb2.appendChild(row); d2.appendChild(rb2); host.appendChild(d2);
-  refreshPresetSel();
-  bs.addEventListener('click',()=>{
-    const n=nm.value.trim();
-    if(!n){ showErr('Name the preset first.'); setTimeout(()=>$('errbanner').classList.remove('show'),3000); return; }
-    const p=getPresets(); p[n]=snapshotFull(); setPresets(p); nm.value=''; refreshPresetSel();
-  });
-  bl.addEventListener('click',()=>{
-    const n=se.value; if(!n) return;
-    const p=getPresets(); if(p[n]){ applySnapshotFull(p[n]); afterPresetLoad(); }
-  });
-  bd.addEventListener('click',()=>{
-    const n=se.value; if(!n) return;
-    const p=getPresets(); delete p[n]; setPresets(p); refreshPresetSel();
-  });
-}
-/* refresh all UI after a preset load */
-function afterPresetLoad(){
-  buildDeck(); buildColumns(); syncColumns();
-  buildProps('layerProps','layer'); buildProps('clipProps','clip');
-  buildDashKnobs(); buildPostFx(); buildMaster(); buildMapUI();
-  refreshPresetSel();
-  if($('resSel')) $('resSel').value=S.res;
-  if($('bpmBig')) $('bpmBig').textContent=S.bpm;
-  if($('masterSl')) $('masterSl').value=(S.params['P.master']!==undefined)?S.params['P.master']:1;
-  if($('ckBeatSync')) $('ckBeatSync').checked=!!S.beatSync;
-  if($('btnBlackout2')) $('btnBlackout2').classList.toggle('armed', !!S.blackout);
-  if($('btnPauseT')) $('btnPauseT').classList.toggle('on', !!S.paused);
-  positionOverlays();
-}
-
-/* ---- perform mode ---- */
-function togglePerform(){ document.body.classList.toggle('perform'); }
-/* ================= MAP UI ================= */
+/* ================= MAP UI (kept from v4 — the phone's superpower) ================= */
 function sliderRow(parent, label, v01, onInput, fmt){
   const wrap = el('div', 'prow'); const line = el('div', 'pline');
   const lab = el('label'); lab.textContent = label; line.appendChild(lab);
@@ -3849,28 +3828,28 @@ function tglRow(parent, label, val, onChange){
   line.appendChild(ck); wrap.appendChild(line); parent.appendChild(wrap);
 }
 function buildMapUI(){
-  const host = $('mapUI'); host.innerHTML = '';
-  const hideB = el('button', null, '\u2304 Hide panel (reach all corners)');
+  const host = $('mapUI'); if(!host) return; host.innerHTML = '';
+  const hideB = el('button', 'abtn', '\u2304 Hide panel (reach all corners)');
   hideB.style.width = '100%'; hideB.style.marginBottom = '8px';
   hideB.addEventListener('click', () => setSheetHidden(true));
   host.appendChild(hideB);
   const ls = el('div');
   S.map.surfaces.forEach((sf, si) => {
     const row = el('div', 'surfrow');
-    if(si === MUI.selSurf){ row.style.outline = '2px solid #22d3ee'; row.style.borderRadius = '10px'; }
+    if(si === MUI.selSurf){ row.style.outline = '2px solid #22d3ee'; }
     const nm = el('span', 'sname', (si === MUI.selSurf ? '\u25b8 ' : '') + sf.name);
     nm.addEventListener('click', () => {
       MUI.selSurf = si; MUI.selCorner = 0;
       saveState(); buildMapUI(); positionOverlays();
     });
     row.appendChild(nm);
-    const en = el('button', sf.enabled ? 'on' : '', sf.enabled ? 'on' : 'off');
+    const en = el('button', 'minibtn '+(sf.enabled ? 'onS' : ''), sf.enabled ? 'on' : 'off');
     en.addEventListener('click', () => {
       sf.enabled = !sf.enabled; saveState(); buildMapUI();
     });
     row.appendChild(en);
     if(S.map.surfaces.length > 1){
-      const del = el('button', 'warn', '\u2715');
+      const del = el('button', 'minibtn', '\u2715');
       del.addEventListener('click', () => {
         S.map.surfaces.splice(si, 1);
         if(MUI.selSurf >= S.map.surfaces.length) MUI.selSurf = 0;
@@ -3881,8 +3860,8 @@ function buildMapUI(){
     ls.appendChild(row);
   });
   host.appendChild(ls);
-  const add = el('button', null, '+ Add surface');
-  add.style.width = '100%'; add.style.margin = '8px 0';
+  const add = el('button', 'gbtn', '+ Add surface');
+  add.style.width = '100%'; add.style.margin = '8px 0'; add.style.minHeight='52px';
   add.addEventListener('click', () => {
     const n = S.map.surfaces.length + 1;
     S.map.surfaces.push({
@@ -3904,12 +3883,9 @@ function buildMapUI(){
   bT.addEventListener('click', () => { S.map.test = !S.map.test; saveState(); buildMapUI(); });
   seg.appendChild(bC); seg.appendChild(bM); seg.appendChild(bT);
   host.appendChild(seg);
-  const sec = el('section', null, '');
-  const h = el('h2', null, 'Pinning'); sec.appendChild(h);
-  sec.appendChild(el('div', 'hint', MUI.mapMode === 'corners'
+  host.appendChild(el('div', 'hint', MUI.mapMode === 'corners'
     ? 'Drag the A B C D handles on the canvas to pin corners. Tap a handle to select it, then nudge below for precision.'
     : 'Drag inside the dashed mask to move it; drag near its corner to resize.'));
-  host.appendChild(sec);
   const sf = S.map.surfaces[MUI.selSurf];
   if(sf){
     const g = cgrp(host, 'Surface ' + sf.name, true);
@@ -4064,8 +4040,6 @@ function wireOutput(){
 }
 
 /* ================= CANVAS FIT ================= */
-
-/* ================= CANVAS FIT ================= */
 function refitCanvas(){
   const r = $('stage').getBoundingClientRect();
   const dpr = Math.min(window.devicePixelRatio||1, 2);
@@ -4085,7 +4059,18 @@ function loop(){
   const t=now-tStart; lastT=now;
   pollAudio();
   let pulse=0;
-  if(S.bpm>0){ const ph=(t*S.bpm/60)%1; pulse=Math.pow(1-ph,3); }
+  const ph=(t*S.bpm/60)%1;
+  if(S.bpm>0){ pulse=Math.pow(1-ph,3); }
+  /* beat-quantized clip fires: fire on the first frame of a new beat
+     (beat-index comparison — robust at any framerate) */
+  const beatIdx=Math.floor(t*S.bpm/60);
+  if(pendingFire){
+    if(!MUI.quant || beatIdx!==lastBeatIdx){
+      const p=pendingFire; pendingFire=null;
+      fireClip(p.i,p.k); syncNewUI();
+    }
+  }
+  lastBeatIdx=beatIdx;
   beatPulse=Math.max(pulse,audioBeat);
   evalModulators(t);
   for(let i=0;i<4;i++) renderLayer(i,t);
@@ -4097,20 +4082,18 @@ function loop(){
   renderMap();
   frames++;
   if(now-fpsT>0.5){
-    $('fps').textContent=Math.round(frames/Math.max(now-fpsT,0.001))+' fps';
+    const f=$('fps'); if(f) f.textContent=Math.round(frames/Math.max(now-fpsT,0.001))+' fps';
     frames=0; fpsT=now;
     updateMeters();
   }
 }
 
 /* ================= WIRING ================= */
-function wireV3(){
-  document.querySelectorAll('#ptabs button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
+function wireNew(){
+  document.querySelectorAll('#tabbar button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
   $('panelFab').addEventListener('click', ()=>setSheetHidden(false));
-  $('masterSl').addEventListener('input', e=>setParam('P.master', parseFloat(e.target.value), e.target));
-  $('masterSl').value=(S.params['P.master']!==undefined)?S.params['P.master']:1;
-  /* transport bar */
-  $('btnTap2').addEventListener('click', tapTempo);
+  /* transport */
+  $('btnTap').addEventListener('click', tapTempo);
   $('btnHalf').addEventListener('click', ()=>{
     S.bpm=clamp(Math.round(S.bpm/2),40,240);
     $('bpmBig').textContent=S.bpm; saveState();
@@ -4121,23 +4104,28 @@ function wireV3(){
   });
   $('btnResync').addEventListener('click', resyncBeat);
   $('btnPauseT').addEventListener('click', togglePauseT);
-  $('ckBeatSync').addEventListener('change', e=>{ S.beatSync=e.target.checked; saveState(); });
-  $('btnBlackout2').addEventListener('click', ()=>{
+  $('btnQuant').addEventListener('click', ()=>{
+    MUI.quant=!MUI.quant;
+    $('btnQuant').classList.toggle('on', MUI.quant); saveState();
+  });
+  $('btnBlackout').addEventListener('click', ()=>{
     S.blackout=!S.blackout;
-    $('btnBlackout2').classList.toggle('armed', S.blackout);
+    $('btnBlackout').classList.toggle('armed', S.blackout);
     saveState();
   });
+  $('ckBeatSync').addEventListener('change', e=>{ S.beatSync=e.target.checked; saveState(); });
+  const msl=$('masterSl');
+  msl.addEventListener('input', ()=>{
+    setParam('P.master', parseFloat(msl.value), msl);
+    $('masterVal').textContent=Math.round(parseFloat(msl.value)*100)+'%';
+  });
+  CTRLS['P.master']={set:v=>setParam('P.master',v), label:'Master'};
+  wirePresets();
   $('btnLearn2').addEventListener('click', ()=>setLearn(!learnArmed));
-  $('btnMidiClear').addEventListener('click', ()=>{ S.midi=[]; saveState(); renderMidiList(); });
   $('btnAudio').addEventListener('click', toggleAudio);
-  $('btnPerform').addEventListener('click', togglePerform);
-  $('btnExitPerform').addEventListener('click', togglePerform);
-  $('btnOutput').addEventListener('click', ()=>setOutput(true));
   $('resSel').addEventListener('change', ()=>{
     S.res=$('resSel').value; buildTargets(); buildMapTarget(); refitCanvas(); saveState();
   });
-  $('btnCompile').addEventListener('click', ()=>compilePlugin(false));
-  $('btnPlugDefault').addEventListener('click', ()=>{ $('plugcode').value=PLUGIN_DEFAULT; compilePlugin(false); });
   wireHandles(); wireMask(); wireOutput();
   document.addEventListener('click', e=>{
     const m=$('clipmenu');
@@ -4164,6 +4152,7 @@ function wireV3(){
 /* ================= INIT ================= */
 function init(){
   S.blackout=false; S.paused=false;
+  MUI.quant=true; MUI.tab='Play';
   try{
     if(!localStorage.getItem('holomapper.mobile.seen')){
       S.res='960x540';
@@ -4173,23 +4162,25 @@ function init(){
   if(!validClips(S.clips)) S.clips=defaultClips();
   if(!Array.isArray(S.fired)||S.fired.length!==4) S.fired=[null,null,null,null];
   if(typeof S.colFired!=='number') S.colFired=null;
-  if(!S.sel||typeof S.sel.i!=='number') S.sel={kind:'layer',i:0};
+  if(!S.sel||typeof S.sel.i!=='number') S.sel={kind:'layer', i:0};
+  if(typeof S.selLayer!=='number') S.selLayer=0;
   for(let i=0;i<4;i++){ S.params['L'+i+'.src']=S.layers[i].src/4; syncFiredToSrc(i); }
   if(!S.map || !Array.isArray(S.map.surfaces) || !S.map.surfaces.length) S.map=defaultMap();
   if(MUI.selSurf >= S.map.surfaces.length) MUI.selSurf=0;
-  $('mhandle').style.pointerEvents='none'; /* visual only; resize via mapcv proximity */
-  buildDeck(); buildColumns();
-  buildProps('layerProps','layer'); buildProps('clipProps','clip');
-  buildPostFx(); buildMaster(); buildCompUI();
-  renderMidiList(); syncTopToggles();
-  buildMapUI();
-  $('plugcode').value=S.pluginCode;
+  if($('mhandle')) $('mhandle').style.pointerEvents='none'; /* visual only; resize via mapcv proximity */
+  buildColumns(); syncNewUI();
+  buildFxCards(); buildMixLayers(); buildMixMacros();
+  $('plugcode').value=S.pluginCode||'';
   $('resSel').value=S.res;
   $('bpmBig').textContent=S.bpm;
-  $('btnBlackout2').classList.toggle('armed', !!S.blackout);
+  $('btnBlackout').classList.toggle('armed', !!S.blackout);
   $('btnPauseT').classList.toggle('on', !!S.paused);
-  showTab('Comp');
-  wireV3();
+  $('btnQuant').classList.toggle('on', !!MUI.quant);
+  $('ckBeatSync').checked=!!S.beatSync;
+  const mv=(S.params['P.master']!==undefined)?S.params['P.master']:1;
+  $('masterSl').value=mv; $('masterVal').textContent=Math.round(mv*100)+'%';
+  showTab('Play');
+  wireNew();
   if(!initGL()) return;
   initQuad();
   if(!compileAll()) return;
