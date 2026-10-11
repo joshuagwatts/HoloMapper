@@ -62,7 +62,7 @@ input[type=checkbox]{accent-color:var(--sel);width:13px;height:13px}
 .dockhead:hover .dgrip{color:var(--acc2)}
 .dockpanel.dragsrc{opacity:.35}
 .dockbody{flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;position:relative}
-.dockbody>#gridzone,.dockbody>#monitors,.dockbody>#proptabs,.dockbody>#browser{flex:1 1 auto;min-height:0;min-width:0}
+.dockbody>#gridzone,.dockbody>#monitors,.dockbody>#proptabs,.dockbody>#browser,.dockbody>#clipinsp{flex:1 1 auto;min-height:0;min-width:0}
 .dockbody>#transport{flex:1 1 auto;min-height:0}
 .tgrip{flex:none;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;
   color:var(--dim);font-size:12px;letter-spacing:3px;padding:0 6px 0 2px;line-height:1}
@@ -164,9 +164,25 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .lstrip{flex:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
   display:grid;grid-template-columns:54px 196px minmax(0,1fr)}
 /* Resolume-style V fader + mix mode on the strip's left edge */
-.lfad{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 3px 6px;
+.lfad{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px 6px;
   border-right:1px solid var(--line);min-height:0}
-.vfader{flex:1;min-height:96px;width:28px;writing-mode:vertical-lr;direction:rtl;cursor:ns-resize;margin:0}
+/* Chunky Resolume-style V fader — custom pointer-drag component. Wide track,
+   big grabbable handle, full strip height. Replaces the thin native vertical
+   range input (much easier to grab onto and move around). */
+.vfad{position:relative;flex:1;min-height:104px;width:36px;cursor:ns-resize;touch-action:none;
+  outline:none;border-radius:6px;flex:none}
+.vfad:focus-visible{box-shadow:0 0 0 2px var(--sel)}
+.vfad-track{position:absolute;left:50%;top:2px;bottom:2px;width:12px;transform:translateX(-50%);
+  background:#0b0c0f;border:1px solid var(--line);border-radius:6px;pointer-events:none}
+.vfad-fill{position:absolute;left:50%;bottom:2px;width:12px;transform:translateX(-50%);
+  background:linear-gradient(to top,#1f6f5c,var(--play));border-radius:6px;pointer-events:none}
+.vfad-handle{position:absolute;left:50%;transform:translate(-50%,50%);width:32px;height:46px;
+  background:linear-gradient(#41474f,#262a31);border:1px solid #565e69;border-radius:7px;
+  box-shadow:0 2px 8px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.12);pointer-events:none}
+.vfad-handle::after{content:'';position:absolute;left:6px;right:6px;top:50%;height:3px;
+  transform:translateY(-50%);background:var(--play);border-radius:2px;
+  box-shadow:0 -9px 0 -1px #6a7280,0 9px 0 -1px #6a7280}
+.vfad:hover .vfad-handle{border-color:var(--acc2)}
 .fval{font-size:9px;font-weight:800;color:var(--dim);line-height:1}
 .lfad .lbsel{max-width:48px;font-size:9px;padding:0 1px}
 .lstrip.sel{border-color:var(--sel)}
@@ -180,7 +196,6 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .tbtn.onB{background:var(--byp);border-color:var(--byp);color:#111}
 .tbtn.onS{background:var(--solo);border-color:var(--solo);color:#111}
 .lrow2{display:flex;align-items:center;gap:4px}
-.lop{flex:1;min-width:30px}
 .lbsel{max-width:86px;font-size:10px}
 .clipgrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;padding:4px;min-width:0}
 .clip{position:relative;min-height:52px;border-radius:var(--r);background:#141518;border:1px solid #2b2e35;
@@ -200,20 +215,12 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .clip.empty .cthumb{font-size:13px}
 .clip .fxdot{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;
   background:var(--play);box-shadow:0 0 4px rgba(45,212,191,.8)}
-/* ============ clip inspector (dedicated window, not a tab) ============
-   Right-side slide-over docked inside #main (re-anchored from #lowerzone by
-   the docking system): overlays the workspace, never the deck grid. Fixed
-   absolute positioning = zero layout reflow when it opens/closes. */
-#clipinsp{position:absolute;top:0;right:0;bottom:0;width:302px;background:var(--panel);
-  border-left:1px solid var(--line);z-index:60;display:flex;flex-direction:column;
-  transform:translateX(103%);transition:transform .18s ease;
-  box-shadow:-10px 0 28px rgba(0,0,0,.5)}
-#clipinsp.open{transform:none}
-.ci-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);flex:none}
-.ci-title{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--txt)}
-.ci-x{margin-left:auto;background:none;border:1px solid var(--line);color:var(--dim);border-radius:4px;
-  width:22px;height:22px;font-size:11px;cursor:pointer;line-height:1}
-.ci-x:hover{color:var(--txt);border-color:var(--sel)}
+/* ============ clip inspector (6th dockable panel) ============
+   The Clip inspector is a first-class dock panel (default: right column,
+   stacked under Browser). Clicking a clip updates it in place; with no clip
+   selected it shows an empty state. */
+#clipinsp{flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column;background:var(--panel)}
+/* (no more slide-over: the Clip inspector is the 6th dockable panel) */
 .ci-body{overflow-y:auto;padding:10px;flex:1;min-height:0}
 .ci-badges{display:flex;gap:6px;margin:0 0 8px;flex-wrap:wrap}
 .ci-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:9px;border:1px solid var(--line);color:var(--dim)}
@@ -574,12 +581,8 @@ body.perform #performbar{display:block}
         <div class="btab on" id="btab-fx"></div>
         <div class="btab" id="btab-src"></div>
       </div>
-      <!-- dedicated Clip inspector: separate window, not a tab -->
+      <!-- Clip inspector: 6th dockable panel (gets its dockhead grip from dockWrapPanels) -->
       <div id="clipinsp" aria-label="Clip inspector">
-        <div class="ci-head">
-          <span class="ci-title">Clip</span>
-          <button class="ci-x" id="cix" title="Close (ESC)">✕</button>
-        </div>
         <div class="ci-body" id="cibody"></div>
       </div>
     </section>
@@ -634,8 +637,8 @@ body.perform #performbar{display:block}
    column's empty space, onto a column edge (splits a new column), or onto a
    row edge (new row). An insertion indicator shows the exact snap spot.
    Layout persists in localStorage; Reset layout restores the default. */
-const DOCK_IDS=['deck','transport','monitors','proptabs','browser'];
-const DOCK_TITLES={deck:'Deck',transport:'Transport',monitors:'Monitors',proptabs:'Properties',browser:'Browser'};
+const DOCK_IDS=['deck','transport','monitors','proptabs','browser','clip'];
+const DOCK_TITLES={deck:'Deck',transport:'Transport',monitors:'Monitors',proptabs:'Properties',browser:'Browser',clip:'Clip'};
 const DOCK_KEY='holomapper.dock.v1';
 let dockLayout=null;
 const dockWraps={}; /* id -> .dockpanel element (inner content preserved) */
@@ -645,7 +648,7 @@ function dockDefault(){return{v:1,rows:[
   {h:'32px',cols:[{w:'1fr',panels:[{id:'transport',size:'auto'}]}]},
   {h:'1fr',cols:[{w:'392px',panels:[{id:'monitors',size:'1fr'}]},
                  {w:'1fr',panels:[{id:'proptabs',size:'1fr'}]},
-                 {w:'228px',panels:[{id:'browser',size:'1fr'}]}]}
+                 {w:'300px',panels:[{id:'browser',size:'1fr'},{id:'clip',size:'1fr'}]}]}
 ]};}
 
 function dockFlexDim(d){return d==='auto'?'0 0 auto':(d==='1fr'?'1 1 0':'0 0 '+d);}
@@ -654,7 +657,7 @@ function dockSer(){return JSON.stringify(dockLayout,function(k,v){return k==='_e
 /* Wrap the existing static sections into dock panels (ids preserved, so all
    existing builders/listeners keep working). Runs once at boot. */
 function dockWrapPanels(){
-  const bodies={deck:'gridzone',transport:'transport',monitors:'monitors',proptabs:'proptabs',browser:'browser'};
+  const bodies={deck:'gridzone',transport:'transport',monitors:'monitors',proptabs:'proptabs',browser:'browser',clip:'clipinsp'};
   for(const id of DOCK_IDS){
     const p=el('div','dockpanel');p.dataset.panel=id;
     if(id!=='transport'){
@@ -673,8 +676,6 @@ function dockWrapPanels(){
   const tg=el('span','tgrip','\u28ff\u28ff');tg.title='Drag to move the Transport panel';
   tg.addEventListener('pointerdown',(e)=>dockGripDown(e,'transport'));
   dockWraps.transport.querySelector('#transport').prepend(tg);
-  /* clip inspector re-anchors to the workspace root (it lived in #lowerzone) */
-  $('main').appendChild($('clipinsp'));
   const lz=$('lowerzone');if(lz)lz.remove();
 }
 
@@ -910,7 +911,22 @@ function dockLoad(){
         }
       }
     }
-    if(ids.length!==DOCK_IDS.length||new Set(ids).size!==ids.length)return null;
+    const have=new Set(ids);
+    if(ids.length!==have.size)return null; /* duplicate panel ids */
+    /* migration: 5-panel layouts predate the Clip panel — dock it right
+       after Browser (the new default spot) instead of dropping the layout */
+    if(!have.has('clip')){
+      if(ids.length!==DOCK_IDS.length-1)return null;
+      let placed=false;
+      for(const r of L.rows){
+        for(const c of r.cols){
+          const bi=c.panels.findIndex(p=>p.id==='browser');
+          if(bi>=0){ c.panels.splice(bi+1,0,{id:'clip',size:'1fr'}); placed=true; break; }
+        }
+        if(placed)break;
+      }
+      if(!placed){ const lr=L.rows[L.rows.length-1]; lr.cols[lr.cols.length-1].panels.push({id:'clip',size:'1fr'}); }
+    }else if(ids.length!==DOCK_IDS.length)return null;
     for(const r of L.rows){
       if(typeof r.h!=='string')r.h='1fr';
       for(const c of r.cols){
@@ -3850,6 +3866,71 @@ function buildColHead(){
     host.appendChild(t);
   }
 }
+/* Chunky Resolume-style V fader — custom pointer-drag vertical fader.
+   Wide track, big grabbable handle, full strip height. Drives L{i}.op through
+   the standard param plumbing (data-ctrl + CTRLS + SYNC_FN), so MIDI learn,
+   macros, and the Layer tab slider all stay in sync. The handle paints via
+   _vfPaint(v01), which SYNC_FN calls for external changes. */
+function buildVFader(i){
+  const id='L'+i+'.op';
+  const root=el('div','vfad');
+  root.setAttribute('data-ctrl',id);
+  root.setAttribute('tabindex','0');
+  root.setAttribute('role','slider');
+  root.setAttribute('aria-label',LAYER_NAMES[i]+' Opacity');
+  root.setAttribute('aria-valuemin','0');
+  root.setAttribute('aria-valuemax','100');
+  root.title=LAYER_NAMES[i]+' Opacity — drag, or click while MIDI Learn is armed to map';
+  root.appendChild(el('div','vfad-track'));
+  const fill=el('div','vfad-fill'); root.appendChild(fill);
+  const han=el('div','vfad-handle'); root.appendChild(han);
+  const cur=()=> (S.params[id]!==undefined)?S.params[id]:1;
+  const paint=(v)=>{
+    const p=clamp(v,0,1)*100;
+    fill.style.height='calc('+p+'% - 2px)';
+    han.style.bottom=p+'%';
+    root.setAttribute('aria-valuenow',String(Math.round(p)));
+    const fv=root.parentElement&&root.parentElement.querySelector('.fval');
+    if(fv) fv.textContent=Math.round(p)+'%';
+  };
+  root._vfPaint=paint;
+  paint(cur());
+  const setFromY=(clientY)=>{
+    const r=root.getBoundingClientRect();
+    if(r.height<=0) return;
+    const v=clamp(1-(clientY-r.top)/r.height,0,1);
+    setParam(id,v,root);
+    paint(v);
+  };
+  root.addEventListener('pointerdown',(e)=>{
+    if(e.pointerType==='mouse'&&e.button!==0) return;
+    /* MIDI-learn capture runs first (capture phase) and stops propagation
+       when armed, so this never moves the fader during mapping. */
+    try{ root.setPointerCapture(e.pointerId); }catch(err){}
+    setFromY(e.clientY);
+    const mv=(ev)=>setFromY(ev.clientY);
+    const up=()=>{
+      root.removeEventListener('pointermove',mv);
+      root.removeEventListener('pointerup',up);
+      root.removeEventListener('pointercancel',up);
+    };
+    root.addEventListener('pointermove',mv);
+    root.addEventListener('pointerup',up);
+    root.addEventListener('pointercancel',up);
+  });
+  root.addEventListener('keydown',(e)=>{
+    let v=null; const c=cur();
+    if(e.key==='ArrowUp'||e.key==='ArrowRight') v=c+0.05;
+    else if(e.key==='ArrowDown'||e.key==='ArrowLeft') v=c-0.05;
+    else if(e.key==='Home') v=1;
+    else if(e.key==='End') v=0;
+    else if(e.key===' '){ e.preventDefault(); e.stopPropagation(); return; }
+    else return;
+    e.preventDefault(); e.stopPropagation();
+    v=clamp(v,0,1); setParam(id,v,root); paint(v);
+  });
+  return root;
+}
 function buildDeck(){
   buildDeckTabs();
   buildColHead();
@@ -3858,19 +3939,14 @@ function buildDeck(){
     const i=di, L=S.layers[i];
     const st=el('div','lstrip'+((S.sel&&S.sel.kind==='layer'&&S.sel.i===i)?' sel':''));
     st.dataset.i=i;
-    /* clicking deck background (not a clip) dismisses the clip inspector */
-    st.addEventListener('click',(e)=>{ if(!e.target.closest('.clip')) closeClipInspector(); });
-    /* Resolume-style V fader + mix mode on the strip's left edge */
+    /* clicking deck background (not a clip, not the V fader) dismisses the clip inspector */
+    st.addEventListener('click',(e)=>{ if(e.target.closest('.vfad')) return; if(!e.target.closest('.clip')) closeClipInspector(); });
+    /* Chunky Resolume-style V fader on the strip's left edge (custom component) */
     const fad=el('div','lfad');
-    const op=document.createElement('input');
-    op.type='range'; op.min=0; op.max=1; op.step=0.001; op.className='vfader';
-    op.value=(S.params['L'+i+'.op']!==undefined)?S.params['L'+i+'.op']:1;
-    op.setAttribute('data-ctrl','L'+i+'.op');
-    op.title=LAYER_NAMES[i]+' Opacity \u2014 click while MIDI Learn is armed to map';
-    const fv=el('span','fval',Math.round(parseFloat(op.value)*100)+'%');
-    op.addEventListener('input',()=>{ setParam('L'+i+'.op',parseFloat(op.value),op); fv.textContent=Math.round(parseFloat(op.value)*100)+'%'; });
+    const op=buildVFader(i);
+    const fv=el('span','fval',Math.round(((S.params['L'+i+'.op']!==undefined)?S.params['L'+i+'.op']:1)*100)+'%');
     CTRLS['L'+i+'.op']={set:v=>setParam('L'+i+'.op',v), label:LAYER_NAMES[i]+' Opacity'};
-    SYNC_FN['L'+i+'.op']=(elm,v)=>{ elm.value=v; const fvs=elm.parentElement.querySelector('.fval'); if(fvs) fvs.textContent=Math.round(v*100)+'%'; };
+    SYNC_FN['L'+i+'.op']=(elm,v)=>{ if(elm._vfPaint) elm._vfPaint(v); };
     const bs=document.createElement('select'); bs.className='lbsel'; bs.title='Mix mode (blend)';
     BLENDS.forEach((b,bi)=>bs.appendChild(new Option(b,bi))); bs.value=L.blend;
     bs.addEventListener('change',()=>{ L.blend=parseInt(bs.value,10); saveState(); });
@@ -4043,25 +4119,34 @@ function buildProps(){
   paramRow(wrap,p+'p1','Param 1'); paramRow(wrap,p+'p2','Param 2');
   if(S.layers[i].src===4) buildClonerUI(wrap,i);
 }
-/* ================= CLIP INSPECTOR — dedicated window (not a tab) =================
-   Clicking a clip name (select) or clip box (fire) opens this right-side
-   slide-over. It reuses buildClipParamSection/paramRow so every control stays
-   MIDI-learnable and macro-assignable, exactly like the Clip tab. */
+/* ================= CLIP INSPECTOR — 6th dockable panel =================
+   The Clip inspector is a first-class dock panel (default: right column under
+   Browser). Clicking a clip name (select) or clip box (fire) updates it in
+   place; with no clip selected it shows a clean empty state. "Closing" it
+   just clears the inspected clip. It reuses buildClipParamSection/paramRow so
+   every control stays MIDI-learnable and macro-assignable, like the Clip tab. */
 const clipInsp={i:null,k:null};
 function openClipInspector(i,k){
   clipInsp.i=i; clipInsp.k=k;
   buildClipInspector();
-  $('clipinsp').classList.add('open');
 }
 function closeClipInspector(){
-  const p=$('clipinsp'); if(p) p.classList.remove('open');
   clipInsp.i=null; clipInsp.k=null;
+  buildClipInspector(); /* back to the empty state */
 }
-function refreshClipInspector(){ if(clipInsp.i!==null) buildClipInspector(); }
+function refreshClipInspector(){ buildClipInspector(); }
+function renderClipEmpty(host){
+  const h=el('div','phead');
+  h.appendChild(el('span','ptitle','CLIP'));
+  host.appendChild(h);
+  const d=el('div','dim','Select a clip to inspect');
+  d.style.margin='12px 2px 4px'; host.appendChild(d);
+  host.appendChild(mkHint('Click a clip name in the deck — its source, params and trigger controls land here.'));
+}
 function buildClipInspector(){
   const host=$('cibody'); if(!host) return; host.innerHTML='';
   const i=clipInsp.i, k=clipInsp.k;
-  if(i===null||k===null||!S.clips[i]) return;
+  if(i===null||k===null||!S.clips[i]){ renderClipEmpty(host); return; }
   const src=S.clips[i][k];
   const h=el('div','phead');
   h.appendChild(el('span','ptitle','CLIP '+LAYER_NAMES[i]+' \u00B7 C'+(k+1)));
@@ -4109,7 +4194,7 @@ function updateClipInspectorState(){
   const bf=$('cifire');
   if(bf) bf.disabled=(S.clips[i][k]===null||S.clips[i][k]===undefined);
 }
-$('cix').addEventListener('click',()=>closeClipInspector());
+/* (the old slide-over close button is gone — the Clip panel is docked now) */
 </script>
 <script>
 'use strict';
