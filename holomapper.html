@@ -185,6 +185,10 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .vfad:hover .vfad-handle{border-color:var(--acc2)}
 .fval{font-size:9px;font-weight:800;color:var(--dim);line-height:1}
 .lfad .lbsel{max-width:48px;font-size:9px;padding:0 1px}
+/* Transition time: compact horizontal slider in the strip's left column */
+.trow{display:flex;flex-direction:column;align-items:center;gap:1px;width:100%}
+.tsl{width:44px;margin:0;cursor:ew-resize}
+.tval{font-size:8px;font-weight:800;color:var(--dim);line-height:1}
 .lstrip.sel{border-color:var(--sel)}
 .lgut{padding:4px 6px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:3px;min-width:0}
 .lrow1{display:flex;align-items:center;gap:4px}
@@ -1211,6 +1215,9 @@ for(let i=0;i<4;i++){
   defParam(p+'audio',LAYER_NAMES[i]+' Audio',   0.6);
   defParam(p+'p1',   LAYER_NAMES[i]+' Param 1', 0.5);
   defParam(p+'p2',   LAYER_NAMES[i]+' Param 2', 0.5);
+  /* Layer clip transition time (seconds, 0 = hard cut). On clip fire with
+     trans>0 the outgoing frame crossfades into the incoming clip. */
+  defParam(p+'trans',LAYER_NAMES[i]+' Transition', 0, v=>v*4, v=>(v*4).toFixed(1)+'s');
 }
 /* ---- Cloner 3D params (per layer). Every one flows through the standard
    param system: MIDI learn, macro assign + depth, presets, phone remote. ---- */
@@ -1882,6 +1889,18 @@ in vec2 v_uv;
 uniform sampler2D u_tex;
 void main(){ O = vec4(texture(u_tex,v_uv).rgb,1.0); }
 `;
+/* Layer clip transition: eased crossfade of the frozen outgoing frame (u_hold)
+   into the freshly rendered incoming frame (u_new). u_p is the smoothstepped
+   0..1 progress. */
+const SRC_TRANSMIX = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_hold;
+uniform sampler2D u_new;
+uniform float u_p;
+void main(){ O = vec4(mix(texture(u_hold,v_uv).rgb, texture(u_new,v_uv).rgb, u_p), 1.0); }
+`;
 
 /* ================= CONTENT WAVE — new FX shaders ================= */
 const SRC_MIRROR = `#version 300 es
@@ -2113,8 +2132,10 @@ function buildTargets(){
   fbT=[makeTarget(RW,RH),makeTarget(RW,RH)];
   postT=[makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH)];
   bloomT=[makeTarget(RW>>1,RH>>1),makeTarget(RW>>1,RH>>1)]; /* v1.2 bloom chain */
+  transMixT=makeTarget(RW,RH); /* layer transition mix scratch */
+  transX=[null,null,null,null]; /* transitions don't survive a target rebuild */
   fbRead=0;
-  const all=[...layerT,compT,...fbT,...postT];
+  const all=[...layerT,compT,...fbT,...postT,transMixT];
   if(all.some(t=>!t.ok)) showErr('A render target is framebuffer-incomplete — visuals may be broken.');
   if(typeof clearNodeTargets==='function') clearNodeTargets(); /* v1.3: node scratch rebuilt lazily */
 }
@@ -2140,6 +2161,7 @@ function compileAll(){
     ['bloompost',SRC_BLOOMPOST],
     ['cam',     SRC_CAM],
     ['copy',    SRC_COPY],
+    ['transmix',SRC_TRANSMIX],
     ['bloombp', SRC_BLOOMBP],
     ['bloomblur',SRC_BLOOMBLUR],
     ['bloomadd',SRC_BLOOMADD]
@@ -3277,6 +3299,44 @@ function renderLayer(i,t){
   }
   renderLayerInto(i,t,layerT[i]);
 }
+/* ================= LAYER CLIP TRANSITIONS =================
+   Per-layer crossfade (L{i}.trans, seconds, 0 = hard cut). Snapshot approach:
+   at fire time the layer's current output is blitted into a hold target; each
+   frame the frozen outgoing frame eases into the live incoming render with a
+   smoothstep. Never glitches, never black-frames: at trans=0 this whole path
+   is skipped and behavior is exactly the old hard cut. */
+let transHoldT=[null,null,null,null]; /* per-layer {tex,fb,w,h}, lazy */
+let transX=[null,null,null,null];     /* per-layer {t0,dur} while transitioning */
+let transMixT=null;                   /* scratch target for the mix pass */
+function snapTransHold(i){
+  const L=layerT[i]; if(!L||!L.ok) return;
+  let H=transHoldT[i];
+  if(!H||!H.ok||H.w!==L.w||H.h!==L.h){ H=makeTarget(L.w,L.h); transHoldT[i]=H; }
+  if(!H.ok) return;
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER,L.fb);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,H.fb);
+  gl.blitFramebuffer(0,0,L.w,L.h,0,0,H.w,H.h,gl.COLOR_BUFFER_BIT,gl.NEAREST);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+}
+function renderTransMix(i,now){
+  const X=transX[i]; if(!X) return;
+  const H=transHoldT[i];
+  if(!H||!H.ok||!transMixT||!transMixT.ok||!PROG.transmix){ transX[i]=null; return; }
+  let p=(now-X.t0)/X.dur;
+  if(p>=1){ transX[i]=null; return; } /* landed: layerT already holds the new clip */
+  if(p<0) p=0;
+  const e=p*p*(3-2*p); /* smoothstep ease */
+  const L=layerT[i], Mx=transMixT, P=PROG.transmix;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,Mx.fb); gl.viewport(0,0,Mx.w,Mx.h);
+  gl.useProgram(P);
+  setTex(P,'u_hold',0,H.tex); setTex(P,'u_new',1,L.tex);
+  gl.uniform1f(U(P,'u_p'),e);
+  quadDraw();
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER,Mx.fb);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,L.fb);
+  gl.blitFramebuffer(0,0,Mx.w,Mx.h,0,0,L.w,L.h,gl.COLOR_BUFFER_BIT,gl.NEAREST);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+}
 const _cbOp=[0,0,0,0], _cbBl=[0,0,0,0], _cbEn=[0,0,0,0]; /* reused per frame: no allocs */
 function renderCombine(){
   const P=PROG.combine;
@@ -3851,6 +3911,17 @@ function fireClip(i,k){ S.firedCol=null; quantizeFire(i,k); }
 function fireClipNow(i,k){
   const src=S.clips[i][k];
   if(src===null||src===undefined) return;
+  /* layer transition: if the layer was already playing a different clip and
+     trans>0, freeze the outgoing frame and ease into the incoming one.
+     Starts at the actual fire moment (quantize/autopilot friendly). */
+  const wasFired=S.fired[i];
+  const dur=PARAMS['L'+i+'.trans']?PARAMS['L'+i+'.trans'].map(eff('L'+i+'.trans')):0;
+  if(dur>0&&wasFired!==null&&wasFired!==undefined&&wasFired!==k){
+    snapTransHold(i);
+    transX[i]={t0:performance.now()/1000,dur:dur};
+  }else{
+    transX[i]=null;
+  }
   S.layers[i].ejected=false;
   S.fired[i]=k;
   setParam('L'+i+'.src', src/Math.max(1,srcCount()-1));
@@ -3951,6 +4022,21 @@ function buildDeck(){
     BLENDS.forEach((b,bi)=>bs.appendChild(new Option(b,bi))); bs.value=L.blend;
     bs.addEventListener('change',()=>{ L.blend=parseInt(bs.value,10); saveState(); });
     fad.appendChild(op); fad.appendChild(fv); fad.appendChild(bs);
+    /* Transition time: compact horizontal slider under the mix mode.
+       data-ctrl makes it MIDI-learnable; data-val keeps the time label synced. */
+    const trw=el('div','trow');
+    const tid='L'+i+'.trans';
+    const tr=document.createElement('input');
+    tr.type='range'; tr.min=0; tr.max=1; tr.step=0.01; tr.className='tsl';
+    tr.value=(S.params[tid]!==undefined)?S.params[tid]:PARAMS[tid].def;
+    tr.setAttribute('data-ctrl',tid);
+    tr.title=LAYER_NAMES[i]+' Transition — crossfade time when a clip fires (click while MIDI Learn is armed to map)';
+    tr.addEventListener('input',()=>setParam(tid,parseFloat(tr.value),tr));
+    CTRLS[tid]={set:v=>setParam(tid,v), label:LAYER_NAMES[i]+' Transition'};
+    const tv=el('span','tval',PARAMS[tid].fmt(parseFloat(tr.value)));
+    tv.setAttribute('data-val',tid);
+    trw.appendChild(tr); trw.appendChild(tv);
+    fad.appendChild(trw);
     st.appendChild(fad);
     const gut=el('div','lgut');
     const r1=el('div','lrow1');
@@ -4117,6 +4203,7 @@ function buildProps(){
   paramRow(wrap,p+'op','Opacity'); paramRow(wrap,p+'speed','Speed');
   paramRow(wrap,p+'hue','Hue');    paramRow(wrap,p+'audio','Audio');
   paramRow(wrap,p+'p1','Param 1'); paramRow(wrap,p+'p2','Param 2');
+  paramRow(wrap,p+'trans','Transition');
   if(S.layers[i].src===4) buildClonerUI(wrap,i);
 }
 /* ================= CLIP INSPECTOR — 6th dockable panel =================
@@ -6470,7 +6557,7 @@ function loop(){
   beatPulse=Math.max(pulse,audioBeat);
   evalModulators(t);
   pumpWebcam(); /* one texture upload per frame max, shared by all layers */
-  for(let i=0;i<4;i++) renderLayer(i,t);
+  for(let i=0;i<4;i++){ renderLayer(i,t); renderTransMix(i,now); }
   renderCombine();
   renderFeedback();
   /* post chain threads one texture through; bypassed stages are skipped
