@@ -2921,7 +2921,8 @@ function syncFiredToSrc(i){
   S.fired[i]=k>=0?k:null;
 }
 function syncDeckSel(){
-  document.querySelectorAll('#deck .lstrip').forEach((st,i)=>{
+  document.querySelectorAll('#deck .lstrip').forEach((st)=>{
+    const i=+st.dataset.i; /* DOM order is L4..L1 (L1 at bottom); never assume position==index */
     st.classList.toggle('sel', !!S.sel && S.sel.kind==='layer' && S.sel.i===i);
     const L=S.layers[i];
     const bB=st.querySelector('.bByp'), bS=st.querySelector('.bSolo');
@@ -4023,7 +4024,7 @@ function buildVFader(i){
 }
 function buildDeck(){
   const host=$('deck'); if(!host) return; host.innerHTML='';
-  for(let i=0;i<4;i++){
+  for(let i=3;i>=0;i--){ /* Layer 1 sits at the BOTTOM of the stack, like Resolume (desktop parity) */
     const L=S.layers[i];
     const st=el('div','lstrip'+((S.sel&&S.sel.kind==='layer'&&S.sel.i===i)?' sel':''));
     st.style.setProperty('--lhue', Math.round(LAYER_HUES[i]*360));
