@@ -624,6 +624,13 @@ for(let i=0;i<4;i++){
   defParam(c+'Mesh',LB+'Mesh',0, clDiscMap(14), clDiscFmt(CL_MESHES));
   defParam(c+'Flat',LB+'Flat Shade',0, v=>v, clTglFmt);
   defParam(c+'Wire',LB+'Wireframe',0, v=>v, clTglFmt);
+  /* SDF raymarch render mode (v1.3): same layout + effector params, SDF core */
+  defParam(c+'RMode',LB+'Render',0, clDiscMap(2), clDiscFmt(['Mesh','SDF']));
+  defParam(c+'SPrim',LB+'SDF Shape',0, clDiscMap(7), clDiscFmt(['Sphere','Box','RndBox','Torus','Capsule','Cone','Octa']));
+  defParam(c+'SBlend',LB+'SDF Blend',0.3, v=>v*0.9, v=>(v*0.9).toFixed(2));
+  defParam(c+'SAO',LB+'SDF AO',0.6, v=>v, clTglFmt);
+  defParam(c+'SShad',LB+'SDF Shadow',0, v=>v, clTglFmt);
+  defParam(c+'SSteps',LB+'SDF Steps',0.3, v=>Math.round(16+v*64), v=>String(Math.round(16+v*64)));
   defParam(c+'IScl',LB+'Instance Scale',0.22, v=>0.1+v*1.9, v=>(0.1+v*1.9).toFixed(2));
   defParam(c+'HueR',LB+'Hue Range',0.35);
   defParam(c+'Sat',LB+'Saturation',0.57, v=>v*1.5, v=>(v*1.5).toFixed(2));
@@ -816,6 +823,7 @@ for(let i=0;i<4;i++){
   PARAMS[c+'Mode'].nopts=3; PARAMS[c+'Plane'].nopts=3;
   PARAMS[c+'Mesh'].nopts=14; PARAMS[c+'PFall'].nopts=4; PARAMS[c+'SndSrc'].nopts=4;
   PARAMS[c+'Mat'].nopts=2; PARAMS[c+'PtShape'].nopts=3;
+  PARAMS[c+'RMode'].nopts=2; PARAMS[c+'SPrim'].nopts=7;
 }
 defParam('P.trails','FB Trails',    0.55);
 defParam('P.zoom',  'FB Zoom',      1/3, v=>0.9+v*0.3,      v=>(0.9+v*0.3).toFixed(3)+'x');
@@ -1628,6 +1636,7 @@ function buildTargets(){
   RW=wh[0]; RH=wh[1];
   canvas.width=RW; canvas.height=RH;
   layerT=[makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true)];
+  sdfT=makeTarget(RW>>1,RH>>1,true); /* v1.3 SDF raymarch target (half-res) */
   compT=makeTarget(RW,RH);
   fbT=[makeTarget(RW,RH),makeTarget(RW,RH)];
   postT=[makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH)]; /* [2] = prism pass */
@@ -1672,6 +1681,11 @@ function compileAll(){
     const pr = makeProgram(CL_VERT_SRC, CL_FRAG_SRC);
     if(!pr){ showErr('Shader "cloner" failed: '+lastGlslErr); return false; }
     PROG.cloner=pr;
+  }
+  { /* Cloner SDF raymarch mode (v1.3): fullscreen fragment raymarcher */
+    const pr = makeProgram(VERT, CL_SDF_FRAG);
+    if(!pr){ showErr('Shader "clsdf" failed: '+lastGlslErr); return false; }
+    PROG.clsdf=pr;
   }
   { /* Cloner ground plane (v1.2) */
     const pr = makeProgram(CL_GROUND_VERT, CL_GROUND_FRAG);
@@ -2365,6 +2379,313 @@ void main(){
   O=vec4(col,1.0);
 }
 `;
+/* ---- SDF raymarch cloner (v1.3): same layout + effector params as the mesh
+   cloner, but the core is a raymarched SDF. Domain repetition builds the
+   grid/radial/linear layouts; every effector becomes a per-cell domain warp;
+   smooth-min blends neighbors for the melt look; AO + soft shadow + ACES. ---- */
+const CL_SDF_FRAG=`#version 300 es
+precision highp float;
+out vec4 O;
+uniform vec2 u_res;
+uniform vec3 u_camPos,u_camF,u_camR,u_camU;
+uniform float u_tanF,u_time,u_hue,u_hueR,u_sat;
+uniform float u_audioBass,u_audioMid,u_audioHigh,u_beat;
+uniform int u_mode;
+uniform float u_cnx,u_cny,u_cnz,u_spx,u_spy,u_spz;
+uniform float u_rcnt,u_rad,u_arc,u_plane;
+uniform float u_lcnt,u_stpx,u_stpy,u_stpz;
+uniform int u_sPrim,u_sSteps;
+uniform float u_sBlend,u_sAO,u_sShad,u_instScale;
+/* effector uniforms (same names as the mesh cloner; uploaded by uploadClonerFX) */
+uniform float u_pOn,u_pPosOn,u_pRotOn,u_pSclOn,u_pStr;
+uniform vec3 u_pPos,u_pRot,u_pScl;
+uniform int u_fallShape; uniform float u_fallInv,u_fallSize,u_fallSpd;
+uniform float u_rOn,u_seed,u_rAnim,u_rAnSpd;
+uniform vec3 u_rPos,u_rRot,u_rScl;
+uniform int u_rFallShape; uniform float u_rFallSize,u_rFallSpd,u_rFallInv;
+uniform float u_sOn,u_nScale,u_nSpd,u_nAmt,u_nSclAmt;
+uniform int u_sFallShape; uniform float u_sFallSize,u_sFallSpd,u_sFallInv;
+uniform float u_sndOn,u_sndGain,u_sndLift; uniform int u_sndSrc;
+uniform int u_sndFallShape; uniform float u_sndFallSize,u_sndFallSpd,u_sndFallInv;
+uniform float u_dOn,u_dMax;
+uniform float u_stpOn,u_stpN; uniform vec3 u_stpPos,u_stpRot,u_stpScl;
+uniform int u_stpFallShape; uniform float u_stpFallSize,u_stpFallSpd,u_stpFallInv;
+uniform float u_frmOn,u_frmAmp,u_frmFreq,u_frmPh,u_frmSpd;
+uniform int u_frmMode,u_frmTgt,u_frmAx;
+uniform int u_frmFallShape; uniform float u_frmFallSize,u_frmFallSpd,u_frmFallInv;
+uniform float u_paOn,u_paRad,u_paAmt; uniform vec3 u_paCen;
+uniform int u_paFallShape; uniform float u_paFallSize,u_paFallSpd,u_paFallInv;
+uniform float u_tgtOn; uniform vec3 u_tgtPos;
+uniform int u_tgtFallShape; uniform float u_tgtFallSize,u_tgtFallSpd,u_tgtFallInv;
+uniform float u_splOn,u_splRad,u_splHgt,u_splAmt,u_splAln; uniform int u_splPath;
+uniform int u_splFallShape; uniform float u_splFallSize,u_splFallSpd,u_splFallInv;
+uniform float u_tmOn,u_tmOff,u_tmStag;
+float h31(vec3 p){ p=fract(p*0.3183099+vec3(0.1,0.2,0.3)); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+float vn3(vec3 p){
+  vec3 ip=floor(p), fp=fract(p); fp=fp*fp*(3.0-2.0*fp);
+  float a=h31(ip),b=h31(ip+vec3(1.,0.,0.)),c=h31(ip+vec3(0.,1.,0.)),d=h31(ip+vec3(1.,1.,0.));
+  float e=h31(ip+vec3(0.,0.,1.)),f=h31(ip+vec3(1.,0.,1.)),g=h31(ip+vec3(0.,1.,1.)),h=h31(ip+vec3(1.,1.,1.));
+  return mix(mix(mix(a,b,fp.x),mix(c,d,fp.x),fp.y),mix(mix(e,f,fp.x),mix(g,h,fp.x),fp.y),fp.z);
+}
+mat3 euler(vec3 r){
+  float cx=cos(r.x),sx=sin(r.x),cy=cos(r.y),sy=sin(r.y),cz=cos(r.z),sz=sin(r.z);
+  return mat3(cy*cz,cy*sz,-sy, sx*sy*cz-cx*sz, sx*sy*sz+cx*cz, sx*cy, cx*sy*cz+sx*sz, cx*sy*sz-sx*cz, cx*cy);
+}
+mat3 aimZ(vec3 d){
+  vec3 f=normalize(d+vec3(1e-5,0.,0.));
+  vec3 r=normalize(cross(vec3(0.,1.,0.),f)+vec3(1e-4,0.,0.));
+  vec3 u=cross(f,r);
+  return mat3(r.x,u.x,f.x, r.y,u.y,f.y, r.z,u.z,f.z);
+}
+mat3 mixm(mat3 a,mat3 b,float k){
+  mat3 r; r[0]=mix(a[0],b[0],k); r[1]=mix(a[1],b[1],k); r[2]=mix(a[2],b[2],k);
+  vec3 c0=normalize(r[0]+vec3(1e-6)), c1=r[1]-c0*dot(c0,r[1]); c1=normalize(c1+vec3(1e-6));
+  vec3 c2=normalize(cross(c0,c1));
+  return mat3(c0,c1,c2);
+}
+float sfalloff(vec3 ip,float t,int shape,float size,float spd,float inv){
+  float d;
+  if(shape==1){ d=length(ip)/max(size,1e-3); }
+  else if(shape==2){ vec3 c=vec3(sin(t*spd)*size*0.6,cos(t*spd*0.8)*size*0.6,0.0); d=length(ip-c)/max(size,1e-3); }
+  else if(shape==3){ vec3 c=vec3(sin(t*spd)*size*0.6,cos(t*spd*0.8)*size*0.6,sin(t*spd*0.6)*size*0.6); vec3 q2=abs(ip-c)-vec3(size); d=length(max(q2,vec3(0.0)))/max(size,1e-3); }
+  else return 1.0;
+  float f=clamp(1.0-d,0.0,1.0); f=f*f*(3.0-2.0*f);
+  return mix(f,1.0-f,inv);
+}
+vec3 hsv(vec3 c){
+  vec3 rgb=clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0,0.0,1.0);
+  return c.z*mix(vec3(1.0),rgb,clamp(c.y,0.0,1.0));
+}
+vec3 aces(vec3 x){ return clamp(x*(2.51*x+0.03)/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
+float smin(float a,float b,float k){ float h=clamp(0.5+0.5*(b-a)/k,0.0,1.0); return mix(b,a,h)-k*h*(1.0-h); }
+/* SDF primitives (unit-ish; domain pre-scaled by u_instScale) */
+float sdPrim(vec3 p){
+  if(u_sPrim==1){ vec3 q=abs(p)-vec3(0.4); return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0); }
+  if(u_sPrim==2){ vec3 q=abs(p)-vec3(0.34); return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0)-0.14; }
+  if(u_sPrim==3){ vec2 q=vec2(length(p.xz)-0.34,p.y); return length(q)-0.15; }
+  if(u_sPrim==4){ vec3 pa=p-vec3(0.0,-0.34,0.0), ba=vec3(0.0,0.68,0.0); float h=clamp(dot(pa,ba)/dot(ba,ba),0.0,1.0); return length(pa-ba*h)-0.17; }
+  if(u_sPrim==5){ vec3 q=vec3(length(p.xz),p.y+0.4,0.0); float r1=0.42,r2=0.04,h=0.8; float b=(r1-r2)/h; float a=sqrt(max(1.0-b*b,0.0)); float k=dot(q.xy,vec2(-b,a)); if(k<0.0) return length(q.xy)-r1; if(k>a*h) return length(q.xy-vec2(0.0,h))-r2; return dot(q.xy,vec2(a,b))-r1; }
+  if(u_sPrim==6){ vec3 q=abs(p); return (q.x+q.y+q.z-0.62)*0.57735027; }
+  return length(p)-0.5;
+}
+/* layout -> cell-local q; outputs cid, valid, idxf, ccen */
+vec3 clDomain(vec3 p, out vec3 cid, out float valid, out float idxf, out vec3 ccen){
+  if(u_mode==0){
+    vec3 sp=vec3(u_spx,u_spy,u_spz);
+    vec3 np=vec3(u_cnx,u_cny,u_cnz);
+    vec3 rel=p+0.5*(np-1.0)*sp;
+    cid=floor(rel/sp);
+    vec3 q=rel-cid*sp-0.5*sp;
+    vec3 inb=step(vec3(0.0),cid)*step(cid,np-0.999);
+    valid=inb.x*inb.y*inb.z;
+    float n=np.x*np.y*np.z;
+    idxf=(cid.x*np.y*np.z+cid.y*np.z+cid.z)/max(n-1.0,1.0);
+    ccen=(cid-0.5*(np-1.0)+0.5)*sp;
+    return q;
+  }else if(u_mode==2){
+    vec3 st=vec3(u_stpx,u_stpy,u_stpz);
+    float sl=max(length(st),1e-3);
+    vec3 dn=st/sl;
+    float n=u_lcnt;
+    vec3 rel=p+0.5*(n-1.0)*st;
+    float id=floor(dot(rel,dn)/sl+0.5);
+    cid=vec3(id,0.0,0.0);
+    vec3 q=rel-id*st;
+    valid=step(0.0,id)*step(id,n-0.999);
+    idxf=id/max(n-1.0,1.0);
+    ccen=(id-0.5*(n-1.0))*st;
+    return q;
+  }
+  vec2 pc = u_plane<0.5 ? p.xy : (u_plane<1.5 ? p.xz : p.yz);
+  float pz = u_plane<0.5 ? p.z : (u_plane<1.5 ? p.y : p.x);
+  float n=u_rcnt;
+  float an = n>1.0 ? u_arc/(n-1.0) : 6.2831853;
+  float ang=atan(pc.y,pc.x); if(ang<0.0) ang+=6.2831853;
+  float id=floor(ang/max(an,1e-4)+0.5);
+  valid=step(0.0,id)*step(id,n-0.999);
+  float ca=id*max(an,1e-4);
+  vec2 cc=vec2(cos(ca),sin(ca))*u_rad;
+  vec2 rel2=pc-cc;
+  float cs=cos(-ca), sn=sin(-ca);
+  vec2 q2=mat2(cs,-sn,sn,cs)*rel2;
+  vec3 q = u_plane<0.5 ? vec3(q2.x,q2.y,pz) : (u_plane<1.5 ? vec3(q2.x,pz,q2.y) : vec3(pz,q2.x,q2.y));
+  vec3 cw = u_plane<0.5 ? vec3(cc.x,cc.y,0.0) : (u_plane<1.5 ? vec3(cc.x,0.0,cc.y) : vec3(0.0,cc.x,cc.y));
+  cid=vec3(id,0.0,0.0);
+  idxf=id/max(n-1.0,1.0);
+  ccen=cw;
+  return q;
+}
+/* bounding volume for safe far-field marching: when a sample is outside all
+   cells, mapOne returns FAR (1e3), which would make the march jump over the
+   scene. boundDist gives a conservative step toward the layout instead. */
+float boundDist(vec3 p){
+  vec3 he;
+  if(u_mode==0){
+    he=0.5*(vec3(u_cnx,u_cny,u_cnz)-1.0)*vec3(u_spx,u_spy,u_spz)+vec3(2.5);
+  }else if(u_mode==2){
+    he=0.5*(u_lcnt-1.0)*abs(vec3(u_stpx,u_stpy,u_stpz))+vec3(2.5);
+  }else{
+    float r=u_rad+2.5;
+    he = u_plane<0.5 ? vec3(r,r,2.5) : (u_plane<1.5 ? vec3(r,2.5,r) : vec3(2.5,r,r));
+  }
+  vec3 q=abs(p)-he;
+  return length(max(q,vec3(0.0)))+min(max(q.x,max(q.y,q.z)),0.0);
+}
+vec3 rotPlane(vec3 p,float a){
+  float c=cos(a), s=sin(a);
+  vec2 pc = u_plane<0.5 ? p.xy : (u_plane<1.5 ? p.xz : p.yz);
+  vec2 rp = mat2(c,-s,s,c)*pc;
+  return u_plane<0.5 ? vec3(rp.x,rp.y,p.z) : (u_plane<1.5 ? vec3(rp.x,p.y,rp.y) : vec3(p.x,rp.x,rp.y));
+}
+/* single cell SDF; outputs ch (cell hash), ccm (color mod) */
+float mapOne(vec3 p, out float ch, out float ccm){
+  vec3 cid; float valid, idxf; vec3 ccen;
+  vec3 q = clDomain(p, cid, valid, idxf, ccen);
+  if(valid<0.5){ ch=0.0; ccm=1.0; return 1e3; }
+  float h1=h31(cid*1.71+3.1);
+  float h2=h31(cid*3.77+7.3);
+  float h3=h31(cid*5.13+1.7);
+  ch=h1; ccm=1.0;
+  float te = u_time - h1*u_dMax*u_dOn + (u_tmOff + idxf*u_tmStag)*u_tmOn;
+  vec3 off=vec3(0.0), rot=vec3(0.0), scl=vec3(1.0);
+  float fP = sfalloff(ccen,te,u_fallShape,u_fallSize,u_fallSpd,u_fallInv)*u_pOn*u_pStr;
+  off+=u_pPos*fP*u_pPosOn; rot+=u_pRot*fP*u_pRotOn; scl*=mix(vec3(1.0),u_pScl,fP*u_pSclOn);
+  float seedEff = u_seed + ((u_rAnim>0.5)?floor(te*u_rAnSpd):0.0);
+  float fR = sfalloff(ccen,te,u_rFallShape,u_rFallSize,u_rFallSpd,u_rFallInv)*u_rOn;
+  if(fR>0.001){
+    vec3 r1=vec3(h31(vec3(h1*91.7,seedEff,seedEff*0.37)),h31(vec3(h1*47.3,seedEff*1.7,seedEff*0.91)),h31(vec3(h1*29.1,seedEff*0.53,seedEff*2.3)));
+    vec3 r2=vec3(h31(vec3(h2*91.7,seedEff,seedEff*0.37)),h31(vec3(h2*47.3,seedEff*1.7,seedEff*0.91)),h31(vec3(h2*29.1,seedEff*0.53,seedEff*2.3)));
+    vec3 r3=vec3(h31(vec3(h3*91.7,seedEff,seedEff*0.37)),h31(vec3(h3*47.3,seedEff*1.7,seedEff*0.91)),h31(vec3(h3*29.1,seedEff*0.53,seedEff*2.3)));
+    off+=(r1-0.5)*2.0*u_rPos*fR; rot+=(r2-0.5)*2.0*u_rRot*fR; scl*=mix(vec3(1.0),1.0+(r3-0.5)*2.0*u_rScl,fR);
+  }
+  float stp = u_stpN>1.0 ? floor(idxf*u_stpN)/u_stpN : 0.0;
+  float fST = sfalloff(ccen,te,u_stpFallShape,u_stpFallSize,u_stpFallSpd,u_stpFallInv)*u_stpOn*stp;
+  off+=u_stpPos*fST; rot+=u_stpRot*fST; scl*=mix(vec3(1.0),u_stpScl,fST);
+  float fFR = sfalloff(ccen,te,u_frmFallShape,u_frmFallSize,u_frmFallSpd,u_frmFallInv)*u_frmOn;
+  if(fFR>0.001){
+    float fph=idxf*u_frmFreq*6.2831853+u_frmPh+te*u_frmSpd;
+    vec3 fvec;
+    if(u_frmMode<1){ fvec=vec3(sin(fph),cos(fph*0.83),sin(fph*1.17+1.3)); }
+    else if(u_frmMode<2){ fvec=vec3(idxf,idxf*idxf,sin(idxf*12.566+te)); }
+    else{ fvec=vec3(sin(idxf*25.13)*0.5,cos(idxf*18.85)*0.5,sin((idxf+h1)*31.42)*0.5); }
+    if(u_frmTgt<1){ fvec*=u_frmAmp; }
+    else if(u_frmTgt<2){ vec3 axm=u_frmAx<1?vec3(1.,0.,0.):(u_frmAx<2?vec3(0.,1.,0.):vec3(0.,0.,1.)); float fsel=dot(normalize(fvec+vec3(1e-4)),axm)*0.5+0.5; fvec*=u_frmAmp*fsel; }
+    else{ fvec*=u_frmAmp; ccm*=1.0+(0.5+0.5*sin(fph*3.0))*u_frmAmp; }
+    off+=fvec*fFR;
+  }
+  float fS=sfalloff(ccen,te,u_sFallShape,u_sFallSize,u_sFallSpd,u_sFallInv)*u_sOn;
+  if(fS>0.001){
+    vec3 nw=vec3(vn3(p*u_nScale+vec3(0.0,te*u_nSpd,te*u_nSpd*0.7)),
+                 vn3(p*u_nScale+vec3(5.2,te*u_nSpd*1.3,0.0)),
+                 vn3(p*u_nScale+vec3(9.1,0.0,te*u_nSpd)));
+    off+=(nw-0.5)*u_nAmt*fS;
+    scl*=1.0+(nw-0.5)*u_nSclAmt*fS;
+  }
+  float bus = u_sndSrc<1?u_audioBass:(u_sndSrc<2?u_audioMid:(u_sndSrc<3?u_audioHigh:u_beat));
+  float fSnd=sfalloff(ccen,te,u_sndFallShape,u_sndFallSize,u_sndFallSpd,u_sndFallInv)*u_sndOn;
+  scl*=1.0+bus*u_sndGain*fSnd;
+  off.y+=bus*u_sndLift*fSnd;
+  float fPA=sfalloff(ccen,te,u_paFallShape,u_paFallSize,u_paFallSpd,u_paFallInv)*u_paOn;
+  if(fPA>0.001){
+    vec3 toC=ccen-u_paCen; float dc=length(toC)+1e-4;
+    float push=smoothstep(u_paRad,u_paRad*0.25,dc);
+    off+=(toC/dc)*push*u_paAmt*fPA;
+  }
+  scl=max(scl,vec3(1e-3));
+  mat3 R=euler(rot);
+  float fT=sfalloff(ccen,te,u_tgtFallShape,u_tgtFallSize,u_tgtFallSpd,u_tgtFallInv)*u_tgtOn;
+  if(fT>0.001){ R=mixm(R,aimZ(u_tgtPos-ccen),clamp(fT,0.0,1.0)); }
+  float fSP=sfalloff(ccen,te,u_splFallShape,u_splFallSize,u_splFallSpd,u_splFallInv)*u_splOn;
+  if(fSP>0.001){
+    vec3 sp=ccen; vec3 splT;
+    if(u_splPath<1){ float an2=atan(sp.z,sp.x)+te*0.7; splT=vec3(cos(an2)*u_splRad,sp.y*0.35+sin(te*1.3+sp.y)*u_splHgt*0.2,sin(an2)*u_splRad)-sp; }
+    else if(u_splPath<2){ float w=sin(sp.x*0.8+te*1.1)*u_splRad; splT=vec3(w,sin(sp.z*0.7+te*0.9)*u_splHgt,w*0.5)-sp*vec3(1.,0.,1.); }
+    else{ float hh=fract(sp.y*0.15+te*0.25); splT=vec3(sin(hh*6.283+sp.x)*u_splRad,(hh-0.5)*u_splHgt*4.0,cos(hh*6.283+sp.z)*u_splRad)-sp*vec3(1.,0.,1.); }
+    off+=splT*u_splAmt*fSP;
+    if(u_splAln>0.5){ R=mixm(R,aimZ(splT),clamp(fSP*u_splAln,0.0,1.0)); }
+  }
+  vec3 qw=transpose(R)*((q-off)/scl);
+  float sc=min(scl.x,min(scl.y,scl.z));
+  float d=sdPrim(qw/max(u_instScale,1e-3))*u_instScale*sc;
+  return d;
+}
+/* full field with smooth-min neighbor blending */
+float mapAll(vec3 p, out float ch, out float ccm){
+  float d=mapOne(p,ch,ccm);
+  float k=u_sBlend;
+  if(k>0.001){
+    vec3 n1=vec3(0.0),n2=vec3(0.0),n3=vec3(0.0),n4=vec3(0.0),n5=vec3(0.0),n6=vec3(0.0);
+    if(u_mode==0){ n1=vec3(u_spx,0.,0.); n2=-n1; n3=vec3(0.,u_spy,0.); n4=-n3; n5=vec3(0.,0.,u_spz); n6=-n5; }
+    else if(u_mode==2){ vec3 st=vec3(u_stpx,u_stpy,u_stpz); n1=st; n2=-st; }
+    else{ float an=(u_rcnt>1.0)?u_arc/(u_rcnt-1.0):6.2831853; n1=rotPlane(p,an)-p; n2=rotPlane(p,-an)-p; }
+    float cx,ccx,dd;
+    if(dot(n1,n1)>1e-8){ dd=mapOne(p+n1,cx,ccx); d=smin(d,dd,k); }
+    if(dot(n2,n2)>1e-8){ dd=mapOne(p+n2,cx,ccx); d=smin(d,dd,k); }
+    if(dot(n3,n3)>1e-8){ dd=mapOne(p+n3,cx,ccx); d=smin(d,dd,k); }
+    if(dot(n4,n4)>1e-8){ dd=mapOne(p+n4,cx,ccx); d=smin(d,dd,k); }
+    if(dot(n5,n5)>1e-8){ dd=mapOne(p+n5,cx,ccx); d=smin(d,dd,k); }
+    if(dot(n6,n6)>1e-8){ dd=mapOne(p+n6,cx,ccx); d=smin(d,dd,k); }
+  }
+  return d;
+}
+vec3 calcN(vec3 p){
+  float c,cc; vec2 e=vec2(1.0,-1.0)*0.0016;
+  return normalize(e.xyy*mapOne(p+e.xyy,c,cc)+e.yyx*mapOne(p+e.yyx,c,cc)+e.yxy*mapOne(p+e.yxy,c,cc)+e.xxx*mapOne(p+e.xxx,c,cc));
+}
+float calcAO(vec3 p,vec3 n){
+  float occ=0.0, sca=1.0, c,cc;
+  for(int i=0;i<5;i++){
+    float h=0.012+0.11*float(i)/4.0;
+    occ+=(h-mapOne(p+n*h,c,cc))*sca; sca*=0.95;
+  }
+  return clamp(1.0-2.5*occ,0.0,1.0);
+}
+float calcSh(vec3 p,vec3 n,vec3 lk){
+  float res=1.0, t=0.025, c,cc;
+  for(int i=0;i<14;i++){
+    float d=mapOne(p+lk*t,c,cc);
+    res=min(res,7.0*d/t);
+    t+=clamp(d,0.02,0.4);
+    if(res<0.006||t>18.0) break;
+  }
+  return clamp(res,0.0,1.0);
+}
+void main(){
+  vec2 uv=vec2((gl_FragCoord.x-0.5*u_res.x)/u_res.y,(gl_FragCoord.y-0.5*u_res.y)/u_res.y);
+  vec3 ro=u_camPos;
+  vec3 rd=normalize(u_camF+u_tanF*(uv.x*u_camR+uv.y*u_camU));
+  float t=0.0, ch=0.0, ccm=1.0;
+  bool hit=false; vec3 hp=vec3(0.0);
+  int mx=u_sSteps;
+  for(int s=0;s<96;s++){
+    if(s>=mx) break;
+    vec3 p=ro+rd*t;
+    float c0,cc0; float d=mapAll(p,c0,cc0);
+    if(d<0.0009*(1.0+t)){ hit=true; hp=p; ch=c0; ccm=cc0; break; }
+    float sD = d>900.0 ? max(boundDist(p),0.03) : d;
+    t+=sD*0.9;
+    if(t>60.0) break;
+  }
+  vec3 col=vec3(0.0);
+  if(hit){
+    vec3 n=calcN(hp);
+    vec3 lk=normalize(vec3(0.55,0.75,0.6));
+    float dif=max(dot(n,lk),0.0);
+    float ao=mix(1.0,calcAO(hp,n),clamp(u_sAO,0.0,1.0));
+    float sh=u_sShad>0.5?calcSh(hp,n,lk):1.0;
+    vec3 vd=normalize(u_camPos-hp);
+    vec3 hv=normalize(lk+vd);
+    float spec=pow(max(dot(n,hv),0.0),44.0);
+    float fre=pow(1.0-max(dot(n,vd),0.0),3.0);
+    vec3 base=hsv(vec3(fract(u_hue+ch*u_hueR),u_sat,1.0))*ccm;
+    vec3 amb=vec3(0.32,0.38,0.5);
+    col=base*(amb*ao+dif*sh*vec3(1.2,1.14,1.08))+(spec*sh+fre*0.35)*vec3(1.0,0.98,0.94)*ao;
+    col=aces(col);
+  }
+  O=vec4(col,1.0);
+}
+`;
+
 
 /* ---- bloom shaders (v1.2): thresholded half-res mip-chain on the cloner layer ---- */
 const SRC_BLOOMBP=`#version 300 es
@@ -2544,6 +2865,7 @@ function buildFlowerGeo(i){
   const key=flowerKey(i);
   let d=clFlowerDat[i];
   if(d&&d.key===key) return d;
+
   const g=clBuildFlower({pet:clv(i,'FPet'),len:clv(i,'FLen'),wid:clv(i,'FWid'),
                          curl:clv(i,'FCurl'),bud:clv(i,'FBud'),
                          stem:clv(i,'FStem')>0.5?1:0});
@@ -2592,7 +2914,121 @@ function renderClonerBloom(i,T){
   gl.bindTexture(gl.TEXTURE_2D,null);
 }
 
+/* v1.3 SDF raymarch render path for the cloner. Renders into a dedicated half-res
+   target (raymarching full-res on a phone GPU won't stay realtime), then
+   upscales into the layer target. Same layout + effector params as the mesh
+   path — every effector becomes a per-cell domain warp in the SDF. */
+let sdfT=null;
+function renderSDFCloner(i,ct,T,eye){
+  ensureClonerGL();
+  const P=PROG.clsdf;
+  if(!P||!sdfT) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,sdfT.fb);
+  gl.viewport(0,0,sdfT.w,sdfT.h);
+  gl.disable(gl.DEPTH_TEST);
+  gl.clearColor(0,0,0,1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(P);
+  /* camera basis from the orbit eye */
+  const fw=[-eye[0],-eye[1],-eye[2]], fl=Math.hypot(fw[0],fw[1],fw[2])||1;
+  const cf=[fw[0]/fl,fw[1]/fl,fw[2]/fl];
+  let cr=[cf[1]*0-cf[2]*1, cf[2]*0-cf[0]*0, cf[0]*1-cf[1]*0];
+  const rl=Math.hypot(cr[0],cr[1],cr[2])||1; cr=[cr[0]/rl,cr[1]/rl,cr[2]/rl];
+  const cu=[cr[1]*cf[2]-cr[2]*cf[1], cr[2]*cf[0]-cr[0]*cf[2], cr[0]*cf[1]-cr[1]*cf[0]];
+  const F=(n,v)=>gl.uniform1f(U(P,n),v);
+  const V3=(n,x,y,z)=>gl.uniform3f(U(P,n),x,y,z);
+  const dg=Math.PI/180;
+  V3('u_camPos',eye[0],eye[1],eye[2]);
+  V3('u_camF',cf[0],cf[1],cf[2]); V3('u_camR',cr[0],cr[1],cr[2]); V3('u_camU',cu[0],cu[1],cu[2]);
+  F('u_tanF',Math.tan(0.785/2));
+  gl.uniform2f(U(P,'u_res'),sdfT.w,sdfT.h);
+  const aud=eff('L'+i+'.audio')*eff('P.aamt');
+  F('u_time',ct);
+  F('u_audioBass',bassSm*aud); F('u_audioMid',midSm*aud); F('u_audioHigh',highSm*aud);
+  F('u_beat',beatPulse); F('u_hue',eff('L'+i+'.hue'));
+  /* layout */
+  gl.uniform1i(U(P,'u_mode'),clv(i,'Mode'));
+  F('u_cnx',clv(i,'CntX')); F('u_cny',clv(i,'CntY')); F('u_cnz',clv(i,'CntZ'));
+  F('u_spx',clv(i,'SpX')); F('u_spy',clv(i,'SpY')); F('u_spz',clv(i,'SpZ'));
+  F('u_rcnt',clv(i,'RCnt')); F('u_rad',clv(i,'Rad')); F('u_arc',clv(i,'Arc')*dg);
+  F('u_plane',clv(i,'Plane'));
+  F('u_lcnt',clv(i,'LCnt')); F('u_stpx',clv(i,'StpX')); F('u_stpy',clv(i,'StpY')); F('u_stpz',clv(i,'StpZ'));
+  /* sdf */
+  gl.uniform1i(U(P,'u_sPrim'),clv(i,'SPrim'));
+  gl.uniform1i(U(P,'u_sSteps'),clv(i,'SSteps'));
+  F('u_sBlend',clv(i,'SBlend')); F('u_sAO',clv(i,'SAO')); F('u_sShad',clv(i,'SShad'));
+  F('u_instScale',clv(i,'IScl')); F('u_hueR',clv(i,'HueR')); F('u_sat',clv(i,'Sat'));
+  uploadClonerFX(P,i);
+  quadDraw();
+  /* upscale into the layer target */
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
+  gl.viewport(0,0,T.w,T.h);
+  const C=PROG.copy;
+  if(C){ gl.useProgram(C); setTex(C,'u_tex',0,sdfT.tex); quadDraw(); }
+  /* v1.2 bloom on the cloner layer (same as mesh path) */
+  if(clv(i,'Bloom')>0.5) renderClonerBloom(i,T);
+}
+
 /* ---- the cloner render pass ---- */
+/* Shared effector uniform upload for both cloner render paths (mesh + SDF).
+   The SDF raymarcher declares the same uniform names and evaluates every
+   effector as a per-cell domain warp. */
+function uploadClonerFX(P,i){
+  const F=(n,v)=>gl.uniform1f(U(P,n),v);
+  const V3=(n,x,y,z)=>gl.uniform3f(U(P,n),x,y,z);
+  const dg=Math.PI/180;
+  F('u_pOn',clv(i,'POn')); F('u_pPosOn',clv(i,'PPos')); F('u_pRotOn',clv(i,'PRt'));
+  F('u_pSclOn',clv(i,'PSl')); F('u_pStr',clv(i,'PStr'));
+  V3('u_pPos',clv(i,'PPx'),clv(i,'PPy'),clv(i,'PPz'));
+  V3('u_pRot',clv(i,'PRx')*dg,clv(i,'PRy')*dg,clv(i,'PRz')*dg);
+  V3('u_pScl',clv(i,'PSx'),clv(i,'PSy'),clv(i,'PSz'));
+  gl.uniform1i(U(P,'u_fallShape'),clv(i,'PFall'));
+  F('u_fallInv',clv(i,'PInv')); F('u_fallSize',clv(i,'PSize')); F('u_fallSpd',clv(i,'PSpd'));
+  F('u_rOn',clv(i,'ROn')); F('u_seed',clv(i,'Seed'));
+  V3('u_rPos',clv(i,'RPx'),clv(i,'RPy'),clv(i,'RPz'));
+  V3('u_rRot',clv(i,'RRx')*dg,clv(i,'RRy')*dg,clv(i,'RRz')*dg);
+  V3('u_rScl',clv(i,'RSx'),clv(i,'RSy'),clv(i,'RSz'));
+  F('u_sOn',clv(i,'SOn')); F('u_nScale',clv(i,'SScl')); F('u_nSpd',clv(i,'SSpd'));
+  F('u_nAmt',clv(i,'SAmt')); F('u_nSclAmt',clv(i,'SScA'));
+  F('u_sndOn',clv(i,'SndOn'));
+  gl.uniform1i(U(P,'u_sndSrc'),clv(i,'SndSrc'));
+  F('u_sndGain',clv(i,'SndG')); F('u_sndLift',clv(i,'SndL'));
+  F('u_dOn',clv(i,'DOn')); F('u_dMax',clv(i,'DAmt'));
+  F('u_rAnim',clv(i,'RAnim')); F('u_rAnSpd',clv(i,'RAnSp'));
+  gl.uniform1i(U(P,'u_rFallShape'),clv(i,'RFall'));
+  F('u_rFallSize',clv(i,'RSize')); F('u_rFallSpd',clv(i,'RFSp')); F('u_rFallInv',clv(i,'RInv'));
+  gl.uniform1i(U(P,'u_sFallShape'),clv(i,'SFall'));
+  F('u_sFallSize',clv(i,'SSize')); F('u_sFallSpd',clv(i,'SFSp')); F('u_sFallInv',clv(i,'SInv'));
+  gl.uniform1i(U(P,'u_sndFallShape'),clv(i,'SndFall'));
+  F('u_sndFallSize',clv(i,'SndSize')); F('u_sndFallSpd',clv(i,'SndFSp')); F('u_sndFallInv',clv(i,'SndInv'));
+  F('u_stpOn',clv(i,'STPOn')); F('u_stpN',clv(i,'STPN'));
+  V3('u_stpPos',clv(i,'STPPx'),clv(i,'STPPy'),clv(i,'STPPz'));
+  V3('u_stpRot',clv(i,'STPRx')*dg,clv(i,'STPRy')*dg,clv(i,'STPRz')*dg);
+  V3('u_stpScl',clv(i,'STPSx'),clv(i,'STPSy'),clv(i,'STPSz'));
+  gl.uniform1i(U(P,'u_stpFallShape'),clv(i,'STPFall'));
+  F('u_stpFallSize',clv(i,'STPSize')); F('u_stpFallSpd',clv(i,'STPSpd')); F('u_stpFallInv',clv(i,'STPInv'));
+  F('u_frmOn',clv(i,'FRMOn')); F('u_frmAmp',clv(i,'FRMAmp')); F('u_frmFreq',clv(i,'FRMFreq'));
+  F('u_frmPh',clv(i,'FRMPh')); F('u_frmSpd',clv(i,'FRMSpd'));
+  gl.uniform1i(U(P,'u_frmMode'),clv(i,'FRMMode')); gl.uniform1i(U(P,'u_frmTgt'),clv(i,'FRMTgt'));
+  gl.uniform1i(U(P,'u_frmAx'),clv(i,'FRMAx'));
+  gl.uniform1i(U(P,'u_frmFallShape'),clv(i,'FRMFall'));
+  F('u_frmFallSize',clv(i,'FRMSize')); F('u_frmFallSpd',clv(i,'FRMFSp')); F('u_frmFallInv',clv(i,'FRMInv'));
+  F('u_paOn',clv(i,'PAOn')); F('u_paRad',clv(i,'PARad')); F('u_paAmt',clv(i,'PAAmt'));
+  V3('u_paCen',clv(i,'PACx'),clv(i,'PACy'),clv(i,'PACz'));
+  gl.uniform1i(U(P,'u_paFallShape'),clv(i,'PAFall'));
+  F('u_paFallSize',clv(i,'PASize')); F('u_paFallSpd',clv(i,'PAFSp')); F('u_paFallInv',clv(i,'PAInv'));
+  F('u_tgtOn',clv(i,'TGTOn'));
+  V3('u_tgtPos',clv(i,'TGTX'),clv(i,'TGTY'),clv(i,'TGTZ'));
+  gl.uniform1i(U(P,'u_tgtFallShape'),clv(i,'TGTFall'));
+  F('u_tgtFallSize',clv(i,'TGTSize')); F('u_tgtFallSpd',clv(i,'TGTFSp')); F('u_tgtFallInv',clv(i,'TGTInv'));
+  F('u_splOn',clv(i,'SPLOn')); F('u_splRad',clv(i,'SPLRad')); F('u_splHgt',clv(i,'SPLHgt'));
+  F('u_splAmt',clv(i,'SPLAmt')); F('u_splAln',clv(i,'SPLAln'));
+  gl.uniform1i(U(P,'u_splPath'),clv(i,'SPLPath'));
+  gl.uniform1i(U(P,'u_splFallShape'),clv(i,'SPLFall'));
+  F('u_splFallSize',clv(i,'SPLSize')); F('u_splFallSpd',clv(i,'SPLFSp')); F('u_splFallInv',clv(i,'SPLInv'));
+  F('u_tmOn',clv(i,'TMOn')); F('u_tmOff',clv(i,'TMOff')); F('u_tmStag',clv(i,'TMStag'));
+}
+
 function renderCloner(i,t,T){
   gl.clearColor(0,0,0,1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
@@ -2612,6 +3048,8 @@ function renderCloner(i,t,T){
   const elv=(clv(i,'El')-0.5)*2.6, dist=clv(i,'Dist');
   const eye=[dist*Math.cos(elv)*Math.cos(az),dist*Math.sin(elv),dist*Math.cos(elv)*Math.sin(az)];
   const vp=m4mul(m4persp(0.785,T.w/T.h,0.1,120),m4look(eye,[0,0,0],[0,1,0]));
+  /* v1.3 SDF raymarch render mode: same params, SDF core (half-res, upscaled) */
+  if(clv(i,'RMode')>0.5){ renderSDFCloner(i,ct,T,eye); return; }
   /* camera basis for particle billboarding: right = fwd x up, up2 = right x fwd */
   const fw=[-eye[0],-eye[1],-eye[2]], fl=Math.hypot(fw[0],fw[1],fw[2])||1;
   fw[0]/=fl; fw[1]/=fl; fw[2]/=fl;
@@ -2664,56 +3102,7 @@ function renderCloner(i,t,T){
   F('u_time',ct);
   F('u_audioBass',bassSm*aud); F('u_audioMid',midSm*aud); F('u_audioHigh',highSm*aud);
   F('u_beat',beatPulse); F('u_hue',eff('L'+i+'.hue'));
-  F('u_pOn',clv(i,'POn')); F('u_pPosOn',clv(i,'PPos')); F('u_pRotOn',clv(i,'PRt'));
-  F('u_pSclOn',clv(i,'PSl')); F('u_pStr',clv(i,'PStr'));
-  V3('u_pPos',clv(i,'PPx'),clv(i,'PPy'),clv(i,'PPz'));
-  V3('u_pRot',clv(i,'PRx')*dg,clv(i,'PRy')*dg,clv(i,'PRz')*dg);
-  V3('u_pScl',clv(i,'PSx'),clv(i,'PSy'),clv(i,'PSz'));
-  gl.uniform1i(U(P,'u_fallShape'),clv(i,'PFall'));
-  F('u_fallInv',clv(i,'PInv')); F('u_fallSize',clv(i,'PSize')); F('u_fallSpd',clv(i,'PSpd'));
-  F('u_rOn',clv(i,'ROn')); F('u_seed',clv(i,'Seed'));
-  V3('u_rPos',clv(i,'RPx'),clv(i,'RPy'),clv(i,'RPz'));
-  V3('u_rRot',clv(i,'RRx')*dg,clv(i,'RRy')*dg,clv(i,'RRz')*dg);
-  V3('u_rScl',clv(i,'RSx'),clv(i,'RSy'),clv(i,'RSz'));
-  F('u_sOn',clv(i,'SOn')); F('u_nScale',clv(i,'SScl')); F('u_nSpd',clv(i,'SSpd'));
-  F('u_nAmt',clv(i,'SAmt')); F('u_nSclAmt',clv(i,'SScA'));
-  F('u_sndOn',clv(i,'SndOn'));
-  gl.uniform1i(U(P,'u_sndSrc'),clv(i,'SndSrc'));
-  F('u_sndGain',clv(i,'SndG')); F('u_sndLift',clv(i,'SndL'));
-  F('u_dOn',clv(i,'DOn')); F('u_dMax',clv(i,'DAmt'));
-  F('u_rAnim',clv(i,'RAnim')); F('u_rAnSpd',clv(i,'RAnSp'));
-  gl.uniform1i(U(P,'u_rFallShape'),clv(i,'RFall'));
-  F('u_rFallSize',clv(i,'RSize')); F('u_rFallSpd',clv(i,'RFSp')); F('u_rFallInv',clv(i,'RInv'));
-  gl.uniform1i(U(P,'u_sFallShape'),clv(i,'SFall'));
-  F('u_sFallSize',clv(i,'SSize')); F('u_sFallSpd',clv(i,'SFSp')); F('u_sFallInv',clv(i,'SInv'));
-  gl.uniform1i(U(P,'u_sndFallShape'),clv(i,'SndFall'));
-  F('u_sndFallSize',clv(i,'SndSize')); F('u_sndFallSpd',clv(i,'SndFSp')); F('u_sndFallInv',clv(i,'SndInv'));
-  F('u_stpOn',clv(i,'STPOn')); F('u_stpN',clv(i,'STPN'));
-  V3('u_stpPos',clv(i,'STPPx'),clv(i,'STPPy'),clv(i,'STPPz'));
-  V3('u_stpRot',clv(i,'STPRx')*dg,clv(i,'STPRy')*dg,clv(i,'STPRz')*dg);
-  V3('u_stpScl',clv(i,'STPSx'),clv(i,'STPSy'),clv(i,'STPSz'));
-  gl.uniform1i(U(P,'u_stpFallShape'),clv(i,'STPFall'));
-  F('u_stpFallSize',clv(i,'STPSize')); F('u_stpFallSpd',clv(i,'STPSpd')); F('u_stpFallInv',clv(i,'STPInv'));
-  F('u_frmOn',clv(i,'FRMOn')); F('u_frmAmp',clv(i,'FRMAmp')); F('u_frmFreq',clv(i,'FRMFreq'));
-  F('u_frmPh',clv(i,'FRMPh')); F('u_frmSpd',clv(i,'FRMSpd'));
-  gl.uniform1i(U(P,'u_frmMode'),clv(i,'FRMMode')); gl.uniform1i(U(P,'u_frmTgt'),clv(i,'FRMTgt'));
-  gl.uniform1i(U(P,'u_frmAx'),clv(i,'FRMAx'));
-  gl.uniform1i(U(P,'u_frmFallShape'),clv(i,'FRMFall'));
-  F('u_frmFallSize',clv(i,'FRMSize')); F('u_frmFallSpd',clv(i,'FRMFSp')); F('u_frmFallInv',clv(i,'FRMInv'));
-  F('u_paOn',clv(i,'PAOn')); F('u_paRad',clv(i,'PARad')); F('u_paAmt',clv(i,'PAAmt'));
-  V3('u_paCen',clv(i,'PACx'),clv(i,'PACy'),clv(i,'PACz'));
-  gl.uniform1i(U(P,'u_paFallShape'),clv(i,'PAFall'));
-  F('u_paFallSize',clv(i,'PASize')); F('u_paFallSpd',clv(i,'PAFSp')); F('u_paFallInv',clv(i,'PAInv'));
-  F('u_tgtOn',clv(i,'TGTOn'));
-  V3('u_tgtPos',clv(i,'TGTX'),clv(i,'TGTY'),clv(i,'TGTZ'));
-  gl.uniform1i(U(P,'u_tgtFallShape'),clv(i,'TGTFall'));
-  F('u_tgtFallSize',clv(i,'TGTSize')); F('u_tgtFallSpd',clv(i,'TGTFSp')); F('u_tgtFallInv',clv(i,'TGTInv'));
-  F('u_splOn',clv(i,'SPLOn')); F('u_splRad',clv(i,'SPLRad')); F('u_splHgt',clv(i,'SPLHgt'));
-  F('u_splAmt',clv(i,'SPLAmt')); F('u_splAln',clv(i,'SPLAln'));
-  gl.uniform1i(U(P,'u_splPath'),clv(i,'SPLPath'));
-  gl.uniform1i(U(P,'u_splFallShape'),clv(i,'SPLFall'));
-  F('u_splFallSize',clv(i,'SPLSize')); F('u_splFallSpd',clv(i,'SPLFSp')); F('u_splFallInv',clv(i,'SPLInv'));
-  F('u_tmOn',clv(i,'TMOn')); F('u_tmOff',clv(i,'TMOff')); F('u_tmStag',clv(i,'TMStag'));
+  uploadClonerFX(P,i);
   F('u_hueR',clv(i,'HueR')); F('u_sat',clv(i,'Sat')); F('u_instScale',clv(i,'IScl'));
   gl.uniform1i(U(P,'u_flat'),clv(i,'Flat')>0.5?1:0);
   F('u_fogOn',clv(i,'Fog')); F('u_fogD',clv(i,'FogD'));
@@ -3401,6 +3790,14 @@ function showMeshSub(i,v){
   if(f) f.style.display=v===12?'':'none';
   if(p) p.style.display=v===13?'':'none';
 }
+/* v1.3: SDF render mode hides the mesh/materials groups, shows the SDF group */
+function showRenderSub(i,v){
+  const sdf=v>0.5;
+  const m=$('clmeshm'+i), mt=$('clmatm'+i), s=$('clsdf'+i);
+  if(m) m.style.display=sdf?'none':'';
+  if(mt) mt.style.display=sdf?'none':'';
+  if(s) s.style.display=sdf?'':'none';
+}
 const CL_LAYOUT_IDS=['Mode','CntX','CntY','CntZ','SpX','SpY','SpZ','RCnt','Rad','Arc',
                      'Plane','LCnt','StpX','StpY','StpZ','Seed','Mesh','FPet','PtN','PtShape'];
 /* Pre-register every cloner param in the MIDI-learn registry for all 4 layers,
@@ -3431,6 +3828,8 @@ for(let _hi=0;_hi<4;_hi++){
   (PARAM_HOOKS[_mid]=PARAM_HOOKS[_mid]||[]).push(()=>{ showModeSub(_hi,discVal(_mid)); });
   const _me=_pre+'Mesh';
   (PARAM_HOOKS[_me]=PARAM_HOOKS[_me]||[]).push(()=>{ showMeshSub(_hi,discVal(_me)); });
+  const _rm=_pre+'RMode';
+  (PARAM_HOOKS[_rm]=PARAM_HOOKS[_rm]||[]).push(()=>{ showRenderSub(_hi,discVal(_rm)); });
 }
 function buildClonerUI(body,i){
   const pre='L'+i+'.cl';
@@ -3439,6 +3838,7 @@ function buildClonerUI(body,i){
   /* ---- cloner mode ---- */
   const gM=cgrp(box,'Cloner mode',true);
   discreteRow(gM,pre+'Mode','Mode',CL_MODES,(v)=>{ clonerDirty[i]=true; showModeSub(i,v); });
+  discreteRow(gM,pre+'RMode','Render',['Mesh','SDF'],(v)=>{ showRenderSub(i,v); });
   const subG=el('div'); subG.id='clmodeG'+i; gM.appendChild(subG);
   const subR=el('div'); subR.id='clmodeR'+i; gM.appendChild(subR);
   const subL=el('div'); subL.id='clmodeL'+i; gM.appendChild(subL);
@@ -3454,7 +3854,7 @@ function buildClonerUI(body,i){
   paramRow(subL,pre+'StpZ','Step Z');
   showModeSub(i,discVal(pre+'Mode'));
   /* ---- mesh ---- */
-  const gMe=cgrp(box,'Mesh',false);
+  const gMe=cgrp(box,'Mesh',false); gMe.id='clmeshm'+i;
   discreteRow(gMe,pre+'Mesh','Mesh',CL_MESHES,()=>{ clonerDirty[i]=true; showMeshSub(i,discVal(pre+'Mesh')); });
   toggleRow(gMe,pre+'Flat','Flat shade');
   toggleRow(gMe,pre+'Wire','Wireframe');
@@ -3478,8 +3878,14 @@ function buildClonerUI(body,i){
   paramRow(pG,pre+'PtDrag','Drag'); paramRow(pG,pre+'PtBurst','Audio burst');
   paramRow(pG,pre+'PtColA','Color A'); paramRow(pG,pre+'PtColB','Color B');
   showMeshSub(i,discVal(pre+'Mesh'));
+  /* ---- SDF raymarch (v1.3) ---- */
+  const gS=cgrp(box,'SDF raymarch',false); gS.id='clsdf'+i;
+  discreteRow(gS,pre+'SPrim','Shape',['Sphere','Box','RndBox','Torus','Capsule','Cone','Octa']);
+  paramRow(gS,pre+'SBlend','Blend');
+  toggleRow(gS,pre+'SAO','AO'); toggleRow(gS,pre+'SShad','Shadow');
+  paramRow(gS,pre+'SSteps','Steps');
   /* ---- spectral materials (v1.2) ---- */
-  const gMt=cgrp(box,'Materials',true);
+  const gMt=cgrp(box,'Materials',true); gMt.id='clmatm'+i;
   discreteRow(gMt,pre+'Mat','Material',['Standard','Spectral']);
   paramRow(gMt,pre+'Metal','Metallic'); paramRow(gMt,pre+'Rough','Roughness');
   paramRow(gMt,pre+'IOR','IOR'); paramRow(gMt,pre+'Disp','Dispersion');
@@ -3593,6 +3999,10 @@ function buildClonerUI(body,i){
   /* layout-affecting params are covered by the global PARAM_HOOKS registered
      above (instance rebuild + subgroup toggles on ANY setParam source) */
   body.appendChild(box);
+  /* init subgroup visibility AFTER attach (getElementById needs the live tree) */
+  showModeSub(i,discVal(pre+'Mode'));
+  showMeshSub(i,discVal(pre+'Mesh'));
+  showRenderSub(i,discVal(pre+'RMode'));
 }
 
 </script>
