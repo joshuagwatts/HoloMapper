@@ -940,6 +940,8 @@ function defaultState(){
     params:params, assigns:{},
     postBypass:Object.assign({feedback:false, kaleido:true, glitch:true}, PX_DEFAULT_BYPASS),
     strobeOn:false, beatSync:false, bpm:120, blackout:false,
+    layerFx:[[],[],[],[]],
+    clipFx:[[],[],[],[]].map(()=>Array.from({length:8},()=>[])),
     macros:Array.from({length:8},(_,i)=>({label:'M'+(i+1), val:0.5})),
     midi:[], pluginCode:PLUGIN_DEFAULT, mods:defaultMods()
   };
@@ -948,6 +950,7 @@ let S = defaultState();
 try{
   const raw = localStorage.getItem(LS_STATE);
   if(raw){ const s=JSON.parse(raw); if(s && s.v===1) S=Object.assign(defaultState(), s); }
+  ensureFxChains();
   const mraw = localStorage.getItem(LS_MIDI);
   if(mraw){ const m=JSON.parse(mraw); if(Array.isArray(m)) S.midi=m; }
 }catch(e){ console.warn('HoloMapper: state load failed', e); }
@@ -3266,6 +3269,101 @@ function layerEnabled(i){
   const anySolo=S.layers.some(l=>l.solo);
   return !L.bypass && (!anySolo || L.solo);
 }
+/* ---- Per-layer/clip FX chains (v1.5) ---- */
+let fxScratch=null;
+function ensureFxScratch(){
+  if(!fxScratch || fxScratch.w!==RW || fxScratch.h!==RH) fxScratch=makeTarget(RW,RH,true);
+}
+/* instance param value (0-1) -> mapped; falls back to global default */
+function fxVal(inst,pid){
+  const v=(inst.v&&inst.v[pid]!==undefined)?inst.v[pid]:(PARAMS[pid]?PARAMS[pid].def:0.5);
+  return PARAMS[pid]?PARAMS[pid].map(v):v;
+}
+/* copy scratch back to target */
+function fxCopyBack(T){
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
+  gl.viewport(0,0,T.w,T.h);
+  const C=PROG.copy; gl.useProgram(C);
+  setTex(C,'u_tex',0,fxScratch.tex);
+  quadDraw();
+}
+/* apply one px_* FX batch to T (result back in T) */
+function applyPxBatch(T, insts, t){
+  if(!insts.length) return;
+  ensureFxScratch();
+  const P=PROG.prism;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform2f(U(P,'u_res'),fxScratch.w,fxScratch.h);
+  gl.uniform2f(U(P,'u_texel'),1/fxScratch.w,1/fxScratch.h);
+  gl.uniform1f(U(P,'u_time'),t);
+  /* build a map of which px FX are on with their values */
+  const onMap={};
+  insts.forEach(inst=>{ onMap[inst.k]=inst; });
+  const px=(uname,pid,fkey)=>{
+    const inst=onMap[fkey];
+    gl.uniform1f(U(P,uname), inst?fxVal(inst,pid):0);
+  };
+  px('u_swirl','P.px_swirl','px_swirl'); px('u_bulge','P.px_bulge','px_bulge');
+  px('u_wave','P.px_wave','px_wave'); px('u_pixel','P.px_pixel','px_pixel');
+  px('u_vhs','P.px_vhs','px_vhs'); px('u_hue','P.px_hue','px_hue');
+  px('u_poster','P.px_poster','px_poster'); px('u_duo','P.px_duo','px_duo');
+  px('u_invert','P.px_invert','px_invert'); px('u_edge','P.px_edge','px_edge');
+  px('u_scan','P.px_scan','px_scan'); px('u_grain','P.grain','px_grain');
+  px('u_vig','P.vig','px_vig'); px('u_halo','P.px_halo','px_halo');
+  px('u_spin','P.px_spin','px_spin'); px('u_tunnel','P.px_tunnel','px_tunnel');
+  px('u_pulse','P.px_pulse','px_pulse'); px('u_flow','P.px_flow','px_flow');
+  px('u_drift','P.px_drift','px_drift'); px('u_stars','P.px_stars','px_stars');
+  px('u_rays','P.px_rays','px_rays'); px('u_shake','P.px_shake','px_shake');
+  px('u_prism','P.px_prism','px_prism'); px('u_plasma','P.px_plasma','px_plasma');
+  gl.uniform1f(U(P,'u_bypass'),0);
+  quadDraw();
+  fxCopyBack(T);
+}
+function applyKaleidoInst(T, inst){
+  ensureFxScratch();
+  const P=PROG.kaleido;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_seg'),fxVal(inst,'P.kseg'));
+  gl.uniform1f(U(P,'u_ang'),fxVal(inst,'P.kang'));
+  gl.uniform1f(U(P,'u_aspect'),fxScratch.w/fxScratch.h);
+  gl.uniform1f(U(P,'u_bypass'),0);
+  quadDraw();
+  fxCopyBack(T);
+}
+function applyGlitchInst(T, inst, t){
+  ensureFxScratch();
+  const P=PROG.glitch;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_amt'),fxVal(inst,'P.gamt'));
+  gl.uniform1f(U(P,'u_time'),t);
+  gl.uniform1f(U(P,'u_bypass'),0);
+  quadDraw();
+  fxCopyBack(T);
+}
+/* Apply an FX chain to target T (in place). Supports px_*, kaleido, glitch. */
+function applyFxChain(T, chain, t){
+  if(!chain||!chain.length) return;
+  const active=chain.filter(x=>x&&x.on);
+  if(!active.length) return;
+  const pxInsts=active.filter(x=>x.k.indexOf('px_')===0);
+  const others=active.filter(x=>x.k.indexOf('px_')!==0);
+  if(pxInsts.length) applyPxBatch(T, pxInsts, t);
+  others.forEach(inst=>{
+    if(inst.k==='kaleido') applyKaleidoInst(T, inst);
+    else if(inst.k==='glitch') applyGlitchInst(T, inst, t);
+    /* feedback/strobe/color skip: composition-only */
+  });
+}
+
 /* Render one source into any target. renderLayer() is the per-layer caller;
    the preview monitor reuses this with the selected clip's source. */
 function renderSourceInto(sidx,i,t,T){
@@ -3303,6 +3401,13 @@ function renderLayer(i,t){
     return;
   }
   renderSourceInto(S.layers[i].src,i,t,T);
+  /* v1.5: clip FX (fired clip) then layer FX, Resolume-style */
+  ensureFxChains();
+  const fired=S.fired[i];
+  if(fired!==null&&fired!==undefined&&S.clipFx[i]&&S.clipFx[i][fired]){
+    applyFxChain(T,S.clipFx[i][fired],t);
+  }
+  if(S.layerFx[i]) applyFxChain(T,S.layerFx[i],t);
 }
 function renderCombine(){
   const P=PROG.combine;
@@ -5034,6 +5139,11 @@ function buildInspector(body){
   const pv=el('div','pvwrap');
   const cv=document.createElement('canvas'); cv.id='pvCanvas'; cv.width=192; cv.height=108;
   pv.appendChild(cv); body.appendChild(pv);
+  /* v1.5: per-clip FX chain */
+  body.appendChild(el('div','secttl','Clip FX'));
+  const cfxw=el('div','fxwrap');
+  buildFxChainEditor(cfxw,S.clipFx[i][k],()=>buildSheet('clip'));
+  body.appendChild(cfxw);
   /* source chips */
   body.appendChild(el('div','secttl','Source'));
   const chips=el('div','srcchips');
@@ -5135,6 +5245,88 @@ function bigSlider(parent,pid,label){
   wrap.appendChild(sl); parent.appendChild(wrap);
   return sl;
 }
+/* ---- Resolume-style FX instances (v1.5): each layer and clip has its own
+   FX chain. Each instance {k:key, on:bool, v:{pid:0-1}} has OWN knobs. */
+function makeFxInst(key){
+  const def=FXDEFS.find(f=>f.key===key);
+  if(!def) return null;
+  const v={};
+  def.params.forEach(([pid])=>{ v[pid]=PARAMS[pid]?PARAMS[pid].def:0.5; });
+  return {k:key, on:true, v};
+}
+function fxInstLabel(inst){
+  const def=FXDEFS.find(f=>f.key===inst.k);
+  return def?def.name:inst.k;
+}
+/* Ensure loaded state has the FX chain arrays (migration for old saves) */
+function ensureFxChains(){
+  if(!Array.isArray(S.layerFx)) S.layerFx=[[],[],[],[]];
+  while(S.layerFx.length<4) S.layerFx.push([]);
+  if(!Array.isArray(S.clipFx)) S.clipFx=[[],[],[],[]].map(()=>Array.from({length:8},()=>[]));
+}
+/* ---- FX chain editor UI (v1.5) ---- */
+const FXCHAINABLE = FXDEFS.filter(f=>f.key && (f.key.indexOf('px_')===0 || f.key==='kaleido' || f.key==='glitch'));
+function buildFxChainEditor(body, chain, onChange){
+  ensureFxChains();
+  const wrap=el('div','fxchain');
+  if(!chain.length){
+    wrap.appendChild(el('div','hint','No FX — tap + to add.'));
+  }
+  chain.forEach((inst,idx)=>{
+    const card=el('div','fxcard'+(inst.on?'':' offx'));
+    const head=el('div','fxchead');
+    const nm=el('div','fxname',fxInstLabel(inst));
+    head.appendChild(nm);
+    const sw=el('button','fxswitch'+(inst.on?' on':''),'');
+    sw.setAttribute('aria-label','Toggle '+fxInstLabel(inst));
+    sw.addEventListener('click',()=>{ inst.on=!inst.on; saveState(); onChange(); });
+    head.appendChild(sw);
+    const del=el('button','minibtn','×'); del.title='Remove FX';
+    del.addEventListener('click',()=>{ chain.splice(idx,1); saveState(); onChange(); });
+    head.appendChild(del);
+    card.appendChild(head);
+    /* per-instance params (own knobs) */
+    const def=FXDEFS.find(f=>f.key===inst.k);
+    if(def) def.params.forEach(([pid,lab])=>{
+      const pdef=PARAMS[pid]; if(!pdef) return;
+      const pr=el('div','srow');
+      const slab=el('div','slab');
+      slab.appendChild(el('label',null,lab||pdef.label));
+      const vv=el('span','sval',pdef.fmt(pdef.map(inst.v[pid]!==undefined?inst.v[pid]:pdef.def)));
+      slab.appendChild(vv); pr.appendChild(slab);
+      const sl=document.createElement('input');
+      sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001;
+      sl.value=inst.v[pid]!==undefined?inst.v[pid]:pdef.def;
+      sl.addEventListener('input',()=>{
+        inst.v[pid]=parseFloat(sl.value);
+        vv.textContent=pdef.fmt(pdef.map(inst.v[pid]));
+        saveState();
+      });
+      pr.appendChild(sl); card.appendChild(pr);
+    });
+    wrap.appendChild(card);
+  });
+  /* add button */
+  const add=el('button','minibtn','+ FX'); add.title='Add FX to chain';
+  add.addEventListener('click',()=>{
+    const pk=el('div','fxpicker');
+    FXCHAINABLE.forEach(fx=>{
+      const b=el('button','fxpickbtn',fx.name);
+      b.addEventListener('click',()=>{
+        const inst=makeFxInst(fx.key);
+        if(inst){ chain.push(inst); saveState(); onChange(); }
+      });
+      pk.appendChild(b);
+    });
+    const close=el('button','minibtn','Close');
+    close.addEventListener('click',()=>{ pk.remove(); });
+    pk.appendChild(close);
+    wrap.appendChild(pk);
+  });
+  wrap.appendChild(add);
+  body.appendChild(wrap);
+}
+
 function buildFxBrowser(body){
   let lastGroup=null;
   FXDEFS.forEach(fx=>{
@@ -5180,6 +5372,16 @@ function buildMixSheet(body){
     bB.addEventListener('click',()=>{ toggleBypass(i); buildSheet('mix'); });
     head.appendChild(bS); head.appendChild(bB); row.appendChild(head);
     bigSlider(row,'L'+i+'.op','Opacity');
+    /* v1.5: per-layer FX chain */
+    const fxBtn=el('button','minibtn','FX'+(S.layerFx[i]&&S.layerFx[i].length?' ('+S.layerFx[i].length+')':''));
+    fxBtn.title='Layer FX chain';
+    const fxWrap=el('div','fxwrap'); fxWrap.style.display='none';
+    fxBtn.addEventListener('click',()=>{
+      const open=fxWrap.style.display==='none';
+      fxWrap.style.display=open?'':'none';
+      if(open){ fxWrap.innerHTML=''; buildFxChainEditor(fxWrap,S.layerFx[i],()=>buildSheet('mix')); }
+    });
+    row.appendChild(fxBtn); row.appendChild(fxWrap);
     body.appendChild(row);
   }
   body.appendChild(el('div','secttl','Macros'));
