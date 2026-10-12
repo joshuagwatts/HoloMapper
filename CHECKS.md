@@ -825,3 +825,13 @@ Joshua: "resolume has like another slider for transition controls and wtf the fa
 - **Drop elsewhere** (deck bg, panels): unchanged old behavior (`loadShaderFiles` → first empty slot on selected layer + auto-fire). Non-shader files: toast only, nothing imported. Dashboard-dial `text/hm-param` drops untouched (separate listeners, `hasF` gate).
 - Verification: `node --check` + acorn 20/20 clean; **14/14 PASS** — cname ~30px, edge-of-row click selects, no `#drophl`, exactly-one-clip highlight, highlight moves between clips, leaving clears it, drop-on-clip imports+assigns+selects, bg-drop old behavior, non-shader no-op, zero page errors. Tab-toggle regression 16/16 still green. Screenshots: checks/drop_cname.png (bigger names, import toasts), checks/drop_highlight.png (single teal clip glow, no overlay).
 - Known limits: none functional. Mid-drag the clip grid isn't rebuilt, so the highlight reference can't go stale before drop.
+
+## Mobile deck visual polish (2026-10-11 — checks/polish_check.mjs)
+- Ground truth: Joshua's phone screenshot (white native blend dropdown, muddy fader, yellow/amber clash).
+- Blend select: fully dark now — `appearance:none`, #14161c background, custom SVG chevron, 44px touch height; `color-scheme:dark` on :root so Android's popup renders dark too.
+- Fader: recessed near-black track w/ inner shadow, teal gradient fill + glow, dark handle (#22262d→#121418) with 3 crisp grip lines (teal center), % readout now 11px bright tabular.
+- Accent unification: FIRED clips glow in their layer's hue (border + tinted box + glow via --lhue); SELECTED-not-fired keeps the 2px teal outline; amber removed from all clip states (stays on bypass = warning). Documented choice in CSS.
+- Strip header: consistent 10px padding, tbtn bumped to 44px, bright/dim text hierarchy kept.
+- Transport: TAP + [120 BPM] joined as one pill unit; tab bar active state gets teal top-edge + glow.
+- Verification: 11/11 PASS (phone viewport, touch) — dark select asserted via computed style, select changes composite, fader touch-drag drives opacity w/ readout, fired border = L1 red rgb(240,95,76), name-tap select, tab sheet, strip scroll, zero page errors. Screenshots: checks/polish_deck.png.
+- mobile.html only; desktop untouched. Not pushed.

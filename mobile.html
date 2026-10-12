@@ -11,6 +11,7 @@
    sheets. Desktop's semantic-color language: teal = live, amber = queued /
    armed, red = destructive. */
 :root{
+  color-scheme:dark;
   --bg:#0b0d12; --panel:#14161c; --panel2:#1a1d24;
   --line:#23262e; --line2:#2e323c;
   --txt:#e8eaee; --dim:#878b94;
@@ -42,7 +43,7 @@ button{font:inherit;color:inherit}
 .icobtn{min-width:44px;min-height:44px;border-radius:12px;background:rgba(20,22,28,.85);
   border:1px solid var(--line2);color:var(--txt);font-size:17px;touch-action:manipulation}
 /* ---------- transport ---------- */
-#transport{flex:none;display:flex;gap:6px;align-items:center;overflow-x:auto;
+#transport{flex:none;display:flex;gap:4px;align-items:center;overflow-x:auto;
   padding:8px 10px;background:var(--panel);border-bottom:1px solid var(--line);
   -webkit-overflow-scrolling:touch;scrollbar-width:none}
 #transport::-webkit-scrollbar{display:none}
@@ -52,9 +53,16 @@ button{font:inherit;color:inherit}
 .tbtn2:active{background:#242832}
 .tbtn2.on{background:rgba(45,212,191,.18);border-color:var(--teal);color:var(--teal)}
 .tbtn2.armed{background:rgba(248,113,113,.16);border-color:var(--red);color:var(--red)}
-#bpmBig{flex:none;font-size:20px;font-weight:900;color:var(--txt);min-width:56px;text-align:center;
-  font-variant-numeric:tabular-nums}
-.bpmlab{flex:none;font-size:10px;color:var(--dim);font-weight:700}
+/* TAP + BPM read as one joined unit */
+#btnTap{border-radius:10px 3px 3px 10px}
+#bpmBig{flex:none;display:inline-flex;align-items:center;min-height:48px;min-width:52px;
+  font-size:20px;font-weight:900;color:var(--txt);text-align:center;padding:0 6px 0 10px;
+  background:var(--panel2);border:1px solid var(--line2);border-left:none;margin-left:-5px;
+  border-radius:3px 3px 3px 3px;font-variant-numeric:tabular-nums}
+.bpmlab{flex:none;align-self:stretch;display:inline-flex;align-items:center;min-height:48px;
+  font-size:10px;color:var(--dim);font-weight:700;background:var(--panel2);
+  border:1px solid var(--line2);border-left:none;margin-left:-1px;border-radius:3px 10px 10px 3px;
+  padding:0 10px 0 2px}
 /* ---------- column bar ---------- */
 #colbar{flex:none;background:var(--panel);border-bottom:1px solid var(--line);padding:6px 10px}
 #colbtns{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
@@ -81,27 +89,34 @@ button{font:inherit;color:inherit}
 .vfad{position:relative;flex:1;min-height:104px;width:44px;cursor:ns-resize;touch-action:pan-x;
   outline:none;border-radius:6px;flex:none}
 .vfad:focus-visible{box-shadow:0 0 0 2px hsl(var(--lhue,200) 85% 60%)}
-.vfad-track{position:absolute;left:50%;top:2px;bottom:2px;width:14px;transform:translateX(-50%);
-  background:#0b0c0f;border:1px solid var(--line);border-radius:7px;pointer-events:none}
-.vfad-fill{position:absolute;left:50%;bottom:2px;width:14px;transform:translateX(-50%);
-  background:linear-gradient(to top,#1f6f5c,var(--play,#2dd4bf));border-radius:7px;pointer-events:none}
-.vfad-handle{position:absolute;left:50%;transform:translate(-50%,50%);width:40px;height:54px;
-  background:linear-gradient(#41474f,#262a31);border:1px solid #565e69;border-radius:8px;
-  box-shadow:0 2px 8px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.12);pointer-events:none}
-.vfad-handle::after{content:'';position:absolute;left:7px;right:7px;top:50%;height:3px;
-  transform:translateY(-50%);background:var(--play,#2dd4bf);border-radius:2px;
-  box-shadow:0 -10px 0 -1px #6a7280,0 10px 0 -1px #6a7280}
+.vfad-track{position:absolute;left:50%;top:2px;bottom:2px;width:16px;transform:translateX(-50%);
+  background:#07080b;border:1px solid #1b1e25;border-radius:8px;pointer-events:none;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.85)}
+.vfad-fill{position:absolute;left:50%;bottom:2px;width:16px;transform:translateX(-50%);
+  background:linear-gradient(to top,#0f766e,var(--teal,#2dd4bf));border-radius:8px;pointer-events:none;
+  box-shadow:0 0 10px rgba(45,212,191,.4)}
+.vfad-handle{position:absolute;left:50%;transform:translate(-50%,50%);width:44px;height:56px;
+  background:linear-gradient(#22262d,#121418);border:1px solid #434a55;border-radius:10px;
+  box-shadow:0 3px 10px rgba(0,0,0,.75),0 0 12px rgba(45,212,191,.28),inset 0 1px 0 rgba(255,255,255,.14);pointer-events:none}
+.vfad-handle::before{content:'';position:absolute;left:9px;right:9px;top:50%;height:2px;
+  transform:translateY(-50%);background:var(--play,#2dd4bf);border-radius:1px;
+  box-shadow:0 -9px 0 0 #aeb4bf,0 9px 0 0 #aeb4bf}
+.vfad-handle::after{content:none}
 .vfad:active .vfad-handle{border-color:var(--play,#2dd4bf)}
-.fval{font-size:9px;font-weight:800;color:var(--dim);line-height:1}
-.lfad .lbsel{max-width:52px;font-size:9px;padding:0 1px}
+.fval{font-size:11px;font-weight:800;color:var(--txt);line-height:1;font-variant-numeric:tabular-nums}
+.lfad .lbsel{appearance:none;-webkit-appearance:none;max-width:52px;min-height:44px;font-size:9px;font-weight:700;
+  color:var(--txt);background-color:#14161c;border:1px solid var(--line2);border-radius:8px;
+  padding:2px 14px 2px 5px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'><path d='M1 1l3 3 3-3' fill='none' stroke='%23878b94' stroke-width='1.6' stroke-linecap='round'/></svg>");
+  background-repeat:no-repeat;background-position:right 5px center}
 .lbody{flex:1;min-width:0;display:flex;flex-direction:column}
 .lstrip.sel{border-color:hsl(var(--lhue,200) 85% 60%)}
-.lhead{display:flex;align-items:center;gap:6px;padding:8px 10px 4px}
+.lhead{display:flex;align-items:center;gap:8px;padding:10px 10px 6px}
 .ltab{flex:none;min-width:48px;min-height:44px;border-radius:10px;font-weight:900;font-size:15px;
   background:hsl(var(--lhue,200) 60% 22%);border:1px solid hsl(var(--lhue,200) 70% 45%);
   color:#fff;touch-action:manipulation}
 .lsrc{flex:1;font-size:12px;color:var(--dim);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tbtn{flex:none;min-width:40px;min-height:40px;border-radius:9px;background:var(--panel2);
+.tbtn{flex:none;min-width:44px;min-height:44px;border-radius:9px;background:var(--panel2);
   border:1px solid var(--line2);color:var(--dim);font-weight:800;touch-action:manipulation}
 .tbtn.onB{background:rgba(251,191,36,.18);border-color:var(--amber);color:var(--amber)}
 .tbtn.onS{background:rgba(45,212,191,.18);border-color:var(--teal);color:var(--teal)}
@@ -110,22 +125,28 @@ button{font:inherit;color:inherit}
   -webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x pan-y}
 .cstrip::-webkit-scrollbar{display:none}
 .clip{flex:none;width:84px;border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:var(--panel2)}
-.clip.fired{border-color:var(--teal);box-shadow:0 0 12px rgba(45,212,191,.35)}
-.clip.selc{outline:2px solid var(--amber);outline-offset:-2px}
+/* Clip states — one coherent scheme: FIRED glows in the layer's own hue (ties the
+   clip to its strip edge); SELECTED (not fired) gets the teal outline. Amber is
+   reserved for warning/armed states (bypass), never for selection. */
+.clip.fired{border-color:hsl(var(--lhue,200) 85% 62%);
+  box-shadow:0 0 14px hsl(var(--lhue,200) 85% 55% / .5),inset 0 0 0 1px hsl(var(--lhue,200) 85% 62%)}
+.clip.selc:not(.fired){outline:2px solid var(--teal);outline-offset:-2px}
 .cbox{display:block;width:100%;min-height:58px;background:#101218;border:none;border-bottom:1px solid var(--line);
   color:var(--txt);font-weight:800;font-size:12px;touch-action:manipulation;padding:6px 4px}
-.clip.fired .cbox{background:rgba(45,212,191,.14);color:var(--teal)}
+.clip.fired .cbox{background:hsl(var(--lhue,200) 70% 32% / .4);color:#fff}
 .clip.empty .cbox{color:var(--dim);border-bottom-style:dashed}
 .cname{display:block;width:100%;min-height:38px;background:none;border:none;color:var(--dim);
   font-size:10px;font-weight:700;touch-action:manipulation;padding:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.clip.selc .cname{color:var(--amber)}
+.clip.selc:not(.fired) .cname{color:var(--teal)}
+.clip.fired .cname{color:hsl(var(--lhue,200) 85% 72%)}
 /* ---------- dock ---------- */
 #dock{flex:none;display:flex;background:var(--panel);border-top:1px solid var(--line);
   padding:6px 4px calc(6px + var(--sat));z-index:20}
 #dock button{flex:1;min-height:58px;border:none;background:none;color:var(--dim);
   font-size:10px;font-weight:800;letter-spacing:.04em;border-radius:10px;touch-action:manipulation}
 #dock button i{display:block;font-style:normal;font-size:19px;margin-bottom:2px}
-#dock button.on{color:var(--teal);background:rgba(45,212,191,.1)}
+#dock button.on{color:var(--teal);background:rgba(45,212,191,.12);
+  box-shadow:0 0 14px rgba(45,212,191,.22),inset 0 2px 0 var(--teal)}
 /* ---------- bottom sheet ---------- */
 #sheetBack{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:44;opacity:0;pointer-events:none;transition:opacity .22s}
 #sheetBack.open{opacity:1;pointer-events:auto}
