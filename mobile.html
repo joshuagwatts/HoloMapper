@@ -573,6 +573,10 @@ const CL_MODES=['Grid','Radial','Linear'];
 const CL_MESHES=['Icosahedron','Torus Knot','Box','Tetra','Torus','Cone','Cylinder','Capsule','Helix','Star','Gem','Diamond','Flower','Particles'];
 const CL_FALLS=['Infinite','Linear','Sphere','Box'];
 const CL_SND=['Bass','Mid','High','Beat'];
+const CL_FRMMODE=['Sine','Cosine','Linear','Noise'];
+const CL_FRMTGT=['Position','Rotation','Scale','Color'];
+const CL_FAX=['X','Y','Z'];
+const CL_SPLPATH=['Circle','Helix','Line'];
 const CL_PLANES=['XY','XZ','YZ'];
 for(let i=0;i<4;i++){
   const p = 'L'+i+'.';
@@ -668,6 +672,87 @@ for(let i=0;i<4;i++){
   /* delay effector */
   defParam(c+'DOn',LB+'Delay On',0, v=>v, clTglFmt);
   defParam(c+'DAmt',LB+'Delay Lag',0.27, v=>v*1.5, v=>(v*1.5).toFixed(2)+'s');
+  /* random: animated seed (HoloMoGraph) + own falloff */
+  defParam(c+'RAnim',LB+'Rnd Animate',0, v=>v, clTglFmt);
+  defParam(c+'RAnSp',LB+'Rnd Anim Speed',0.2, v=>0.1+v*7.9, v=>(0.1+v*7.9).toFixed(1)+'/s');
+  defParam(c+'RFall',LB+'Rnd Falloff',0, clDiscMap(4), clDiscFmt(CL_FALLS));
+  defParam(c+'RSize',LB+'Rnd Fall Size',0.29, v=>0.2+v*9.8, v=>(0.2+v*9.8).toFixed(1));
+  defParam(c+'RFSp',LB+'Rnd Fall Speed',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'RInv',LB+'Rnd Fall Invert',0, v=>v, clTglFmt);
+  /* shader effector: own falloff */
+  defParam(c+'SFall',LB+'Noise Falloff',0, clDiscMap(4), clDiscFmt(CL_FALLS));
+  defParam(c+'SSize',LB+'Noise Fall Size',0.29, v=>0.2+v*9.8, v=>(0.2+v*9.8).toFixed(1));
+  defParam(c+'SFSp',LB+'Noise Fall Speed',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'SInv',LB+'Noise Fall Invert',0, v=>v, clTglFmt);
+  /* sound effector: own falloff */
+  defParam(c+'SndFall',LB+'Snd Falloff',0, clDiscMap(4), clDiscFmt(CL_FALLS));
+  defParam(c+'SndSize',LB+'Snd Fall Size',0.29, v=>0.2+v*9.8, v=>(0.2+v*9.8).toFixed(1));
+  defParam(c+'SndFSp',LB+'Snd Fall Speed',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'SndInv',LB+'Snd Fall Invert',0, v=>v, clTglFmt);
+  /* step effector (HoloMoGraph: stepped interpolation across clones) */
+  defParam(c+'STPOn',LB+'Step On',0, v=>v, clTglFmt);
+  defParam(c+'STPN',LB+'Steps',0.214, clIntMap(2,16), clIntFmt(2,16));
+  defParam(c+'STPPx',LB+'Step Pos X',0.5, v=>(v-0.5)*6, v=>((v-0.5)*6).toFixed(2));
+  defParam(c+'STPPy',LB+'Step Pos Y',0.5, v=>(v-0.5)*6, v=>((v-0.5)*6).toFixed(2));
+  defParam(c+'STPPz',LB+'Step Pos Z',1,   v=>(v-0.5)*6, v=>((v-0.5)*6).toFixed(2));
+  defParam(c+'STPRx',LB+'Step Rot X',0.5, v=>(v-0.5)*360, v=>Math.round((v-0.5)*360)+'\u00B0');
+  defParam(c+'STPRy',LB+'Step Rot Y',0.5, v=>(v-0.5)*360, v=>Math.round((v-0.5)*360)+'\u00B0');
+  defParam(c+'STPRz',LB+'Step Rot Z',0.5, v=>(v-0.5)*360, v=>Math.round((v-0.5)*360)+'\u00B0');
+  defParam(c+'STPSx',LB+'Step Scl X',0.5, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'STPSy',LB+'Step Scl Y',0.5, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'STPSz',LB+'Step Scl Z',0.5, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'STPFall',LB+'Step Falloff',0, clDiscMap(4), clDiscFmt(CL_FALLS));
+  defParam(c+'STPSize',LB+'Step Fall Size',0.29, v=>0.2+v*9.8, v=>(0.2+v*9.8).toFixed(1));
+  defParam(c+'STPSpd',LB+'Step Fall Speed',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'STPInv',LB+'Step Fall Invert',0, v=>v, clTglFmt);
+  /* formula effector (HoloMoGraph: wave/math driven offsets) */
+  defParam(c+'FRMOn',LB+'Formula On',0, v=>v, clTglFmt);
+  defParam(c+'FRMMode',LB+'Wave',0, clDiscMap(4), clDiscFmt(CL_FRMMODE));
+  defParam(c+'FRMAmp',LB+'Amplitude',0.25, v=>v*4, v=>(v*4).toFixed(2));
+  defParam(c+'FRMFreq',LB+'Frequency',0.2, v=>0.1+v*5.9, v=>(0.1+v*5.9).toFixed(2));
+  defParam(c+'FRMPh',LB+'Phase',0, v=>v*6.283, v=>(v*6.283).toFixed(2));
+  defParam(c+'FRMSpd',LB+'Speed',0.2, v=>v*4, v=>(v*4).toFixed(2)+'/s');
+  defParam(c+'FRMTgt',LB+'Target',0, clDiscMap(4), clDiscFmt(CL_FRMTGT));
+  defParam(c+'FRMAx',LB+'Axis',1, clDiscMap(3), clDiscFmt(CL_FAX));
+  defParam(c+'FRMFall',LB+'Formula Falloff',0, clDiscMap(4), clDiscFmt(CL_FALLS));
+  defParam(c+'FRMSize',LB+'Formula Fall Size',0.29, v=>0.2+v*9.8, v=>(0.2+v*9.8).toFixed(1));
+  defParam(c+'FRMFSp',LB+'Formula Fall Speed',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'FRMInv',LB+'Formula Fall Invert',0, v=>v, clTglFmt);
+  /* push apart effector (HoloMoGraph: radial separation) */
+  defParam(c+'PAOn',LB+'Push On',0, v=>v, clTglFmt);
+  defParam(c+'PARad',LB+'Radius',0.367, v=>0.1+v*7.9, v=>(0.1+v*7.9).toFixed(1));
+  defParam(c+'PAAmt',LB+'Amount',0.33, v=>v*3, v=>(v*3).toFixed(2));
+  defParam(c+'PACx',LB+'Center X',0.5, v=>(v-0.5)*10, v=>((v-0.5)*10).toFixed(1));
+  defParam(c+'PACy',LB+'Center Y',0.5, v=>(v-0.5)*10, v=>((v-0.5)*10).toFixed(1));
+  defParam(c+'PACz',LB+'Center Z',0.5, v=>(v-0.5)*10, v=>((v-0.5)*10).toFixed(1));
+  defParam(c+'PAFall',LB+'Push Falloff',0, clDiscMap(4), clDiscFmt(CL_FALLS));
+  defParam(c+'PASize',LB+'Push Fall Size',0.29, v=>0.2+v*9.8, v=>(0.2+v*9.8).toFixed(1));
+  defParam(c+'PAFSp',LB+'Push Fall Speed',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'PAInv',LB+'Push Fall Invert',0, v=>v, clTglFmt);
+  /* target effector (HoloMoGraph: aim clones at a point) */
+  defParam(c+'TGTOn',LB+'Target On',0, v=>v, clTglFmt);
+  defParam(c+'TGTX',LB+'Target X',0.5, v=>(v-0.5)*10, v=>((v-0.5)*10).toFixed(1));
+  defParam(c+'TGTY',LB+'Target Y',0.7, v=>(v-0.5)*10, v=>((v-0.5)*10).toFixed(1));
+  defParam(c+'TGTZ',LB+'Target Z',0.5, v=>(v-0.5)*10, v=>((v-0.5)*10).toFixed(1));
+  defParam(c+'TGTFall',LB+'Target Falloff',0, clDiscMap(4), clDiscFmt(CL_FALLS));
+  defParam(c+'TGTSize',LB+'Target Fall Size',0.29, v=>0.2+v*9.8, v=>(0.2+v*9.8).toFixed(1));
+  defParam(c+'TGTFSp',LB+'Target Fall Speed',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'TGTInv',LB+'Target Fall Invert',0, v=>v, clTglFmt);
+  /* spline effector (HoloMoGraph: deform along a path) */
+  defParam(c+'SPLOn',LB+'Spline On',0, v=>v, clTglFmt);
+  defParam(c+'SPLPath',LB+'Path',0, clDiscMap(3), clDiscFmt(CL_SPLPATH));
+  defParam(c+'SPLRad',LB+'Path Radius',0.32, v=>0.5+v*7.5, v=>(0.5+v*7.5).toFixed(1));
+  defParam(c+'SPLHgt',LB+'Helix Height',0.4, v=>v*10, v=>(v*10).toFixed(1));
+  defParam(c+'SPLAmt',LB+'Amount',0.33, v=>v*3, v=>(v*3).toFixed(2));
+  defParam(c+'SPLAln',LB+'Align',1, v=>v, clTglFmt);
+  defParam(c+'SPLFall',LB+'Spline Falloff',0, clDiscMap(4), clDiscFmt(CL_FALLS));
+  defParam(c+'SPLSize',LB+'Spline Fall Size',0.29, v=>0.2+v*9.8, v=>(0.2+v*9.8).toFixed(1));
+  defParam(c+'SPLFSp',LB+'Spline Fall Speed',0.15, v=>v*2, v=>(v*2).toFixed(2));
+  defParam(c+'SPLInv',LB+'Spline Fall Invert',0, v=>v, clTglFmt);
+  /* time effector (HoloMoGraph: per-clone time offset) */
+  defParam(c+'TMOn',LB+'Time On',0, v=>v, clTglFmt);
+  defParam(c+'TMOff',LB+'Offset',0.5, v=>(v-0.5)*10, v=>((v-0.5)*10).toFixed(1)+'s');
+  defParam(c+'TMStag',LB+'Stagger',0.125, v=>v*2, v=>(v*2).toFixed(2)+'s');
   /* render */
   defParam(c+'Fog',LB+'Fog',1, v=>v, clTglFmt);
   defParam(c+'FogD',LB+'Fog Density',0.12, v=>v*0.5, v=>(v*0.5).toFixed(3));
@@ -1951,6 +2036,7 @@ layout(location=0) in vec3 a_pos;
 layout(location=1) in vec3 a_nor;
 layout(location=2) in vec3 a_inst;
 layout(location=3) in float a_rnd;
+layout(location=5) in float a_idx;
 layout(location=4) in vec4 a_flw;
 uniform mat4 u_vp;
 uniform vec3 u_camPos;
@@ -1961,12 +2047,40 @@ uniform vec3 u_pPos,u_pRot,u_pScl;
 uniform int u_fallShape;
 uniform float u_fallInv,u_fallSize,u_fallSpd;
 uniform float u_rOn,u_seed;
+uniform float u_rAnim,u_rAnSpd;
+uniform int u_rFallShape;
+uniform float u_rFallSize,u_rFallSpd,u_rFallInv;
 uniform vec3 u_rPos,u_rRot,u_rScl;
 uniform float u_sOn,u_nScale,u_nSpd,u_nAmt,u_nSclAmt;
+uniform int u_sFallShape;
+uniform float u_sFallSize,u_sFallSpd,u_sFallInv;
 uniform float u_sndOn;
 uniform int u_sndSrc;
 uniform float u_sndGain,u_sndLift;
+uniform int u_sndFallShape;
+uniform float u_sndFallSize,u_sndFallSpd,u_sndFallInv;
 uniform float u_dOn,u_dMax;
+uniform float u_stpOn,u_stpN;
+uniform vec3 u_stpPos,u_stpRot,u_stpScl;
+uniform int u_stpFallShape;
+uniform float u_stpFallSize,u_stpFallSpd,u_stpFallInv;
+uniform float u_frmOn,u_frmAmp,u_frmFreq,u_frmPh,u_frmSpd;
+uniform int u_frmMode,u_frmTgt,u_frmAx;
+uniform int u_frmFallShape;
+uniform float u_frmFallSize,u_frmFallSpd,u_frmFallInv;
+uniform float u_paOn,u_paRad,u_paAmt;
+uniform vec3 u_paCen;
+uniform int u_paFallShape;
+uniform float u_paFallSize,u_paFallSpd,u_paFallInv;
+uniform float u_tgtOn;
+uniform vec3 u_tgtPos;
+uniform int u_tgtFallShape;
+uniform float u_tgtFallSize,u_tgtFallSpd,u_tgtFallInv;
+uniform float u_splOn,u_splRad,u_splHgt,u_splAmt,u_splAln;
+uniform int u_splPath;
+uniform int u_splFallShape;
+uniform float u_splFallSize,u_splFallSpd,u_splFallInv;
+uniform float u_tmOn,u_tmOff,u_tmStag;
 uniform float u_hueR,u_sat,u_instScale;
 uniform float u_flower,u_bloomAng;
 uniform float u_particle;
@@ -1994,22 +2108,33 @@ float vn3(vec3 p){
   float e=h31(i+vec3(0.,0.,1.)),g=h31(i+vec3(1.,0.,1.)),h=h31(i+vec3(0.,1.,1.)),k=h31(i+vec3(1.,1.,1.));
   return mix(mix(mix(a,b,f.x),mix(c,d,f.x),f.y),mix(mix(e,g,f.x),mix(h,k,f.x),f.y),f.z);
 }
-float falloff(vec3 ip,float t){
-  if(u_fallShape==0) return 1.0;
-  vec3 c=vec3(sin(t*u_fallSpd)*2.2,cos(t*u_fallSpd*0.77)*1.6,sin(t*u_fallSpd*0.53+1.7)*2.2);
+/* per-effector falloff: each effector evaluates its own (HoloMoGraph parity) */
+float falloffP(vec3 ip,float t,int shape,float size,float spd,float inv){
+  if(shape==0) return 1.0;
+  vec3 c=vec3(sin(t*spd)*2.2,cos(t*spd*0.77)*1.6,sin(t*spd*0.53+1.7)*2.2);
   float d;
-  if(u_fallShape==1) d=abs(ip.x-c.x);
-  else if(u_fallShape==2) d=length(ip-c);
+  if(shape==1) d=abs(ip.x-c.x);
+  else if(shape==2) d=length(ip-c);
   else d=max(max(abs(ip.x-c.x),abs(ip.y-c.y)),abs(ip.z-c.z));
-  float f=clamp(1.0-d/max(u_fallSize,0.001),0.0,1.0);
+  float f=clamp(1.0-d/max(size,0.001),0.0,1.0);
   f=f*f*(3.0-2.0*f);
-  return mix(f,1.0-f,u_fallInv);
+  return mix(f,1.0-f,inv);
+}
+float falloff(vec3 ip,float t){
+  return falloffP(ip,t,u_fallShape,u_fallSize,u_fallSpd,u_fallInv);
 }
 mat3 euler(vec3 r){
   float cx=cos(r.x),sx=sin(r.x),cy=cos(r.y),sy=sin(r.y),cz=cos(r.z),sz=sin(r.z);
   return mat3(cy*cz,cy*sz,-sy,
               sx*sy*cz-cx*sz,sx*sy*sz+cx*cz,sx*cy,
               cx*sy*cz+sx*sz,cx*sy*sz-sx*cz,cx*cy);
+}
+/* build a basis with local +Z aimed along d (target / spline-align) */
+mat3 aimZ(vec3 d){
+  vec3 zA=normalize(d);
+  vec3 upA=abs(zA.y)>0.99?vec3(1.0,0.0,0.0):vec3(0.0,1.0,0.0);
+  vec3 xA=normalize(cross(upA,zA));
+  return mat3(xA,cross(zA,xA),zA);
 }
 void main(){
   v_uv=a_pos.xy+0.5;
@@ -2051,39 +2176,96 @@ void main(){
     bp=a_flw.xyz+rel*ca+cross(ax,rel)*sa+ax*dot(ax,rel)*(1.0-ca);
     bn=bn*ca+cross(ax,bn)*sa+ax*dot(ax,bn)*(1.0-ca);
   }
-  /* Delay = per-instance time lag on the Plain effector target */
-  float tl=u_time-a_rnd*u_dMax*u_dOn;
-  float f=falloff(a_inst,tl)*u_pOn*u_pStr;
+  /* ---- effector stack (HoloMoGraph order: each with its own falloff) ----
+     per-instance effective time: delay lag + time-effector offset */
+  float te=u_time-a_rnd*u_dMax*u_dOn+(u_tmOff+a_idx*u_tmStag)*u_tmOn;
+  /* Plain */
+  float f=falloff(a_inst,te)*u_pOn*u_pStr;
   vec3 off=u_pPos*f*u_pPosOn;
   vec3 rot=u_pRot*f*u_pRotOn;
   vec3 scl=vec3(1.0)+(u_pScl-vec3(1.0))*f*u_pSclOn;
-  /* Random effector (seeded per instance) */
-  vec3 r1=vec3(h31(vec3(a_rnd*91.7,u_seed,u_seed*0.37)),
-               h31(vec3(u_seed*1.3,a_rnd*57.3,7.7)),
-               h31(vec3(3.1,u_seed*2.9,a_rnd*113.1)));
-  vec3 r2=vec3(h31(vec3(a_rnd*31.7,u_seed*3.1,9.2)),
-               h31(vec3(u_seed*7.7,a_rnd*77.7,1.3)),
-               h31(vec3(5.9,u_seed*1.7,a_rnd*43.7)));
-  off+=(r1-0.5)*2.0*u_rPos*u_rOn;
-  rot+=(r2-0.5)*2.0*u_rRot*u_rOn;
-  scl*=vec3(1.0)+(r1-0.5)*2.0*u_rScl*u_rOn;
+  float frmCol=1.0;
+  /* Random (animated seed like Blender's Animated Random) */
+  float seedEff=u_seed+((u_rAnim>0.5)?floor(te*u_rAnSpd):0.0);
+  float fR=falloffP(a_inst,te,u_rFallShape,u_rFallSize,u_rFallSpd,u_rFallInv)*u_rOn;
+  vec3 r1=vec3(h31(vec3(a_rnd*91.7,seedEff,seedEff*0.37)),
+               h31(vec3(seedEff*1.3,a_rnd*57.3,7.7)),
+               h31(vec3(3.1,seedEff*2.9,a_rnd*113.1)));
+  vec3 r2=vec3(h31(vec3(a_rnd*31.7,seedEff*3.1,9.2)),
+               h31(vec3(seedEff*7.7,a_rnd*77.7,1.3)),
+               h31(vec3(5.9,seedEff*1.7,a_rnd*43.7)));
+  off+=(r1-0.5)*2.0*u_rPos*fR;
+  rot+=(r2-0.5)*2.0*u_rRot*fR;
+  scl*=vec3(1.0)+(r1-0.5)*2.0*u_rScl*fR;
+  /* Step: stepped interpolation across clones (floor(idx*steps)/steps) */
+  float stN=max(u_stpN,2.0);
+  float stp=floor(a_idx*stN)/stN;
+  float fST=falloffP(a_inst,te,u_stpFallShape,u_stpFallSize,u_stpFallSpd,u_stpFallInv)*u_stpOn*stp;
+  off+=u_stpPos*fST;
+  rot+=u_stpRot*fST;
+  scl*=vec3(1.0)+(u_stpScl-vec3(1.0))*fST;
+  /* Formula: wave driven offsets, target = position/rotation/scale/color */
+  float fFR=falloffP(a_inst,te,u_frmFallShape,u_frmFallSize,u_frmFallSpd,u_frmFallInv)*u_frmOn;
+  float fph=a_idx*u_frmFreq*6.28318+u_frmPh+te*u_frmSpd;
+  float fv;
+  if(u_frmMode==0) fv=sin(fph);
+  else if(u_frmMode==1) fv=cos(fph);
+  else if(u_frmMode==2) fv=a_idx*2.0-1.0;
+  else fv=h31(vec3(a_idx*91.7,floor(te*max(u_frmSpd,0.001)),7.7))*2.0-1.0;
+  vec3 fvec=vec3(0.0);
+  if(u_frmAx==0) fvec.x=fv*u_frmAmp;
+  else if(u_frmAx==1) fvec.y=fv*u_frmAmp;
+  else fvec.z=fv*u_frmAmp;
+  if(u_frmTgt==0) off+=fvec*fFR;
+  else if(u_frmTgt==1) rot+=fvec*fFR;
+  else if(u_frmTgt==2) scl*=vec3(1.0)+fvec*fFR;
+  else frmCol=clamp(1.0+fv*u_frmAmp*fFR,0.0,2.0);
   /* Shader effector: animated 3D noise field */
-  float n=vn3(a_inst*u_nScale+vec3(0.0,u_time*u_nSpd,u_time*u_nSpd*0.6));
-  off+=(n-0.5)*u_nAmt*u_sOn;
-  scl*=1.0+(n-0.5)*u_nSclAmt*u_sOn;
+  float fS=falloffP(a_inst,te,u_sFallShape,u_sFallSize,u_sFallSpd,u_sFallInv)*u_sOn;
+  float n=vn3(a_inst*u_nScale+vec3(0.0,te*u_nSpd,te*u_nSpd*0.6));
+  off+=(n-0.5)*u_nAmt*fS;
+  scl*=1.0+(n-0.5)*u_nSclAmt*fS;
   /* Sound effector: scale punch + lift from the audio buses */
+  float fSnd=falloffP(a_inst,te,u_sndFallShape,u_sndFallSize,u_sndFallSpd,u_sndFallInv)*u_sndOn;
   float bus=u_sndSrc==0?u_audioBass:(u_sndSrc==1?u_audioMid:(u_sndSrc==2?u_audioHigh:u_beat));
-  scl*=1.0+bus*u_sndGain*u_sndOn;
-  off.y+=bus*u_sndLift*u_sndOn;
+  scl*=1.0+bus*u_sndGain*fSnd;
+  off.y+=bus*u_sndLift*fSnd;
+  /* Push Apart: radial separation from a center point */
+  float fPA=falloffP(a_inst,te,u_paFallShape,u_paFallSize,u_paFallSpd,u_paFallInv)*u_paOn;
+  vec3 toC=a_inst-u_paCen;
+  float dC=length(toC);
+  vec3 dirC=dC>0.0001?toC/dC:vec3(0.0,1.0,0.0);
+  float push=(1.0-min(dC/max(u_paRad,0.001),1.0))*fPA;
+  off+=dirC*push*u_paAmt;
+  /* Target: aim each clone's +Z at the target point */
+  float fT=falloffP(a_inst,te,u_tgtFallShape,u_tgtFallSize,u_tgtFallSpd,u_tgtFallInv)*u_tgtOn;
+  /* Spline: offset along a path tangent, optional align */
+  float fSP=falloffP(a_inst,te,u_splFallShape,u_splFallSize,u_splFallSpd,u_splFallInv)*u_splOn;
+  vec3 splT=vec3(1.0,0.0,0.0);
+  if(u_splPath==0||u_splPath==1){
+    float xz=length(a_inst.xz);
+    float ta=xz>0.001?atan(a_inst.z,a_inst.x):0.0;
+    if(u_splPath==0) splT=vec3(-sin(ta),0.0,cos(ta));
+    else splT=normalize(vec3(-u_splRad*sin(ta),u_splHgt/6.28318,u_splRad*cos(ta)));
+  }
+  off+=splT*(u_splAmt*fSP);
   /* compose instance transform */
   mat3 R=euler(rot);
+  if(fT>0.001){
+    float k=clamp(fT,0.0,1.0);
+    R=R*(1.0-k)+aimZ(u_tgtPos-(a_inst+off))*k;
+  }
+  if(fSP>0.001&&u_splAln>0.5){
+    float k=clamp(fSP,0.0,1.0);
+    R=R*(1.0-k)+aimZ(splT)*k;
+  }
   vec3 p=R*(bp*u_instScale*scl);
   vec3 world=a_inst+off+p;
   vec3 N=R*bn;
   v_world=world;
   v_nor=N;
   v_norF=N;
-  v_col=hsv(vec3(fract(u_hue+a_rnd*u_hueR),u_sat,1.0));
+  v_col=hsv(vec3(fract(u_hue+a_rnd*u_hueR),u_sat,1.0))*frmCol;
   gl_Position=u_vp*vec4(world,1.0);
 }
 `;
@@ -2290,7 +2472,7 @@ function m4mul(a,b){
 
 /* ---- per-layer instance buffers ---- */
 const clonerDirty=[true,true,true,true];
-let clInstBuf=[null,null,null,null], clInstRnd=[null,null,null,null], clInstCount=[0,0,0,0];
+let clInstBuf=[null,null,null,null], clInstRnd=[null,null,null,null], clInstIdx=[null,null,null,null], clInstCount=[0,0,0,0];
 function clv(i,n){
   const id='L'+i+'.cl'+n;
   return PARAMS[id].map(eff(id));
@@ -2333,15 +2515,19 @@ function rebuildClonerInstances(i){
   const count=positions.length/3;
   let seed=Math.floor(clv(i,'Seed')*1000)+i*77+1;
   const rndArr=new Float32Array(count);
+  const idxArr=new Float32Array(count);
   for(let k=0;k<count;k++){
     seed=(seed*16807)%2147483647;
     rndArr[k]=(seed-1)/2147483646;
+    idxArr[k]=count<=1?0:k/(count-1);
   }
-  if(!clInstBuf[i]){ clInstBuf[i]=gl.createBuffer(); clInstRnd[i]=gl.createBuffer(); }
+  if(!clInstBuf[i]){ clInstBuf[i]=gl.createBuffer(); clInstRnd[i]=gl.createBuffer(); clInstIdx[i]=gl.createBuffer(); }
   gl.bindBuffer(gl.ARRAY_BUFFER,clInstBuf[i]);
   gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(positions),gl.DYNAMIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER,clInstRnd[i]);
   gl.bufferData(gl.ARRAY_BUFFER,rndArr,gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,clInstIdx[i]);
+  gl.bufferData(gl.ARRAY_BUFFER,idxArr,gl.STATIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER,null);
   clInstCount[i]=count;
   clonerDirty[i]=false;
@@ -2421,7 +2607,7 @@ function renderCloner(i,t,T){
   if(S.beatSync) sp=snapBeat(sp);
   const ct=t*sp;
   /* camera: orbit azimuth + elevation + distance */
-  let az=clv(i,'Az')*Math.PI*2;
+  let az=clv(i,'Az')*Math.PI/180; /* clv returns degrees (param map v=>v*360) */
   if(clv(i,'Orb')>0.5) az+=ct*0.12;
   const elv=(clv(i,'El')-0.5)*2.6, dist=clv(i,'Dist');
   const eye=[dist*Math.cos(elv)*Math.cos(az),dist*Math.sin(elv),dist*Math.cos(elv)*Math.sin(az)];
@@ -2461,6 +2647,8 @@ function renderCloner(i,t,T){
   gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2,3,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(2,1);
   gl.bindBuffer(gl.ARRAY_BUFFER,clInstRnd[i]);
   gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3,1,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(3,1);
+  gl.bindBuffer(gl.ARRAY_BUFFER,clInstIdx[i]);
+  gl.enableVertexAttribArray(5); gl.vertexAttribPointer(5,1,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(5,1);
   if(isFlower){
     gl.bindBuffer(gl.ARRAY_BUFFER,g.flw);
     gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4,4,gl.FLOAT,false,0,0); gl.vertexAttribDivisor(4,0);
@@ -2493,6 +2681,39 @@ function renderCloner(i,t,T){
   gl.uniform1i(U(P,'u_sndSrc'),clv(i,'SndSrc'));
   F('u_sndGain',clv(i,'SndG')); F('u_sndLift',clv(i,'SndL'));
   F('u_dOn',clv(i,'DOn')); F('u_dMax',clv(i,'DAmt'));
+  F('u_rAnim',clv(i,'RAnim')); F('u_rAnSpd',clv(i,'RAnSp'));
+  gl.uniform1i(U(P,'u_rFallShape'),clv(i,'RFall'));
+  F('u_rFallSize',clv(i,'RSize')); F('u_rFallSpd',clv(i,'RFSp')); F('u_rFallInv',clv(i,'RInv'));
+  gl.uniform1i(U(P,'u_sFallShape'),clv(i,'SFall'));
+  F('u_sFallSize',clv(i,'SSize')); F('u_sFallSpd',clv(i,'SFSp')); F('u_sFallInv',clv(i,'SInv'));
+  gl.uniform1i(U(P,'u_sndFallShape'),clv(i,'SndFall'));
+  F('u_sndFallSize',clv(i,'SndSize')); F('u_sndFallSpd',clv(i,'SndFSp')); F('u_sndFallInv',clv(i,'SndInv'));
+  F('u_stpOn',clv(i,'STPOn')); F('u_stpN',clv(i,'STPN'));
+  V3('u_stpPos',clv(i,'STPPx'),clv(i,'STPPy'),clv(i,'STPPz'));
+  V3('u_stpRot',clv(i,'STPRx')*dg,clv(i,'STPRy')*dg,clv(i,'STPRz')*dg);
+  V3('u_stpScl',clv(i,'STPSx'),clv(i,'STPSy'),clv(i,'STPSz'));
+  gl.uniform1i(U(P,'u_stpFallShape'),clv(i,'STPFall'));
+  F('u_stpFallSize',clv(i,'STPSize')); F('u_stpFallSpd',clv(i,'STPSpd')); F('u_stpFallInv',clv(i,'STPInv'));
+  F('u_frmOn',clv(i,'FRMOn')); F('u_frmAmp',clv(i,'FRMAmp')); F('u_frmFreq',clv(i,'FRMFreq'));
+  F('u_frmPh',clv(i,'FRMPh')); F('u_frmSpd',clv(i,'FRMSpd'));
+  gl.uniform1i(U(P,'u_frmMode'),clv(i,'FRMMode')); gl.uniform1i(U(P,'u_frmTgt'),clv(i,'FRMTgt'));
+  gl.uniform1i(U(P,'u_frmAx'),clv(i,'FRMAx'));
+  gl.uniform1i(U(P,'u_frmFallShape'),clv(i,'FRMFall'));
+  F('u_frmFallSize',clv(i,'FRMSize')); F('u_frmFallSpd',clv(i,'FRMFSp')); F('u_frmFallInv',clv(i,'FRMInv'));
+  F('u_paOn',clv(i,'PAOn')); F('u_paRad',clv(i,'PARad')); F('u_paAmt',clv(i,'PAAmt'));
+  V3('u_paCen',clv(i,'PACx'),clv(i,'PACy'),clv(i,'PACz'));
+  gl.uniform1i(U(P,'u_paFallShape'),clv(i,'PAFall'));
+  F('u_paFallSize',clv(i,'PASize')); F('u_paFallSpd',clv(i,'PAFSp')); F('u_paFallInv',clv(i,'PAInv'));
+  F('u_tgtOn',clv(i,'TGTOn'));
+  V3('u_tgtPos',clv(i,'TGTX'),clv(i,'TGTY'),clv(i,'TGTZ'));
+  gl.uniform1i(U(P,'u_tgtFallShape'),clv(i,'TGTFall'));
+  F('u_tgtFallSize',clv(i,'TGTSize')); F('u_tgtFallSpd',clv(i,'TGTFSp')); F('u_tgtFallInv',clv(i,'TGTInv'));
+  F('u_splOn',clv(i,'SPLOn')); F('u_splRad',clv(i,'SPLRad')); F('u_splHgt',clv(i,'SPLHgt'));
+  F('u_splAmt',clv(i,'SPLAmt')); F('u_splAln',clv(i,'SPLAln'));
+  gl.uniform1i(U(P,'u_splPath'),clv(i,'SPLPath'));
+  gl.uniform1i(U(P,'u_splFallShape'),clv(i,'SPLFall'));
+  F('u_splFallSize',clv(i,'SPLSize')); F('u_splFallSpd',clv(i,'SPLFSp')); F('u_splFallInv',clv(i,'SPLInv'));
+  F('u_tmOn',clv(i,'TMOn')); F('u_tmOff',clv(i,'TMOff')); F('u_tmStag',clv(i,'TMStag'));
   F('u_hueR',clv(i,'HueR')); F('u_sat',clv(i,'Sat')); F('u_instScale',clv(i,'IScl'));
   gl.uniform1i(U(P,'u_flat'),clv(i,'Flat')>0.5?1:0);
   F('u_fogOn',clv(i,'Fog')); F('u_fogD',clv(i,'FogD'));
@@ -3292,17 +3513,70 @@ function buildClonerUI(body,i){
   paramRow(eR,pre+'RPx','Pos X'); paramRow(eR,pre+'RPy','Pos Y'); paramRow(eR,pre+'RPz','Pos Z');
   paramRow(eR,pre+'RRx','Rot X'); paramRow(eR,pre+'RRy','Rot Y'); paramRow(eR,pre+'RRz','Rot Z');
   paramRow(eR,pre+'RSx','Scl X'); paramRow(eR,pre+'RSy','Scl Y'); paramRow(eR,pre+'RSz','Scl Z');
+  toggleRow(eR,pre+'RAnim','Animate'); paramRow(eR,pre+'RAnSp','Anim speed');
+  discreteRow(eR,pre+'RFall','Falloff',CL_FALLS);
+  toggleRow(eR,pre+'RInv','Invert');
+  paramRow(eR,pre+'RSize','Fall size'); paramRow(eR,pre+'RFSp','Fall speed');
   const eS=cgrp(gE,'Shader',false);
   toggleRow(eS,pre+'SOn','Enabled');
   paramRow(eS,pre+'SScl','Noise scale'); paramRow(eS,pre+'SSpd','Noise speed');
   paramRow(eS,pre+'SAmt','Displace'); paramRow(eS,pre+'SScA','Scale amt');
+  discreteRow(eS,pre+'SFall','Falloff',CL_FALLS);
+  toggleRow(eS,pre+'SInv','Invert');
+  paramRow(eS,pre+'SSize','Fall size'); paramRow(eS,pre+'SFSp','Fall speed');
   const eSnd=cgrp(gE,'Sound',false);
   toggleRow(eSnd,pre+'SndOn','Enabled');
   discreteRow(eSnd,pre+'SndSrc','Source',CL_SND);
   paramRow(eSnd,pre+'SndG','Gain'); paramRow(eSnd,pre+'SndL','Lift');
+  discreteRow(eSnd,pre+'SndFall','Falloff',CL_FALLS);
+  toggleRow(eSnd,pre+'SndInv','Invert');
+  paramRow(eSnd,pre+'SndSize','Fall size'); paramRow(eSnd,pre+'SndFSp','Fall speed');
   const eD=cgrp(gE,'Delay',false);
   toggleRow(eD,pre+'DOn','Enabled');
   paramRow(eD,pre+'DAmt','Lag');
+  const eStp=cgrp(gE,'Step',false);
+  toggleRow(eStp,pre+'STPOn','Enabled');
+  paramRow(eStp,pre+'STPN','Steps');
+  paramRow(eStp,pre+'STPPx','Pos X'); paramRow(eStp,pre+'STPPy','Pos Y'); paramRow(eStp,pre+'STPPz','Pos Z');
+  paramRow(eStp,pre+'STPRx','Rot X'); paramRow(eStp,pre+'STPRy','Rot Y'); paramRow(eStp,pre+'STPRz','Rot Z');
+  paramRow(eStp,pre+'STPSx','Scl X'); paramRow(eStp,pre+'STPSy','Scl Y'); paramRow(eStp,pre+'STPSz','Scl Z');
+  discreteRow(eStp,pre+'STPFall','Falloff',CL_FALLS);
+  toggleRow(eStp,pre+'STPInv','Invert');
+  paramRow(eStp,pre+'STPSize','Fall size'); paramRow(eStp,pre+'STPSpd','Fall speed');
+  const eFrm=cgrp(gE,'Formula',false);
+  toggleRow(eFrm,pre+'FRMOn','Enabled');
+  discreteRow(eFrm,pre+'FRMMode','Wave',CL_FRMMODE);
+  paramRow(eFrm,pre+'FRMAmp','Amplitude'); paramRow(eFrm,pre+'FRMFreq','Frequency');
+  paramRow(eFrm,pre+'FRMPh','Phase'); paramRow(eFrm,pre+'FRMSpd','Speed');
+  discreteRow(eFrm,pre+'FRMTgt','Target',CL_FRMTGT);
+  discreteRow(eFrm,pre+'FRMAx','Axis',CL_FAX);
+  discreteRow(eFrm,pre+'FRMFall','Falloff',CL_FALLS);
+  toggleRow(eFrm,pre+'FRMInv','Invert');
+  paramRow(eFrm,pre+'FRMSize','Fall size'); paramRow(eFrm,pre+'FRMFSp','Fall speed');
+  const ePA=cgrp(gE,'Push Apart',false);
+  toggleRow(ePA,pre+'PAOn','Enabled');
+  paramRow(ePA,pre+'PARad','Radius'); paramRow(ePA,pre+'PAAmt','Amount');
+  paramRow(ePA,pre+'PACx','Center X'); paramRow(ePA,pre+'PACy','Center Y'); paramRow(ePA,pre+'PACz','Center Z');
+  discreteRow(ePA,pre+'PAFall','Falloff',CL_FALLS);
+  toggleRow(ePA,pre+'PAInv','Invert');
+  paramRow(ePA,pre+'PASize','Fall size'); paramRow(ePA,pre+'PAFSp','Fall speed');
+  const eTgt=cgrp(gE,'Target',false);
+  toggleRow(eTgt,pre+'TGTOn','Enabled');
+  paramRow(eTgt,pre+'TGTX','Target X'); paramRow(eTgt,pre+'TGTY','Target Y'); paramRow(eTgt,pre+'TGTZ','Target Z');
+  discreteRow(eTgt,pre+'TGTFall','Falloff',CL_FALLS);
+  toggleRow(eTgt,pre+'TGTInv','Invert');
+  paramRow(eTgt,pre+'TGTSize','Fall size'); paramRow(eTgt,pre+'TGTFSp','Fall speed');
+  const eSpl=cgrp(gE,'Spline',false);
+  toggleRow(eSpl,pre+'SPLOn','Enabled');
+  discreteRow(eSpl,pre+'SPLPath','Path',CL_SPLPATH);
+  paramRow(eSpl,pre+'SPLRad','Path radius'); paramRow(eSpl,pre+'SPLHgt','Helix height');
+  paramRow(eSpl,pre+'SPLAmt','Amount'); toggleRow(eSpl,pre+'SPLAln','Align');
+  discreteRow(eSpl,pre+'SPLFall','Falloff',CL_FALLS);
+  toggleRow(eSpl,pre+'SPLInv','Invert');
+  paramRow(eSpl,pre+'SPLSize','Fall size'); paramRow(eSpl,pre+'SPLFSp','Fall speed');
+  const eTm=cgrp(gE,'Time',false);
+  toggleRow(eTm,pre+'TMOn','Enabled');
+  paramRow(eTm,pre+'TMOff','Offset'); paramRow(eTm,pre+'TMStag','Stagger');
   /* ---- render ---- */
   const gR=cgrp(box,'Render',false);
   toggleRow(gR,pre+'Fog','Fog');
