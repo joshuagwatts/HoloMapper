@@ -3012,7 +3012,7 @@ function renderCloner(i,t,T){
   if(S.beatSync) sp=snapBeat(sp);
   const ct=t*sp;
   /* camera: orbit azimuth + elevation + distance */
-  let az=clv(i,'Az')*Math.PI*2;
+  let az=clv(i,'Az')*Math.PI/180; /* clv returns degrees (param map v=>v*360) */
   if(clv(i,'Orb')>0.5) az+=ct*0.12;
   const elv=(clv(i,'El')-0.5)*2.6, dist=clv(i,'Dist');
   const eye=[dist*Math.cos(elv)*Math.cos(az),dist*Math.sin(elv),dist*Math.cos(elv)*Math.sin(az)];

@@ -4098,8 +4098,12 @@ function pumpCamera(){
   if(camVideo.readyState<2||camVideo.currentTime===camLastT) return;
   camLastT=camVideo.currentTime;
   gl.bindTexture(gl.TEXTURE_2D,camTex);
+  /* video rows arrive top-first; flip at upload so t=0 is the frame bottom
+     (the quad maps v=0 to screen bottom) — otherwise the image is upside down */
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
   try{ gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,camVideo); }
   catch(e){ /* transient upload failure — keep last good frame */ }
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
 }
 function camSlate(){
   if(camSlateTex) return camSlateTex;
@@ -4117,7 +4121,10 @@ function camSlate(){
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  /* canvas rows are top-first like video — same flip so the slate reads upright */
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
   camSlateTex=t; return t;
 }
 function renderCamera(i,t,T){
