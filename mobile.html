@@ -566,7 +566,7 @@ function defParam(id, label, defN, map, fmt){
 }
 const LAYER_NAMES = ['L1','L2','L3','L4'];
 const LAYER_HUES  = [0.02, 0.38, 0.62, 0.15];
-const LAYER_SRC   = ['Tunnel','Flow Field','Nebula','Plugin','Cloner 3D','Camera'];
+const LAYER_SRC   = ['Tunnel','Flow Field','Nebula','Plugin','Cloner 3D','Camera','Aurora','Voronoi','Plexus','Wavefield','Plasma'];
 const BLENDS      = ['Normal','Add','Screen','Multiply','Overlay','Difference'];
 /* Cloner 3D option lists (shared by param defs and UI builders) */
 const CL_MODES=['Grid','Radial','Linear'];
@@ -921,7 +921,7 @@ function validClips(c){
   if(!Array.isArray(c)||c.length!==4) return null;
   for(let i=0;i<4;i++){
     if(!Array.isArray(c[i])||c[i].length!==8) return null;
-    for(let k=0;k<8;k++){ const v=c[i][k]; if(v!==null&&(typeof v!=='number'||v<0||v>5)) return null; }
+    for(let k=0;k<8;k++){ const v=c[i][k]; if(v!==null&&(typeof v!=='number'||v<0||v>10)) return null; }
   }
   return c;
 }
@@ -1163,6 +1163,111 @@ void main(){
   O = vec4(col,1.0);
 }
 `;
+
+const SRC_AURORA = `
+void main(){
+  vec2 uv = (gl_FragCoord.xy-0.5*u_res)/u_res.y;
+  float t = u_time*u_speed;
+  vec2 p = uv*(1.5+u_param1*2.0);
+  float w1 = fbm(p*1.2+vec2(t*0.10,t*0.06));
+  float w2 = fbm(p*1.7-vec2(t*0.07,t*0.11)+w1*1.5);
+  float w3 = fbm(p*2.3+vec2(-t*0.05,t*0.09)+w2*1.2);
+  vec3 col = hsv(vec3(fract(u_hue+w1*0.5+w2*0.3), 0.75, w3));
+  col += hsv(vec3(fract(u_hue+0.12+w2*0.4), 0.6, 1.0))*pow(w2,3.0)*0.7;
+  col *= 0.75+u_audioBass*0.9+u_beat*0.35;
+  O = vec4(col,1.0);
+}
+`;
+
+const SRC_VORONOI = `
+void main(){
+  vec2 uv = (gl_FragCoord.xy-0.5*u_res)/u_res.y;
+  float t = u_time*u_speed;
+  vec2 p = uv*(3.0+u_param1*5.0);
+  vec2 ip = floor(p), fp = fract(p);
+  float md = 8.0, mid = 0.0;
+  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){
+    vec2 g = vec2(float(x),float(y));
+    vec2 o = vec2(hash12(ip+g), hash12(ip+g+19.19));
+    o = 0.5+0.42*sin(t*(0.6+u_param2)+6.2831*o);
+    vec2 r = g+o-fp;
+    float d = dot(r,r);
+    if(d<md){ md=d; mid=hash12(ip+g+7.7); }
+  }
+  float cells = sqrt(md);
+  float edge = smoothstep(0.0,0.08,cells);
+  vec3 col = hsv(vec3(fract(u_hue+mid*0.6+t*0.03), 0.8, 0.25+0.75*edge));
+  col += vec3(1.0)*pow(1.0-edge,3.0)*0.8;
+  col *= 0.7+u_audioMid*1.0+u_beat*0.4;
+  O = vec4(col,1.0);
+}
+`;
+
+const SRC_PLEXUS = `
+void main(){
+  vec2 uv = (gl_FragCoord.xy-0.5*u_res)/u_res.y;
+  float t = u_time*u_speed;
+  vec2 p = uv*(4.0+u_param1*4.0);
+  vec2 ip = floor(p), fp = fract(p);
+  float f1=8.0, f2=8.0, pid=0.0;
+  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){
+    vec2 g = vec2(float(x),float(y));
+    vec2 o = vec2(hash12(ip+g), hash12(ip+g+19.19));
+    o = 0.5+0.42*sin(t*(0.5+u_param2*0.8)+6.2831*o);
+    vec2 r = g+o-fp;
+    float d = dot(r,r);
+    if(d<f1){ f2=f1; f1=d; pid=hash12(ip+g+3.3); }
+    else if(d<f2){ f2=d; }
+  }
+  float edge = sqrt(f2)-sqrt(f1);
+  float lines = 1.0-smoothstep(0.0,0.12,edge);
+  float pts = 1.0-smoothstep(0.02,0.09,sqrt(f1));
+  vec3 col = hsv(vec3(fract(u_hue+pid*0.5), 0.7, 1.0))*pts;
+  col += hsv(vec3(fract(u_hue+0.08),0.65,0.9))*lines*0.55;
+  col *= 0.65+u_audioHigh*1.2+u_beat*0.5;
+  O = vec4(col,1.0);
+}
+`;
+
+const SRC_WAVE = `
+void main(){
+  vec2 uv = (gl_FragCoord.xy-0.5*u_res)/u_res.y;
+  float t = u_time*u_speed;
+  vec2 p = uv*(2.5+u_param1*3.0);
+  float w = 0.0;
+  w += sin(p.x*2.1+t*1.3)*0.5;
+  w += sin(p.y*2.7-t*1.1+1.7)*0.35;
+  w += sin((p.x+p.y)*3.4+t*0.7)*0.25;
+  w += sin(length(p)*4.0-t*1.9)*0.3*(0.5+u_param2);
+  float fr = fract(w*2.0);
+  float lines = pow(1.0-abs(fr-0.5)*2.0, 8.0);
+  float glow = smoothstep(0.2,1.0,w*0.5+0.5);
+  vec3 col = hsv(vec3(fract(u_hue+w*0.15+t*0.02), 0.85, 0.15+glow*0.6));
+  col += hsv(vec3(fract(u_hue+0.1),0.7,1.0))*lines*0.8;
+  col *= 0.7+u_audioBass*1.1+u_beat*0.45;
+  O = vec4(col,1.0);
+}
+`;
+
+const SRC_PLASMA = `
+void main(){
+  vec2 uv = (gl_FragCoord.xy-0.5*u_res)/u_res.y;
+  float t = u_time*u_speed;
+  vec2 p = uv*(2.0+u_param1*2.5);
+  float v = 0.0;
+  v += sin(p.x*3.0+t*1.2);
+  v += sin(p.y*4.0-t*0.9);
+  v += sin((p.x+p.y)*2.5+t*0.6);
+  v += sin(length(p)*5.0-t*1.5);
+  v *= 0.25;
+  float m = sin(v*6.28318);
+  vec3 col = hsv(vec3(fract(u_hue+v*0.8+t*0.05), 0.9, 0.5+0.5*m));
+  col = pow(col, vec3(1.4))*1.2;
+  col *= 0.7+u_audioMid*0.9+u_beat*0.4;
+  O = vec4(col,1.0);
+}
+`;
+
 
 </script>
 <script>
@@ -1660,6 +1765,11 @@ function compileAll(){
     ['tunnel',  FRAG_HEAD+SRC_TUNNEL],
     ['flow',    FRAG_HEAD+SRC_FLOW],
     ['nebula',  FRAG_HEAD+SRC_NEBULA],
+    ['aurora',  FRAG_HEAD+SRC_AURORA],
+    ['voronoi', FRAG_HEAD+SRC_VORONOI],
+    ['plexus',  FRAG_HEAD+SRC_PLEXUS],
+    ['wave',    FRAG_HEAD+SRC_WAVE],
+    ['plasma',  FRAG_HEAD+SRC_PLASMA],
     ['combine', SRC_COMBINE],
     ['feedback',SRC_FEEDBACK],
     ['kaleido', SRC_KALEIDO],
@@ -2521,12 +2631,12 @@ vec3 clDomain(vec3 p, out vec3 cid, out float valid, out float idxf, out vec3 cc
 float boundDist(vec3 p){
   vec3 he;
   if(u_mode==0){
-    he=0.5*(vec3(u_cnx,u_cny,u_cnz)-1.0)*vec3(u_spx,u_spy,u_spz)+vec3(2.5);
+    he=0.5*(vec3(u_cnx,u_cny,u_cnz)-1.0)*vec3(u_spx,u_spy,u_spz)+vec3(1.0);
   }else if(u_mode==2){
-    he=0.5*(u_lcnt-1.0)*abs(vec3(u_stpx,u_stpy,u_stpz))+vec3(2.5);
+    he=0.5*(u_lcnt-1.0)*abs(vec3(u_stpx,u_stpy,u_stpz))+vec3(1.0);
   }else{
-    float r=u_rad+2.5;
-    he = u_plane<0.5 ? vec3(r,r,2.5) : (u_plane<1.5 ? vec3(r,2.5,r) : vec3(2.5,r,r));
+    float r=u_rad+1.0;
+    he = u_plane<0.5 ? vec3(r,r,1.0) : (u_plane<1.5 ? vec3(r,1.0,r) : vec3(1.0,r,r));
   }
   vec3 q=abs(p)-he;
   return length(max(q,vec3(0.0)))+min(max(q.x,max(q.y,q.z)),0.0);
@@ -2662,7 +2772,7 @@ void main(){
     vec3 p=ro+rd*t;
     float c0,cc0; float d=mapAll(p,c0,cc0);
     if(d<0.0009*(1.0+t)){ hit=true; hp=p; ch=c0; ccm=cc0; break; }
-    float sD = d>900.0 ? max(boundDist(p),0.03) : d;
+    float sD = d>900.0 ? max(boundDist(p),0.1) : d;
     t+=sD*0.9;
     if(t>60.0) break;
   }
@@ -3143,7 +3253,7 @@ function renderCloner(i,t,T){
 'use strict';
 /* ================= RENDER PIPELINE =================
    layers -> combine -> feedback(ping-pong) -> kaleido -> glitch -> grade -> screen */
-const SRC_KEYS = ['tunnel','flow','nebula','plugin','cloner'];
+const SRC_KEYS = ['tunnel','flow','nebula','plugin','cloner','cam','aurora','voronoi','plexus','wave','plasma'];
 let beatPulse=0;
 function snapBeat(v){
   const divs=[0.25,0.5,1,2,4];
@@ -3831,12 +3941,72 @@ for(let _hi=0;_hi<4;_hi++){
   const _rm=_pre+'RMode';
   (PARAM_HOOKS[_rm]=PARAM_HOOKS[_rm]||[]).push(()=>{ showRenderSub(_hi,discVal(_rm)); });
 }
+/* ---- Cloner style presets (v1.4): foundational motion-graphics looks.
+   Each preset resets the layer's cloner params (except camera) then applies
+   its values. Values are 0..1 param space. */
+const CL_PRESETS=[
+ {name:'Wave Grid', p:{
+   Mode:0, CntX:0.45, CntY:0, CntZ:0.45, SpX:0.4, SpY:0.4, SpZ:0.4,
+   Mesh:0, RMode:0, IScl:0.2,
+   FRMOn:1, FRMTgt:0, FRMAmp:0.25, FRMFreq:0.3, FRMSpd:0.4, FRMMode:0,
+ }},
+ {name:'Metaball Goo', p:{
+   Mode:0, CntX:0.27, CntY:0.27, CntZ:0.27, SpX:0.25, SpY:0.25, SpZ:0.25,
+   RMode:1, SPrim:0, SBlend:0.7, SAO:1, SSteps:0.4,
+   ROn:1, RPx:0.25, RPy:0.25, RPz:0.25, RSpd:0.25,
+   IScl:0.25,
+ }},
+ {name:'Radial Burst', p:{
+   Mode:0.5, RCnt:0.08, Rad:0.33, Arc:1, Plane:0.5,
+   Mesh:0.385, RMode:0, IScl:0.25,
+   ROn:1, RRx:0.4, RRy:0.4, RRz:0.4, RSpd:0.3,
+ }},
+ {name:'Cube Matrix', p:{
+   Mode:0, CntX:0.36, CntY:0.36, CntZ:0.36, SpX:0.4, SpY:0.4, SpZ:0.4,
+   Mesh:0.154, RMode:0, IScl:0.3,
+   STPOn:1, STPN:0.35, STPPx:0.3, STPPy:0.3, STPSx:0.3, STPSy:0.3,
+ }},
+ {name:'Helix Flow', p:{
+   Mode:1, LCnt:0.09, StpX:0.625, StpY:0.5, StpZ:0.5,
+   Mesh:0.615, RMode:0, IScl:0.3,
+   SOn:1, SAmt:0.5, SSpd:0.4,
+ }},
+ {name:'Particle Audio', p:{
+   Mode:0, CntX:0.6, CntY:0.6, CntZ:0, SpX:0.5, SpY:0.5, SpZ:0.5,
+   Mesh:1, RMode:0, IScl:0.3,
+   SndOn:1, SndSrc:0, SndG:0.6,
+ }},
+];
+function applyClonerPreset(i, idx){
+  const pr=CL_PRESETS[idx]; if(!pr) return;
+  const pre='L'+i+'.cl';
+  /* reset cloner params to defaults (keep camera) */
+  for(const id in PARAMS){
+    if(id.indexOf(pre)===0){
+      const suf=id.slice(pre.length);
+      if(suf==='Az'||suf==='El'||suf==='Dist'||suf==='Orb') continue;
+      setParam(id, PARAMS[id].def, true);
+    }
+  }
+  /* apply preset */
+  for(const suf in pr.p) setParam(pre+suf, pr.p[suf], true);
+  clonerDirty[i]=true;
+  showModeSub(i,discVal(pre+'Mode'));
+  showMeshSub(i,discVal(pre+'Mesh'));
+  showRenderSub(i,discVal(pre+'RMode'));
+}
+
 function buildClonerUI(body,i){
   const pre='L'+i+'.cl';
   clonerDirty[i]=true; /* preset apply / src switch may have changed layout */
   const box=el('div','clonerbox'); box.id='clbox'+i;
   /* ---- cloner mode ---- */
   const gM=cgrp(box,'Cloner mode',true);
+  { const fr=el('div','segrow'); fr.appendChild(el('span','seglab','Style'));
+    const se=el('select','selin'); se.appendChild(new Option('-- styles --','-1'));
+    CL_PRESETS.forEach((p,pi)=>se.appendChild(new Option(p.name,String(pi))));
+    se.addEventListener('change',()=>{ if(se.value!=='-1'){ applyClonerPreset(i,+se.value); const old=document.getElementById('clbox'+i); if(old) old.remove(); buildClonerUI(body,i); } });
+    fr.appendChild(se); gM.appendChild(fr); }
   discreteRow(gM,pre+'Mode','Mode',CL_MODES,(v)=>{ clonerDirty[i]=true; showModeSub(i,v); });
   discreteRow(gM,pre+'RMode','Render',['Mesh','SDF'],(v)=>{ showRenderSub(i,v); });
   const subG=el('div'); subG.id='clmodeG'+i; gM.appendChild(subG);
