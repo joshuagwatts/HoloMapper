@@ -204,7 +204,12 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .clip{position:relative;min-height:52px;border-radius:var(--r);background:#141518;border:1px solid #2b2e35;
   color:var(--dim);font-size:9px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;
   align-items:stretch;justify-content:center;text-align:center;padding:0;line-height:1.15;user-select:none;overflow:hidden}
-.clip .cthumb{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;padding:2px}
+.clip .cthumb{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;padding:0;position:relative;overflow:hidden;cursor:pointer;background:#0a0b0e}
+/* live visual thumbnails: canvas fills the box, name stays as a readable overlay label */
+.thcv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.thlab{position:absolute;left:0;right:0;bottom:0;font-size:8px;line-height:1.2;padding:1px 3px 2px;text-align:center;
+  color:#dfe3ea;background:linear-gradient(transparent,rgba(0,0,0,.72));white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;pointer-events:none}
 .clip .cname{flex:none;font-size:11px;line-height:1.25;color:var(--dim);border-top:1px solid #23262c;padding:8px 4px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .clip:hover{border-color:var(--sel)}
@@ -4057,7 +4062,15 @@ function buildDeck(){
       const src=S.clips[i][k];
       const c=el('div','clip'+(src===null||src===undefined?' empty':'')+((S.fired[i]===k)?' fired':'')+((S.sel&&S.sel.kind==='clip'&&S.sel.i===i&&S.sel.c===k)?' selc':''));
       c.dataset.i=i; c.dataset.k=k;
-      const th=el('div','cthumb',src===null||src===undefined?'+':srcName(src).split(' ')[0]);
+      const th=el('div','cthumb');
+      if(src===null||src===undefined){ th.textContent='+'; }
+      else{
+        const tcv=document.createElement('canvas');
+        tcv.className='thcv'; tcv.width=THW; tcv.height=THH;
+        th.appendChild(tcv);
+        const tlb=el('span','thlab',srcName(src).split(' ')[0]);
+        th.appendChild(tlb);
+      }
       th.title=(src===null||src===undefined?'Empty slot \u2014 right-click to assign a source':'TRIGGER '+srcName(src)+' on '+LAYER_NAMES[i]+' (quantized: '+(S.snap||'bar')+')');
       th.addEventListener('click',()=>{ fireClip(i,k); openClipInspector(i,k); });
       const cnm=el('div','cname',src===null||src===undefined?'empty':srcName(src));
@@ -4073,6 +4086,14 @@ function buildDeck(){
     host.appendChild(st);
   }
   if(typeof refreshClipInspector==='function') refreshClipInspector();
+  /* thumbnails: repaint cached pixels into the fresh canvases, queue the rest */
+  if(typeof queueThumbs==='function'){
+    for(let qi=0;qi<4;qi++) for(let qk=0;qk<8;qk++){
+      const qs=S.clips[qi][qk];
+      if(typeof qs==='number') paintThumb(qi,qk,qs);
+    }
+    queueThumbs();
+  }
 }
 /* clip source-assign popup */
 function showClipMenu(x,y,i,k){
@@ -4713,8 +4734,37 @@ function makeTarget8(w,h){
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   return {tex:tex,fb:fb,w:w,h:h};
 }
-const _pvSavedFb={}; /* scratch for updatePreview's NRUN fbRead snapshot */
+const _pvSavedFb={}; /* scratch for renderClipSource's NRUN fbRead snapshot */
 let pvCtx=null;
+/* Render clip source `src` for layer i into target T (node-graph path with a
+   source override, else the plain layer path) — the same "what would firing
+   produce" render the preview monitor shows. NRUN feedback state is
+   snapshotted and restored so live trails stay coherent. Shared by the preview
+   monitor and the deck thumbnail queue. */
+function renderClipSource(i,t,src,T){
+  if(useGraph(i)){
+    const savedFb=_pvSavedFb;
+    for(const k in savedFb) delete savedFb[k];
+    for(const k in NRUN) if(k.indexOf(i+'.')===0&&NRUN[k].fbRead!==undefined) savedFb[k]=NRUN[k].fbRead;
+    try{ evalGraph(i,t,src,T); }
+    catch(err){ renderLayerInto(i,t,T,src,true); }
+    for(const k in savedFb) if(NRUN[k]) NRUN[k].fbRead=savedFb[k];
+  }else{
+    renderLayerInto(i,t,T,src,true);
+  }
+}
+/* readPixels from T into `read` (Uint8Array sized w*h*4) with a vertical flip
+   into ImageData `img` (pre-sized w*h). Shared by preview + thumbnails. */
+function blitTargetFlipped(T,read,img){
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
+  gl.readPixels(0,0,T.w,T.h,gl.RGBA,gl.UNSIGNED_BYTE,read);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  const d=img.data, w=T.w, h=T.h;
+  for(let y=0;y<h;y++){
+    const s=(h-1-y)*w*4;
+    d.set(read.subarray(s,s+w*4),y*w*4);
+  }
+}
 function updatePreview(t){
   const cv=$('pv'); if(!cv||!cv.getContext) return;
   const sel=S.sel;
@@ -4725,33 +4775,79 @@ function updatePreview(t){
   }
   const i=Math.min(3,Math.max(0,sel.i|0));
   if(!pvT){ pvT=makeTarget8(480,270); pvRead=new Uint8Array(480*270*4); }
-  if(useGraph(i)){
-    const savedFb=_pvSavedFb;
-    for(const k in savedFb) delete savedFb[k];
-    for(const k in NRUN) if(k.indexOf(i+'.')===0&&NRUN[k].fbRead!==undefined) savedFb[k]=NRUN[k].fbRead;
-    try{ evalGraph(i,t,src,pvT); }
-    catch(err){ renderLayerInto(i,t,pvT,src,true); }
-    for(const k in savedFb) if(NRUN[k]) NRUN[k].fbRead=savedFb[k];
-  }else{
-    renderLayerInto(i,t,pvT,src,true);
-  }
-  gl.bindFramebuffer(gl.FRAMEBUFFER,pvT.fb);
-  gl.readPixels(0,0,480,270,gl.RGBA,gl.UNSIGNED_BYTE,pvRead);
-  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  renderClipSource(i,t,src,pvT);
   if(cv.width!==320) cv.width=320;
   if(cv.height!==180) cv.height=180;
   if(!pvOff){ pvOff=document.createElement('canvas'); pvOff.width=480; pvOff.height=270; }
   const og=pvOff.getContext('2d');
   if(!pvImg) pvImg=og.createImageData(480,270);
-  const d=pvImg.data;
-  for(let y=0;y<270;y++){
-    const s=(269-y)*480*4;
-    d.set(pvRead.subarray(s,s+480*4),y*480*4);
-  }
+  blitTargetFlipped(pvT,pvRead,pvImg);
   og.putImageData(pvImg,0,0);
   if(!pvCtx) pvCtx=cv.getContext('2d');
   pvCtx.drawImage(pvOff,0,0,320,180);
   if(!pvLive){ pvLive=true; updatePvLabel(); }
+}
+/* ---------- deck clip thumbnails ----------
+   Every non-empty deck clip box shows a live snapshot of its actual visual,
+   rendered through the exact same path as the preview monitor
+   (renderClipSource) — Resolume-style. Amortized: a queue is drained a couple
+   of renders per frame; after warmup the per-frame cost is zero. Rendered
+   pixels are cached per (layer,slot,src,graphRev) so deck rebuilds repaint
+   instantly, and node-graph edits (which bump g.rev via touchGraph)
+   automatically invalidate that layer's thumbs. */
+const THW=160, THH=90;
+let thT=null, thRead=null, thImg=null;
+const thumbCache={};   /* "i,k" -> {key:key, img:ImageData} */
+const thumbQueued={};  /* key -> true while queued (dedupe) */
+const thumbQueue=[];
+function thumbKey(i,k,src){
+  const g=S.graphs&&S.graphs[i];
+  return i+','+k+','+src+','+((g&&g.rev)||0);
+}
+function queueThumbs(){
+  thumbQueue.length=0;
+  for(const k in thumbQueued) delete thumbQueued[k];
+  for(let i=0;i<4;i++) for(let k=0;k<8;k++){
+    const src=S.clips[i][k];
+    if(typeof src!=='number') continue;
+    const key=thumbKey(i,k,src), ik=i+','+k;
+    const e=thumbCache[ik];
+    if(e&&e.key===key) continue;          /* cached and current */
+    if(thumbQueued[key]) continue;
+    thumbQueued[key]=true;
+    thumbQueue.push({i:i,k:k,src:src,key:key});
+  }
+}
+function paintThumb(i,k,src){
+  /* repaint a cached thumb into the deck's current canvas (after buildDeck) */
+  const e=thumbCache[i+','+k];
+  if(!e||e.key!==thumbKey(i,k,src)) return false;
+  const cv=document.querySelector('.clip[data-i="'+i+'"][data-k="'+k+'"] .thcv');
+  if(!cv) return false;
+  cv.getContext('2d').putImageData(e.img,0,0);
+  return true;
+}
+function pumpThumbs(t,n){
+  if(!thT){ thT=makeTarget8(THW,THH); thRead=new Uint8Array(THW*THH*4); }
+  let done=0;
+  while(done<n && thumbQueue.length){
+    const q=thumbQueue.shift();
+    delete thumbQueued[q.key];
+    try{
+      renderClipSource(q.i,t,q.src,thT);
+      if(!thImg){
+        const off=document.createElement('canvas'); off.width=THW; off.height=THH;
+        thImg=off.getContext('2d').createImageData(THW,THH);
+      }
+      blitTargetFlipped(thT,thRead,thImg);
+      /* copy: thImg is reused scratch */
+      const copy=new ImageData(new Uint8ClampedArray(thImg.data),THW,THH);
+      thumbCache[q.i+','+q.k]={key:q.key,img:copy};
+      const cv=document.querySelector('.clip[data-i="'+q.i+'"][data-k="'+q.k+'"] .thcv');
+      if(cv) cv.getContext('2d').putImageData(copy,0,0);
+    }catch(err){ /* failed shader: keep the dark box, never break the queue */ }
+    done++;
+  }
 }
 /* ---------- blackout ---------- */
 function toggleBlackout(){
@@ -6071,6 +6167,7 @@ function closeNodes(){
   neOpen=false; neSel=null; neDragWire=null; neDive=null;
   $('nodeed').style.display='none';
   closePalette();
+  if(typeof queueThumbs==='function') queueThumbs(); /* graph edits may have changed thumbs */
   if(neAfTimer){ clearInterval(neAfTimer); neAfTimer=null; }
 }
 /* ----- Tab dive-in (Ableton-style deck <-> nodes toggle) -----
@@ -6614,6 +6711,9 @@ function loop(){
      the dominant frame cost) and skipped while the node editor covers the deck.
      Uses its own counter — `frames` resets every 0.5s for the fps meter. */
   if(!neOpen && (pvTick=(pvTick+1)%3)===0) updatePreview(t);
+  /* deck thumbnails: amortized — 2 renders/frame max until the queue drains,
+     zero per-frame cost afterwards */
+  if(!neOpen && thumbQueue.length) pumpThumbs(t,2);
   frames++;
   if(now-fpsT>0.5){
     /* rolling 1s fps average + effective render scale, always honest */

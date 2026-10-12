@@ -132,7 +132,12 @@ button{font:inherit;color:inherit}
   box-shadow:0 0 14px hsl(var(--lhue,200) 85% 55% / .5),inset 0 0 0 1px hsl(var(--lhue,200) 85% 62%)}
 .clip.selc:not(.fired){outline:2px solid var(--teal);outline-offset:-2px}
 .cbox{display:block;width:100%;min-height:58px;background:#101218;border:none;border-bottom:1px solid var(--line);
-  color:var(--txt);font-weight:800;font-size:12px;touch-action:manipulation;padding:6px 4px}
+  color:var(--txt);font-weight:800;font-size:12px;touch-action:manipulation;padding:0;position:relative;overflow:hidden}
+/* live visual thumbnails: canvas fills the box, name stays as a readable overlay label */
+.thcv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.thlab{position:absolute;left:0;right:0;bottom:0;font-size:8px;line-height:1.2;padding:1px 3px 2px;text-align:center;
+  color:#dfe3ea;background:linear-gradient(transparent,rgba(0,0,0,.72));white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;pointer-events:none;font-weight:700}
 .clip.fired .cbox{background:hsl(var(--lhue,200) 70% 32% / .4);color:#fff}
 .clip.empty .cbox{color:var(--dim);border-bottom-style:dashed}
 .cname{display:block;width:100%;min-height:38px;background:none;border:none;color:var(--dim);
@@ -4054,7 +4059,17 @@ function buildDeck(){
       const src=S.clips[i][k];
       const c=el('div','clip'+(src===null?' empty':'')+((S.fired[i]===k)?' fired':'')+((S.sel&&S.sel.kind==='clip'&&S.sel.i===i&&S.sel.c===k)?' selc':''));
       c.dataset.i=i; c.dataset.k=k;
-      const box=el('button','cbox',src===null?'+':clipLabel(src));
+      const box=document.createElement('button');
+      box.className='cbox';
+      if(src===null){ box.textContent='+'; }
+      else{
+        const tcv=document.createElement('canvas');
+        tcv.className='thcv'; tcv.width=THW; tcv.height=THH;
+        box.appendChild(tcv);
+        const tlb=document.createElement('span');
+        tlb.className='thlab'; tlb.textContent=clipLabel(src);
+        box.appendChild(tlb);
+      }
       box.title=src===null?'Empty slot':('Fire '+LAYER_SRC[src]+' (quantized)');
       box.setAttribute('data-ctrl','clip'+i+'.'+k);
       CTRLS['clip'+i+'.'+k]={set:((ii,kk)=>v=>{ if(v>=0.5) vFire(ii,kk); })(i,k), label:'Fire '+LAYER_NAMES[i]+' clip '+(k+1)};
@@ -4070,6 +4085,14 @@ function buildDeck(){
     host.appendChild(st);
   }
   syncDeckSel();
+  /* thumbnails: repaint cached pixels into the fresh canvases, queue the rest */
+  if(typeof queueThumbs==='function'){
+    for(let qi=0;qi<4;qi++) for(let qk=0;qk<8;qk++){
+      const qs=S.clips[qi][qk];
+      if(qs!==null&&qs!==undefined) paintThumb(qi,qk,qs);
+    }
+    queueThumbs();
+  }
 }
 function buildColumns(){
   const host=$('colbtns'); if(!host) return; host.innerHTML='';
@@ -4437,6 +4460,60 @@ function v6PreviewTick(){
   }
   g.putImageData(img,0,0);
 }
+/* ---- deck clip thumbnails: static snapshots of each clip's actual visual ----
+   Same render path as the preview monitor (renderSourceInto with a source
+   override). Amortized: a queue drains 2 renders/frame; zero cost after
+   warmup. Pixels cached per (layer,slot,src) so deck rebuilds repaint
+   instantly. No node graphs on mobile, so no graph-rev in the key. */
+const THW=128, THH=72;
+let thT=null, thImg=null;
+const thPx=new Uint8Array(THW*THH*4);
+const thumbCache={}, thumbQueued={}, thumbQueue=[];
+function thumbKey(i,k,src){ return i+','+k+','+src; }
+function queueThumbs(){
+  thumbQueue.length=0;
+  for(const k in thumbQueued) delete thumbQueued[k];
+  for(let i=0;i<4;i++) for(let k=0;k<8;k++){
+    const src=S.clips[i][k];
+    if(src===null||src===undefined) continue;
+    const key=thumbKey(i,k,src), ik=i+','+k;
+    const e=thumbCache[ik];
+    if(e&&e.key===key) continue;
+    if(thumbQueued[key]) continue;
+    thumbQueued[key]=true;
+    thumbQueue.push({i:i,k:k,src:src,key:key});
+  }
+}
+function paintThumb(i,k,src){
+  const e=thumbCache[i+','+k];
+  if(!e||e.key!==thumbKey(i,k,src)) return false;
+  const cv=document.querySelector('.clip[data-i="'+i+'"][data-k="'+k+'"] .thcv');
+  if(!cv) return false;
+  cv.getContext('2d').putImageData(e.img,0,0);
+  return true;
+}
+function pumpThumbs(t,n){
+  if(!thT){ try{ thT=makeTarget(THW,THH,0,true); }catch(e){ thT=null; } if(!thT||!thT.ok){ thT=null; return; } }
+  let done=0;
+  while(done<n && thumbQueue.length){
+    const q=thumbQueue.shift();
+    delete thumbQueued[q.key];
+    try{
+      renderSourceInto(q.src,q.i,t,thT);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,thT.fb);
+      gl.readPixels(0,0,THW,THH,gl.RGBA,gl.UNSIGNED_BYTE,thPx);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+      if(!thImg){ const off=document.createElement('canvas'); off.width=THW; off.height=THH; thImg=off.getContext('2d').createImageData(THW,THH); }
+      const d=thImg.data;
+      for(let y=0;y<THH;y++){ const s=(THH-1-y)*THW*4; d.set(thPx.subarray(s,s+THW*4),y*THW*4); }
+      const copy=new ImageData(new Uint8ClampedArray(d),THW,THH);
+      thumbCache[q.i+','+q.k]={key:q.key,img:copy};
+      const cv=document.querySelector('.clip[data-i="'+q.i+'"][data-k="'+q.k+'"] .thcv');
+      if(cv) cv.getContext('2d').putImageData(copy,0,0);
+    }catch(err){ /* failed source: keep the dark box, never break the queue */ }
+    done++;
+  }
+}
 /* per-frame v6 extras: quantized column fires, autopilot, preview */
 function v6LoopExtra(beatIdx){
   if(pendingCol!==null&&(!MUI.quant||beatIdx!==lastBeatIdx)){
@@ -4801,6 +4878,8 @@ function loop(){
   renderPrism(t);
   renderGradeTex(t);
   renderMap();
+  /* deck thumbnails: amortized — 2 renders/frame max until the queue drains */
+  if(thumbQueue.length) pumpThumbs(t,2);
   frames++;
   if(now-fpsT>0.5){
     const f=$('fps'); if(f) f.textContent=Math.round(frames/Math.max(now-fpsT,0.001))+' fps';
