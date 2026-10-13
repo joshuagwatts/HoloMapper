@@ -201,6 +201,18 @@ button{font:inherit;color:inherit}
 .segbtn.on{background:rgba(45,212,191,.16);border-color:var(--teal);color:var(--teal)}
 .segrow input[type=checkbox]{width:28px;height:28px;accent-color:var(--teal)}
 .hint{font-size:12px;color:var(--dim);margin:8px 0}
+/* ---------- Macros (v1.5, big viby performance sliders) ---------- */
+.macrorow{ margin:14px 0; padding:12px; background:#1a1d24; border-radius:14px; border:1px solid var(--line2); }
+.macrorow .slab{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.macrobig{ width:100%; height:48px; -webkit-appearance:none; appearance:none; background:transparent; }
+.macrobig::-webkit-slider-runnable-track{ height:12px; border-radius:6px;
+  background:linear-gradient(90deg, hsl(var(--hue,210) 80% 55%), hsl(calc(var(--hue,210) + 40) 80% 45%)); }
+.macrobig::-webkit-slider-thumb{ -webkit-appearance:none; width:36px; height:36px; margin-top:-12px;
+  border-radius:50%; background:#fff; border:3px solid hsl(var(--hue,210) 80% 55%);
+  box-shadow:0 2px 12px rgba(0,0,0,.5); }
+.macrobig::-moz-range-track{ height:12px; border-radius:6px; background:#2a2e38; }
+.macrobig::-moz-range-thumb{ width:32px; height:32px; border-radius:50%; background:#fff;
+  border:3px solid hsl(var(--hue,210) 80% 55%); }
 /* ---------- FX browser ---------- */
 .fxgroup{font-size:11px;font-weight:900;letter-spacing:.1em;color:var(--teal);margin:16px 0 8px;text-transform:uppercase}
 .fxcard{background:var(--panel2);border:1px solid var(--line2);border-radius:14px;padding:12px;margin-bottom:10px}
@@ -331,6 +343,7 @@ body.output.pins #btnOutPins{background:rgba(45,212,191,.4);border-color:var(--t
   <button data-sheet="clip"><i>&#9670;</i><span>Clip</span></button>
   <button data-sheet="fx"><i>&#10022;</i><span>FX</span></button>
   <button data-sheet="mix"><i>&#9681;</i><span>Mix</span></button>
+  <button data-sheet="macros"><i>&#9835;</i><span>Macros</span></button>
   <button data-sheet="map"><i>&#9672;</i><span>Map</span></button>
   <button data-sheet="setup"><i>&#9881;</i><span>Setup</span></button>
 </nav>
@@ -4861,10 +4874,11 @@ function openSheet(name){
 }
 function buildSheet(name){
   const body=$('sheetBody'); if(!body) return; body.innerHTML='';
-  $('sheetTitle').textContent={clip:'Clip',fx:'FX',mix:'Mix',map:'Map',setup:'Setup'}[name]||'';
+  $('sheetTitle').textContent={clip:'Clip',fx:'FX',mix:'Mix',macros:'Macros',map:'Map',setup:'Setup'}[name]||'';
   if(name==='clip') buildInspector(body);
   else if(name==='fx') buildFxBrowser(body);
   else if(name==='mix') buildMixSheet(body);
+  else if(name==='macros') buildMacrosSheet(body);
   else if(name==='map'){
     const host=document.createElement('div'); host.id='mapUI'; body.appendChild(host);
     buildMapUI();
@@ -5356,6 +5370,28 @@ function buildFxBrowser(body){
   });
 }
 
+/* ---- Macros sheet (v1.5): big performance sliders, one tap away ---- */
+function buildMacrosSheet(body){
+  body.appendChild(el('div','secttl','Performance Macros'));
+  body.appendChild(el('div','hint','8 MIDI-mappable macro knobs — assign to any param.'));
+  for(let m=0;m<8;m++){
+    const wrap=el('div','macrorow');
+    const slab=el('div','slab');
+    const lab=el('label',null,'M'+(m+1)+' \u00B7 '+S.macros[m].label);
+    lab.style.fontSize='16px'; lab.style.fontWeight='600';
+    slab.appendChild(lab);
+    const vv=el('span','sval',Math.round(S.macros[m].val*100)+'%');
+    vv.style.fontSize='16px';
+    slab.appendChild(vv); wrap.appendChild(slab);
+    const sl=document.createElement('input');
+    sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001; sl.value=S.macros[m].val;
+    sl.className='macrobig';
+    sl.setAttribute('data-ctrl','macro'+m);
+    sl.addEventListener('input',()=>{ setMacro(m,parseFloat(sl.value),sl); vv.textContent=Math.round(S.macros[m].val*100)+'%'; });
+    CTRLS['macro'+m]={set:v=>setMacro(m,v), label:'Macro '+(m+1)+' '+S.macros[m].label};
+    wrap.appendChild(sl); body.appendChild(wrap);
+  }
+}
 /* ---- Mix sheet: layers + 8 macros + master ---- */
 function buildMixSheet(body){
   body.appendChild(el('div','secttl','Layers'));
@@ -5384,22 +5420,7 @@ function buildMixSheet(body){
     row.appendChild(fxBtn); row.appendChild(fxWrap);
     body.appendChild(row);
   }
-  body.appendChild(el('div','secttl','Macros'));
-  for(let m=0;m<8;m++){
-    const wrap=el('div','srow');
-    const slab=el('div','slab');
-    slab.appendChild(el('label',null,'M'+(m+1)+' \u00B7 '+S.macros[m].label));
-    const vv=el('span','sval',Math.round(S.macros[m].val*100)+'%');
-    slab.appendChild(vv); wrap.appendChild(slab);
-    const sl=document.createElement('input');
-    sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001; sl.value=S.macros[m].val;
-    sl.setAttribute('data-ctrl','macro'+m); sl.title='Macro '+(m+1)+' — MIDI-learnable';
-    sl.addEventListener('input',()=>{ setMacro(m,parseFloat(sl.value),sl); vv.textContent=Math.round(S.macros[m].val*100)+'%'; });
-    CTRLS['macro'+m]={set:v=>setMacro(m,v), label:'Macro '+(m+1)+' '+S.macros[m].label};
-    wrap.appendChild(sl); body.appendChild(wrap);
-  }
-  body.appendChild(el('div','secttl','Master'));
-  bigSlider(body,'P.master','Master fade');
+  body.appendChild(el('div','hint','Macros have their own tab now — tap Macros in the dock.'));
 }
 
 /* ---- Setup sheet: presets, MIDI, audio, resolution, plugin, reset ---- */

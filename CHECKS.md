@@ -893,3 +893,8 @@ Joshua: "resolume has like another slider for transition controls and wtf the fa
 - What it is (mobile): Resolume-style FX instances. Each layer has its own FX chain (S.layerFx[4]), each clip slot has its own chain (S.clipFx[4][8]). Each instance {k:key, on:bool, v:{pid:0-1}} carries OWN knob values (not shared globals). Render: source → clip FX (fired clip) → layer FX → composite. Supports 28 FX: all 26 px_* (batched in one prism-shader pass), kaleido, glitch. Skips feedback (temporal), strobe (global), color (composition-only).
 - UI: Mix sheet layer rows get an "FX (n)" button (expands inline chain editor); clip inspector gets a "Clip FX" section. Chain editor: per-instance bypass toggle, per-instance param sliders (own knobs), delete, "+ FX" picker (28 chainable FX).
 - Verification: acorn 15/15 clean. **8/8 + 2/2 + 4/4 PASS** (zero page errors): instances have own knobs, applyFxChain changes image, layer FX changes renderLayer output, bypass restores, clip FX applies on fired clip, UI builds. Caveat: chain order is fixed (px → kaleido → glitch); custom reordering not in v1.
+
+## Macros dock tab (2026-10-12 — checks/macro_ui.mjs)
+- His ask: "Where are the macros on mobile?" → "Needs to be way easier access that shit is not very viby".
+- What: dedicated Macros button in the bottom dock (between Mix and Map). Opens a sheet with 8 big performance sliders (48px touch targets, gradient tracks). Removed the buried macros from the Mix sheet (now just a hint pointing to the tab).
+- Verification: acorn 15/15 clean. **5/5 PASS**: dock button exists, 8 sliders built, MIDI-learnable (data-ctrl), Mix cleaned up, zero page errors.
