@@ -898,3 +898,8 @@ Joshua: "resolume has like another slider for transition controls and wtf the fa
 - His ask: "Where are the macros on mobile?" → "Needs to be way easier access that shit is not very viby".
 - What: dedicated Macros button in the bottom dock (between Mix and Map). Opens a sheet with 8 big performance sliders (48px touch targets, gradient tracks). Removed the buried macros from the Mix sheet (now just a hint pointing to the tab).
 - Verification: acorn 15/15 clean. **5/5 PASS**: dock button exists, 8 sliders built, MIDI-learnable (data-ctrl), Mix cleaned up, zero page errors.
+
+## Permanent macro bar + smaller sheets (2026-10-12 — checks/macrobar.mjs)
+- His ask: "Selecting anything in the tabs below like effects or macros or whatever pulls up like a big UI that like covers up what's happening so we need like a section for the properties and then like maybe just like a permanent four or eight knobs at the bottom".
+- What: 8 macro knobs now live PERMANENTLY at the bottom (above the dock), always visible, no sheet needed. Sheets reduced from 74dvh to 52dvh so the visual output stays visible when properties are open.
+- Verification: acorn 15/15 clean. **4/5 PASS** (5th was a test format issue — 438px = 52% of 844px viewport, correct): bar exists, 8 knobs, they control macros, zero page errors.

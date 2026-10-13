@@ -155,7 +155,19 @@ button{font:inherit;color:inherit}
 /* ---------- bottom sheet ---------- */
 #sheetBack{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:44;opacity:0;pointer-events:none;transition:opacity .22s}
 #sheetBack.open{opacity:1;pointer-events:auto}
-#sheet{position:fixed;left:0;right:0;bottom:0;z-index:45;max-height:74dvh;display:flex;flex-direction:column;
+#macrobar{flex:none;background:rgba(20,22,28,.95);border-top:1px solid var(--line2);padding:6px 8px;}
+#macroknobs{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;}
+#macroknobs::-webkit-scrollbar{display:none;}
+.mknob{flex:0 0 72px;text-align:center;}
+.mknob label{display:block;font-size:10px;color:var(--txt2);margin-bottom:2px;white-space:nowrap;overflow:hidden;}
+.mknob input{width:100%;height:32px;-webkit-appearance:none;background:transparent;}
+.mknob input::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:#2a2e38;}
+.mknob input::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;
+  border-radius:50%;background:hsl(210 80% 60%);border:2px solid #fff;}
+.mknob input::-moz-range-track{height:6px;border-radius:3px;background:#2a2e38;}
+.mknob input::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:hsl(210 80% 60%);border:2px solid #fff;}
+.mknob .mv{font-size:9px;color:var(--txt2);}
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:45;max-height:52dvh;display:flex;flex-direction:column;
   background:var(--panel);border-top:1px solid var(--line2);border-radius:18px 18px 0 0;
   transform:translateY(103%);transition:transform .25s ease;box-shadow:0 -12px 40px rgba(0,0,0,.5)}
 #sheet.open{transform:translateY(0)}
@@ -339,6 +351,9 @@ body.output.pins #btnOutPins{background:rgba(45,212,191,.4);border-color:var(--t
 <main id="deckWrap">
   <div id="deck"></div>
 </main>
+<div id="macrobar">
+  <div id="macroknobs"></div>
+</div>
 <nav id="dock">
   <button data-sheet="clip"><i>&#9670;</i><span>Clip</span></button>
   <button data-sheet="fx"><i>&#10022;</i><span>FX</span></button>
@@ -964,6 +979,7 @@ try{
   const raw = localStorage.getItem(LS_STATE);
   if(raw){ const s=JSON.parse(raw); if(s && s.v===1) S=Object.assign(defaultState(), s); }
   ensureFxChains();
+  try{ buildMacroBar(); }catch(e){}
   const mraw = localStorage.getItem(LS_MIDI);
   if(mraw){ const m=JSON.parse(mraw); if(Array.isArray(m)) S.midi=m; }
 }catch(e){ console.warn('HoloMapper: state load failed', e); }
@@ -5371,6 +5387,27 @@ function buildFxBrowser(body){
 }
 
 /* ---- Macros sheet (v1.5): big performance sliders, one tap away ---- */
+/* Permanent macro bar (v1.5): 8 knobs always visible at bottom */
+function buildMacroBar(){
+  const host=$('macroknobs'); if(!host) return; host.innerHTML='';
+  for(let m=0;m<8;m++){
+    const wrap=document.createElement('div'); wrap.className='mknob';
+    const lab=document.createElement('label'); lab.textContent='M'+(m+1)+' '+S.macros[m].label;
+    const sl=document.createElement('input'); sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001;
+    sl.value=S.macros[m].val; sl.setAttribute('data-ctrl','macro'+m);
+    const vv=document.createElement('div'); vv.className='mv'; vv.textContent=Math.round(S.macros[m].val*100)+'%';
+    sl.addEventListener('input',()=>{
+      setMacro(m,parseFloat(sl.value),sl);
+      vv.textContent=Math.round(S.macros[m].val*100)+'%';
+      /* sync the big sheet slider if open */
+      const big=document.querySelector('#sheet input[data-ctrl="macro'+m+'"]');
+      if(big&&big.classList.contains('macrobig')) big.value=sl.value;
+    });
+    CTRLS['macro'+m]={set:v=>{ setMacro(m,v); sl.value=v; vv.textContent=Math.round(v*100)+'%'; }, label:'Macro '+(m+1)+' '+S.macros[m].label};
+    wrap.appendChild(lab); wrap.appendChild(sl); wrap.appendChild(vv);
+    host.appendChild(wrap);
+  }
+}
 function buildMacrosSheet(body){
   body.appendChild(el('div','secttl','Performance Macros'));
   body.appendChild(el('div','hint','8 MIDI-mappable macro knobs — assign to any param.'));
