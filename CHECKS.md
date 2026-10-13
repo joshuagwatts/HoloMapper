@@ -903,3 +903,8 @@ Joshua: "resolume has like another slider for transition controls and wtf the fa
 - His ask: "Selecting anything in the tabs below like effects or macros or whatever pulls up like a big UI that like covers up what's happening so we need like a section for the properties and then like maybe just like a permanent four or eight knobs at the bottom".
 - What: 8 macro knobs now live PERMANENTLY at the bottom (above the dock), always visible, no sheet needed. Sheets reduced from 74dvh to 52dvh so the visual output stays visible when properties are open.
 - Verification: acorn 15/15 clean. **4/5 PASS** (5th was a test format issue — 438px = 52% of 844px viewport, correct): bar exists, 8 knobs, they control macros, zero page errors.
+
+## C1-C8 replaced with macro knobs (2026-10-12 — checks/colknobs.mjs)
+- His ask: "What the hell does c1 through whatever even do?" → "Replace those with the knobs".
+- What: the COLUMNS bar (C1-C8 scene launchers) is now a MACROS bar with 8 macro knobs. Column fire still works via MIDI (CTRLS['col'+k] preserved), just no UI buttons. Removed the redundant permanent macrobar from the previous commit.
+- Verification: acorn 15/15 clean. **7/7 PASS**: 8 knobs, C1-C8 gone, label MACROS, knobs work, MIDI preserved, zero page errors.
