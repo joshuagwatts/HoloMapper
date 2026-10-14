@@ -5039,13 +5039,13 @@ const FXLIST=[['feedback','Feedback'],['kaleido','Kaleidoscope'],['glitch','RGB 
 /* ---- FX chain definitions (v1.4): Resolume-style per-clip/per-layer/per-comp
    chains. Each instance {k:key, on:bool, v:{pid:0-1}} has OWN knobs. ---- */
 const FXDEFS=[
-  {group:'Warp', key:'kaleido', name:'Kaleido', sub:'kaleidoscope', params:[['P.kseg','Slices'],['P.kang','Spin']]},
-  {group:'Warp', key:'mirror', name:'Mirror', sub:'fold mirror', params:[['P.mirmode','Mode'],['P.mirpos','Position']]},
-  {group:'Time', key:'glitch', name:'RGB Split', sub:'glitchy color split', params:[['P.gamt','Amount']]},
-  {group:'Color', key:'colorize', name:'Colorize', sub:'duotone color', params:[['P.czpal','Palette'],['P.czamt','Amount'],['P.czhueA','Hue A'],['P.czhueB','Hue B']]},
-  {group:'Color', key:'grade', name:'Grade', sub:'color grade', params:[['P.bri','Brightness'],['P.con','Contrast'],['P.sat','Saturation'],['P.vig','Vignette'],['P.grain','Grain']]},
-  {group:'Look', key:'automask', name:'Auto Mask', sub:'luma/chroma key', params:[['P.ammode','Mode'],['P.amthr','Threshold'],['P.amsoft','Softness'],['P.amkey','Key Hue'],['P.aminv','Invert']]},
-  {group:'Look', key:'bloompost', name:'Bloom', sub:'glow bloom', params:[['P.blthr','Threshold'],['P.blstr','Strength']]},
+  {group:'Warp', key:'kaleido', name:'Kaleido', sub:'kaleidoscope', params:[['P.kseg','Segments'],['P.kang','Rotation']]},
+  {group:'Warp', key:'mirror', name:'Mirror', sub:'fold mirror', params:[['P.mirmode','Mirror Mode'],['P.mirpos','Fold Position']]},
+  {group:'Time', key:'glitch', name:'RGB Split', sub:'glitchy color split', params:[['P.gamt','Split Amount']]},
+  {group:'Color', key:'colorize', name:'Colorize', sub:'duotone color', params:[['P.czpal','Palette'],['P.czamt','Blend Amount'],['P.czhueA','Shadow Hue'],['P.czhueB','Highlight Hue']]},
+  {group:'Color', key:'grade', name:'Grade', sub:'color grade', params:[['P.bri','Brightness'],['P.con','Contrast'],['P.sat','Saturation'],['P.vig','Vignette'],['P.grain','Film Grain']]},
+  {group:'Look', key:'automask', name:'Auto Mask', sub:'luma/chroma key', params:[['P.ammode','Key Mode'],['P.amthr','Threshold'],['P.amsoft','Edge Softness'],['P.amkey','Key Hue'],['P.aminv','Invert Mask']]},
+  {group:'Look', key:'bloompost', name:'Bloom', sub:'glow bloom', params:[['P.blthr','Bloom Threshold'],['P.blstr','Bloom Strength']]},
 ];
 const FXCHAINABLE=FXDEFS.filter(f=>f.key);
 function makeFxInst(key){
