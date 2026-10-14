@@ -917,3 +917,13 @@ Joshua: "resolume has like another slider for transition controls and wtf the fa
   - Windows menu in topbar: checkbox list of all 7 panels — uncheck to hide, check to bring back. Hidden state persists. Reset layout now also restores hidden panels.
   - Migration: old v1 saved layouts with 'monitors' auto-split into output+preview in place.
 - Verification: acorn 20/20 clean. **15/15 + 7/7 + 5/5 PASS**, zero page errors: all panels render, layout matches spec, hide/show works, reset restores everything, v1 migration works, deck still fires clips after panel drags.
+
+## Desktop FX chains + drag-and-drop rack (2026-10-14 — checks/fxrack_desktop.mjs)
+- His ask: "RACK ME UP WITH THE EFFECTS and allow me to drag the effects and add them ontop of the sources in the deck"
+- What (desktop holomapper.html only):
+  - FX chain data model: S.layerFx[4], S.clipFx[4][8], S.compFx[] — each instance {k, on, v} with OWN knobs (Resolume-style, ported from mobile).
+  - 7 chainable FX: kaleido, mirror, glitch, colorize, grade, automask, bloompost (feedback skipped: temporal).
+  - Render: clip FX → layer FX applied in renderLayer (after source/graph); comp FX applied after post chain.
+  - Drag-and-drop: browser FX rows (⠿ draggable) drop onto deck clips (→ clip chain) or layer name headers (→ layer chain). Composition tab is also a drop target.
+  - FX rack UI: chain display in Clip inspector, Layer tab, and Composition tab — each FX with bypass, params (own knobs), remove, reorder up/down.
+- Verification: acorn 20/20 clean. **12/12 PASS**, zero page errors: data model, makeFxInst, drop handlers, rack renders with params, browser draggable, applyFxChain runs. Uniform spy confirms instance knobs reach shaders (u_seg=10, u_ang=1.57 from 0.75/0.25). Pixel-diff N/A headless (float targets) — his machine is ground truth.

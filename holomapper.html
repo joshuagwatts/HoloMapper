@@ -130,6 +130,23 @@ details.sec>summary .x{color:var(--dim);font-weight:400;font-size:10px;text-tran
 #plugok{color:var(--ok);font-size:11px;margin-top:6px}
 /* ---- shadertoy .txt drop (v1.4; per-clip highlight, 2026-10-11) ---- */
 .clip.drophl{border-color:var(--play);box-shadow:0 0 14px rgba(45,212,191,.75);outline:2px solid var(--play);outline-offset:-2px}
+.clip.fxdrop,.lname.fxdrop{outline:2px dashed var(--acc);outline-offset:-2px;background:rgba(45,212,191,.12)}
+.fxrack{display:flex;flex-direction:column;gap:8px}
+.fxcard{background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:8px}
+.fxcard.off{opacity:.45}
+.fxhead{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.fxname{flex:1;font-weight:700;font-size:12px}
+.fxbtn{min-width:24px;height:22px;padding:0 6px;font-size:11px;border-radius:4px;border:1px solid var(--line2);background:var(--panel);color:var(--txt);cursor:pointer}
+.fxbtn:hover{border-color:var(--acc)}
+.fxbtn.off{background:var(--panel);color:var(--dim)}
+.fxbtn.del{color:#ef4444}
+.fxparam{display:flex;align-items:center;gap:8px;margin:4px 0}
+.fxparam label{flex:0 0 70px;font-size:11px;color:var(--dim)}
+.fxparam input{flex:1;height:20px}
+.fxval{flex:0 0 52px;font-size:11px;text-align:right;color:var(--txt)}
+.fxrow.chainable{cursor:grab;border-left:2px solid var(--acc)}
+.fxrow.chainable:active{cursor:grabbing}
+.fxsep{padding:8px 6px 4px;font-size:10px;color:var(--dim);letter-spacing:.08em}
 .clip.drophl .cthumb,.clip.drophl .cname{color:#fff}
 #shtoast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:1000;display:flex;flex-direction:column;gap:8px;max-width:min(600px,92vw);}
 .sht{background:#14171d;border:1px solid var(--line);border-left:4px solid var(--ok);color:#e8ecf1;border-radius:10px;padding:10px 14px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.55);white-space:pre-wrap;word-break:break-word;max-height:38vh;overflow:auto;}
@@ -1553,6 +1570,9 @@ function defaultState(){
     params:params, assigns:{},
     postBypass:{feedback:false, kaleido:true, glitch:true, mirror:true, automask:true, colorize:true, bloompost:true},
     strobeOn:false, beatSync:false, bpm:120, blackout:false,
+    layerFx:[[],[],[],[]],
+    clipFx:[[],[],[],[]].map(()=>Array.from({length:8},()=>[])),
+    compFx:[],
     macros:Array.from({length:8},(_,i)=>({label:'M'+(i+1), val:0.5})),
     midi:[], pluginCode:PLUGIN_DEFAULT, imports:[], mods:defaultMods()
   };
@@ -1561,6 +1581,7 @@ let S = defaultState();
 try{
   const raw = localStorage.getItem(LS_STATE);
   if(raw){ const s=JSON.parse(raw); if(s && s.v===1) S=Object.assign(defaultState(), s); }
+  ensureFxChains();
   const mraw = localStorage.getItem(LS_MIDI);
   if(mraw){ const m=JSON.parse(mraw); if(Array.isArray(m)) S.midi=m; }
   /* rebind S.clips to the active deck (decks may come from saved state) */
@@ -3300,6 +3321,141 @@ function renderWebcam(i,t,T){
 }
 /* v1.3 node graph: renderLayerInto renders a layer source into any target.
    srcOv overrides the layer's fired source (used by Source nodes). */
+/* ---- FX chain appliers (v1.4): instance-based FX rendering ----
+   Each applier takes (T, inst, t): renders the FX onto target T in place.
+   Uses fxScratch as a ping-pong target. */
+let fxScratch=null;
+function ensureFxScratch(){
+  if(!fxScratch||!fxScratch.ok||fxScratch.w!==RW||fxScratch.h!==RH){
+    fxScratch=makeTarget(RW,RH);
+  }
+}
+function fxVal(inst,pid){
+  const v=(inst.v&&inst.v[pid]!==undefined)?inst.v[pid]:(PARAMS[pid]?PARAMS[pid].def:0.5);
+  return PARAMS[pid]?PARAMS[pid].map(v):v;
+}
+function fxCopyBack(T){
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
+  gl.viewport(0,0,T.w,T.h);
+  const P=PROG.copy; if(!P) return;
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,fxScratch.tex);
+  quadDraw();
+}
+function applyKaleidoChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.kaleido; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_seg'),fxVal(inst,'P.kseg'));
+  gl.uniform1f(U(P,'u_ang'),fxVal(inst,'P.kang'));
+  gl.uniform1f(U(P,'u_aspect'),fxScratch.w/fxScratch.h);
+  quadDraw();
+  fxCopyBack(T);
+}
+function applyGlitchChain(T,inst,t){
+  ensureFxScratch();
+  const P=PROG.glitch; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_amt'),fxVal(inst,'P.gamt'));
+  gl.uniform1f(U(P,'u_time'),t);
+  quadDraw();
+  fxCopyBack(T);
+}
+function applyMirrorChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.mirror; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_mode'),fxVal(inst,'P.mirmode'));
+  gl.uniform1f(U(P,'u_pos'),(inst.v&&inst.v['P.mirpos']!==undefined)?inst.v['P.mirpos']:0.5);
+  quadDraw();
+  fxCopyBack(T);
+}
+function applyAutoMaskChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.automask; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_mode'),fxVal(inst,'P.ammode'));
+  gl.uniform1f(U(P,'u_thr'),fxVal(inst,'P.amthr'));
+  gl.uniform1f(U(P,'u_soft'),fxVal(inst,'P.amsoft'));
+  gl.uniform1f(U(P,'u_keyhue'),fxVal(inst,'P.amkey'));
+  gl.uniform1f(U(P,'u_inv'),fxVal(inst,'P.aminv')>=0.5?1:0);
+  quadDraw();
+  fxCopyBack(T);
+}
+function applyColorizeChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.colorize; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_pal'),fxVal(inst,'P.czpal'));
+  gl.uniform1f(U(P,'u_amt'),(inst.v&&inst.v['P.czamt']!==undefined)?inst.v['P.czamt']:0.5);
+  gl.uniform1f(U(P,'u_hueA'),(inst.v&&inst.v['P.czhueA']!==undefined)?inst.v['P.czhueA']:0);
+  gl.uniform1f(U(P,'u_hueB'),(inst.v&&inst.v['P.czhueB']!==undefined)?inst.v['P.czhueB']:0.5);
+  quadDraw();
+  fxCopyBack(T);
+}
+function applyBloomChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.bloompost; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_thr'),fxVal(inst,'P.blthr'));
+  gl.uniform1f(U(P,'u_str'),fxVal(inst,'P.blstr'));
+  gl.uniform2f(U(P,'u_texel'),1/fxScratch.w,1/fxScratch.h);
+  quadDraw();
+  fxCopyBack(T);
+}
+function applyGradeChain(T,inst,t){
+  ensureFxScratch();
+  const P=PROG.grade; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_bri'),fxVal(inst,'P.bri'));
+  gl.uniform1f(U(P,'u_con'),fxVal(inst,'P.con'));
+  gl.uniform1f(U(P,'u_sat2'),fxVal(inst,'P.sat'));
+  gl.uniform1f(U(P,'u_vig'),fxVal(inst,'P.vig'));
+  gl.uniform1f(U(P,'u_grain'),fxVal(inst,'P.grain'));
+  gl.uniform1f(U(P,'u_time'),t);
+  gl.uniform1f(U(P,'u_master'),1);
+  gl.uniform1f(U(P,'u_strobeOn'),0);
+  quadDraw();
+  fxCopyBack(T);
+}
+/* Apply an FX chain to target T in place. Chain order is preserved. */
+function applyFxChain(T,chain,t){
+  if(!chain||!chain.length) return;
+  const active=chain.filter(x=>x&&x.on);
+  if(!active.length) return;
+  for(const inst of active){
+    if(inst.k==='kaleido') applyKaleidoChain(T,inst);
+    else if(inst.k==='glitch') applyGlitchChain(T,inst,t);
+    else if(inst.k==='mirror') applyMirrorChain(T,inst);
+    else if(inst.k==='automask') applyAutoMaskChain(T,inst);
+    else if(inst.k==='colorize') applyColorizeChain(T,inst);
+    else if(inst.k==='bloompost') applyBloomChain(T,inst);
+    else if(inst.k==='grade') applyGradeChain(T,inst,t);
+    /* feedback skipped: temporal, composition-only */
+  }
+}
+
 function renderLayerInto(i,t,T,srcOv,ignByp){
   gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
   gl.viewport(0,0,T.w,T.h);
@@ -3374,11 +3530,25 @@ function renderLayer(i,t){
     gl.clearColor(0,0,0,1);
     gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
     if(layerEnabled(i)){
-      try{ evalGraph(i,t); return; }
-      catch(err){ console.error('HoloMapper: node graph eval failed, fixed fallback',err); }
+      try{ evalGraph(i,t); }
+      catch(err){ console.error('HoloMapper: node graph eval failed, fixed fallback',err); renderLayerInto(i,t,T); }
+      /* v1.4: clip FX + layer FX chains (Resolume-style), applied after graph */
+      applyLayerFxChains(i,t,T);
+      return;
     } else return;
   }
   renderLayerInto(i,t,layerT[i]);
+  /* v1.4: clip FX + layer FX chains (Resolume-style) */
+  applyLayerFxChains(i,t,layerT[i]);
+}
+/* Apply clip FX (fired clip) then layer FX to the layer target */
+function applyLayerFxChains(i,t,T){
+  ensureFxChains();
+  const fired=S.fired[i];
+  if(fired!==null&&fired!==undefined&&S.clipFx[i]&&S.clipFx[i][fired]){
+    applyFxChain(T,S.clipFx[i][fired],t);
+  }
+  if(S.layerFx[i]) applyFxChain(T,S.layerFx[i],t);
 }
 /* ================= LAYER CLIP TRANSITIONS =================
    Per-layer crossfade (L{i}.trans, seconds, 0 = hard cut). Snapshot approach:
@@ -4083,6 +4253,28 @@ function buildVFader(i){
   });
   return root;
 }
+/* v1.4: FX drag-and-drop handlers */
+function dropFxOnClip(key,i,k){
+  ensureFxChains();
+  const inst=makeFxInst(key);
+  if(!inst){ toast('Unknown FX: '+key); return; }
+  if(!S.clipFx[i]) S.clipFx[i]=Array.from({length:8},()=>[]);
+  S.clipFx[i][k].push(inst);
+  saveState();
+  toast(fxInstLabel(inst)+' → '+LAYER_NAMES[i]+' Clip '+(k+1));
+  buildDeck(); /* refresh to show FX dot */
+  if(typeof refreshFxRack==='function') refreshFxRack();
+}
+function dropFxOnLayer(key,i){
+  ensureFxChains();
+  const inst=makeFxInst(key);
+  if(!inst){ toast('Unknown FX: '+key); return; }
+  S.layerFx[i].push(inst);
+  saveState();
+  toast(fxInstLabel(inst)+' → '+LAYER_NAMES[i]);
+  buildDeck();
+  if(typeof refreshFxRack==='function') refreshFxRack();
+}
 function buildDeck(){
   buildDeckTabs();
   buildColHead();
@@ -4125,6 +4317,17 @@ function buildDeck(){
     nm.title='Select layer (key '+(i+1)+') \u2014 double-click opens the node graph';
     nm.addEventListener('click',()=>selectLayer(i));
     nm.addEventListener('dblclick',(e)=>{ e.stopPropagation(); if(typeof openNodes==='function') openNodes(i); });
+    /* v1.4: FX drop target — drag FX from browser onto layer */
+    nm.addEventListener('dragover',(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; nm.classList.add('fxdrop'); });
+    nm.addEventListener('dragleave',()=>{ nm.classList.remove('fxdrop'); });
+    nm.addEventListener('drop',(e)=>{
+      e.preventDefault(); nm.classList.remove('fxdrop');
+      const data=e.dataTransfer.getData('text/plain');
+      if(data&&data.indexOf('fx:')===0){
+        const key=data.slice(3);
+        dropFxOnLayer(key,i);
+      }
+    });
     const bX=el('button','tbtn bClr'+(L.ejected?' onB':''),'X'); bX.title='Eject layer clip';
     bX.addEventListener('click',()=>ejectLayer(i));
     const bB=el('button','tbtn bByp'+(L.bypass?' onB':''),'B'); bB.title='Bypass layer (key B)';
@@ -4157,6 +4360,17 @@ function buildDeck(){
       c.setAttribute('data-ctrl','clip'+i+'.'+k);
       CTRLS['clip'+i+'.'+k]={set:((ii,kk)=>v=>{ if(v>=0.5) fireClip(ii,kk); })(i,k), label:'Fire '+LAYER_NAMES[i]+' clip '+(k+1)};
       c.addEventListener('contextmenu',(e)=>{ e.preventDefault(); showClipMenu(e.clientX,e.clientY,i,k); });
+      /* v1.4: FX drop target — drag FX from browser onto clip */
+      c.addEventListener('dragover',(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; c.classList.add('fxdrop'); });
+      c.addEventListener('dragleave',()=>{ c.classList.remove('fxdrop'); });
+      c.addEventListener('drop',(e)=>{
+        e.preventDefault(); c.classList.remove('fxdrop');
+        const data=e.dataTransfer.getData('text/plain');
+        if(data&&data.indexOf('fx:')===0){
+          const key=data.slice(3);
+          dropFxOnClip(key,i,k);
+        }
+      });
       grid.appendChild(c);
     }
     st.appendChild(grid);
@@ -4302,6 +4516,12 @@ function buildProps(){
   paramRow(wrap,p+'p1','Param 1'); paramRow(wrap,p+'p2','Param 2');
   paramRow(wrap,p+'trans','Transition');
   if(S.layers[i].src===4) buildClonerUI(wrap,i);
+  /* v1.4: FX rack — drag effects from Browser onto the layer header */
+  const fxsec=el('div','psec');
+  fxsec.appendChild(el('div','plab','FX Chain ('+S.layerFx[i].length+')'));
+  const fxhost=el('div'); fxsec.appendChild(fxhost);
+  buildFxRack(fxhost,S.layerFx[i],()=>buildProps());
+  host.appendChild(fxsec);
 }
 /* ================= CLIP INSPECTOR — 6th dockable panel =================
    The Clip inspector is a first-class dock panel (default: right column under
@@ -4327,6 +4547,72 @@ function renderClipEmpty(host){
   d.style.margin='12px 2px 4px'; host.appendChild(d);
   host.appendChild(mkHint('Click a clip name in the deck — its source, params and trigger controls land here.'));
 }
+/* ---- FX Rack (v1.4): Resolume-style chain display ----
+   buildFxRack(host, chain, onChange): renders the chain with per-instance
+   controls. Each instance has own knobs, bypass, remove, reorder. */
+function buildFxRack(host, chain, onChange){
+  ensureFxChains();
+  host.innerHTML='';
+  const wrap=el('div','fxrack');
+  if(!chain.length){
+    wrap.appendChild(el('div','dim','No FX — drag effects from the Browser onto this clip/layer.'));
+    host.appendChild(wrap);
+    return;
+  }
+  chain.forEach((inst,idx)=>{
+    const card=el('div','fxcard'+(inst.on?'':' off'));
+    const head=el('div','fxhead');
+    const nm=el('span','fxname',fxInstLabel(inst));
+    head.appendChild(nm);
+    /* reorder */
+    if(idx>0){
+      const up=el('button','fxbtn','▲'); up.title='Move up';
+      up.addEventListener('click',()=>{ chain.splice(idx-1,0,chain.splice(idx,1)[0]); saveState(); onChange(); });
+      head.appendChild(up);
+    }
+    if(idx<chain.length-1){
+      const dn=el('button','fxbtn','▼'); dn.title='Move down';
+      dn.addEventListener('click',()=>{ chain.splice(idx+1,0,chain.splice(idx,1)[0]); saveState(); onChange(); });
+      head.appendChild(dn);
+    }
+    /* bypass */
+    const by=el('button','fxbtn'+(inst.on?'':' off'),'B'); by.title='Bypass';
+    by.addEventListener('click',()=>{ inst.on=!inst.on; saveState(); onChange(); });
+    head.appendChild(by);
+    /* remove */
+    const del=el('button','fxbtn del','×'); del.title='Remove';
+    del.addEventListener('click',()=>{ chain.splice(idx,1); saveState(); onChange(); });
+    head.appendChild(del);
+    card.appendChild(head);
+    /* params (own knobs) */
+    const def=FXDEFS.find(f=>f.key===inst.k);
+    if(def) def.params.forEach(([pid,lab])=>{
+      const pdef=PARAMS[pid]; if(!pdef) return;
+      const pr=el('div','fxparam');
+      const pl=el('label',null,lab||pdef.label);
+      const vv=el('span','fxval',pdef.fmt(pdef.map(inst.v[pid]!==undefined?inst.v[pid]:pdef.def)));
+      const sl=document.createElement('input');
+      sl.type='range'; sl.min=0; sl.max=1; sl.step=0.001;
+      sl.value=inst.v[pid]!==undefined?inst.v[pid]:pdef.def;
+      sl.title=(lab||pdef.label)+' — '+fxInstLabel(inst);
+      sl.addEventListener('input',()=>{
+        inst.v[pid]=parseFloat(sl.value);
+        vv.textContent=pdef.fmt(pdef.map(inst.v[pid]));
+        saveState();
+      });
+      pr.appendChild(pl); pr.appendChild(sl); pr.appendChild(vv);
+      card.appendChild(pr);
+    });
+    wrap.appendChild(card);
+  });
+  host.appendChild(wrap);
+}
+/* Refresh all visible racks (called after drag-drop) */
+function refreshFxRack(){
+  buildClipInspector();
+  if(typeof buildProps==='function') buildProps();
+}
+
 function buildClipInspector(){
   const host=$('cibody'); if(!host) return; host.innerHTML='';
   const i=clipInsp.i, k=clipInsp.k;
@@ -4353,6 +4639,12 @@ function buildClipInspector(){
   host.appendChild(swrap);
   if(src!==null&&src!==undefined) buildClipParamSection(host,i,src);
   else host.appendChild(mkHint('This slot is empty. Pick a source above, then Fire.'));
+  /* v1.4: FX rack — drag effects from Browser onto the deck clip */
+  const fxsec=el('div','psec');
+  fxsec.appendChild(el('div','plab','FX Chain ('+S.clipFx[i][k].length+')'));
+  const fxhost=el('div'); fxsec.appendChild(fxhost);
+  buildFxRack(fxhost,S.clipFx[i][k],()=>buildClipInspector());
+  host.appendChild(fxsec);
   const tsec=el('div','psec');
   tsec.appendChild(el('div','plab','Trigger'));
   tsec.appendChild(el('div','dim','Quantize: '+(S.snap||'bar')+' \u2014 fires on the next boundary'));
@@ -4652,8 +4944,25 @@ function dialTitle(m){
 /* ---------- Composition tab ---------- */
 function buildCompTab(){
   const host=$('ptab-comp'); if(!host) return; host.innerHTML='';
+  /* v1.4: FX drop target */
+  host.addEventListener('dragover',(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
+  host.addEventListener('drop',(e)=>{
+    e.preventDefault();
+    const data=e.dataTransfer.getData('text/plain');
+    if(data&&data.indexOf('fx:')===0){
+      const key=data.slice(3);
+      const inst=makeFxInst(key);
+      if(inst){ ensureFxChains(); S.compFx.push(inst); saveState(); toast(fxInstLabel(inst)+' → Composition'); buildCompTab(); }
+    }
+  });
   const dd=el('div'); dd.id='dashdials'; host.appendChild(dd);
   host.appendChild(mkHint('Dashboard — drag any parameter label onto a dial. Double-click a dial to rename. Right-click a dial clears its assignments.'));
+  /* v1.4: FX rack — drag effects from Browser here, or onto the Composition tab */
+  const fxsec=el('div','psec');
+  fxsec.appendChild(el('div','plab','FX Chain ('+S.compFx.length+')'));
+  const fxhost=el('div'); fxsec.appendChild(fxhost);
+  buildFxRack(fxhost,S.compFx,()=>buildCompTab());
+  host.appendChild(fxsec);
   /* composition controls */
   const sComp=el('details','sec'); sComp.open=true;
   const sumC=el('summary'); sumC.innerHTML='Composition <span class="x">master + output</span>'; sComp.appendChild(sumC);
@@ -4727,8 +5036,54 @@ function buildCompTab(){
 }
 /* ---------- browser: effects / sources ---------- */
 const FXLIST=[['feedback','Feedback'],['kaleido','Kaleidoscope'],['glitch','RGB Split / Glitch'],['mirror','Mirror'],['automask','Auto Mask'],['colorize','Colorize'],['bloompost','Bloom'],['grade','Grade']];
+/* ---- FX chain definitions (v1.4): Resolume-style per-clip/per-layer/per-comp
+   chains. Each instance {k:key, on:bool, v:{pid:0-1}} has OWN knobs. ---- */
+const FXDEFS=[
+  {group:'Warp', key:'kaleido', name:'Kaleido', sub:'kaleidoscope', params:[['P.kseg','Slices'],['P.kang','Spin']]},
+  {group:'Warp', key:'mirror', name:'Mirror', sub:'fold mirror', params:[['P.mirmode','Mode'],['P.mirpos','Position']]},
+  {group:'Time', key:'glitch', name:'RGB Split', sub:'glitchy color split', params:[['P.gamt','Amount']]},
+  {group:'Color', key:'colorize', name:'Colorize', sub:'duotone color', params:[['P.czpal','Palette'],['P.czamt','Amount'],['P.czhueA','Hue A'],['P.czhueB','Hue B']]},
+  {group:'Color', key:'grade', name:'Grade', sub:'color grade', params:[['P.bri','Brightness'],['P.con','Contrast'],['P.sat','Saturation'],['P.vig','Vignette'],['P.grain','Grain']]},
+  {group:'Look', key:'automask', name:'Auto Mask', sub:'luma/chroma key', params:[['P.ammode','Mode'],['P.amthr','Threshold'],['P.amsoft','Softness'],['P.amkey','Key Hue'],['P.aminv','Invert']]},
+  {group:'Look', key:'bloompost', name:'Bloom', sub:'glow bloom', params:[['P.blthr','Threshold'],['P.blstr','Strength']]},
+];
+const FXCHAINABLE=FXDEFS.filter(f=>f.key);
+function makeFxInst(key){
+  const def=FXDEFS.find(f=>f.key===key);
+  if(!def) return null;
+  const v={};
+  def.params.forEach(([pid])=>{ v[pid]=PARAMS[pid]?PARAMS[pid].def:0.5; });
+  return {k:key, on:true, v};
+}
+function fxInstLabel(inst){
+  const def=FXDEFS.find(f=>f.key===inst.k);
+  return def?def.name:inst.k;
+}
+function ensureFxChains(){
+  if(!Array.isArray(S.layerFx)) S.layerFx=[[],[],[],[]];
+  while(S.layerFx.length<4) S.layerFx.push([]);
+  if(!Array.isArray(S.clipFx)) S.clipFx=[[],[],[],[]].map(()=>Array.from({length:8},()=>[]));
+  if(!Array.isArray(S.compFx)) S.compFx=[];
+}
 function buildFxBrowser(){
   const host=$('btab-fx'); if(!host) return; host.innerHTML='';
+  /* chainable FX (drag onto clips/layers) */
+  FXCHAINABLE.forEach(def=>{
+    const r=el('div','fxrow chainable');
+    r.draggable=true;
+    r.dataset.fxkey=def.key;
+    const nm=el('span','fxn','\u28ff '+def.name);
+    nm.title='Drag onto a deck clip or layer header to add to its FX chain';
+    r.appendChild(nm);
+    const tag=el('span','dim','drag me');
+    r.appendChild(tag);
+    r.addEventListener('dragstart',(e)=>{
+      e.dataTransfer.setData('text/plain','fx:'+def.key);
+      e.dataTransfer.effectAllowed='copy';
+    });
+    host.appendChild(r);
+  });
+  host.appendChild(el('div','fxsep','— Composition FX —'));
   FXLIST.forEach(([key,name])=>{
     const r=el('div','fxrow');
     const nm=el('span','fxn',name);
@@ -4745,7 +5100,7 @@ function buildFxBrowser(){
     r.addEventListener('click',()=>setPTab('comp'));
     host.appendChild(r);
   });
-  host.appendChild(mkHint('B toggles bypass. Click a row to open the Composition panel.'));
+  host.appendChild(mkHint('Drag \u28ff effects onto deck clips/layers. B toggles bypass. Click a row to open the Composition panel.'));
 }
 function buildSrcBrowser(){
   const host=$('btab-src'); if(!host) return; host.innerHTML='';
@@ -6783,6 +7138,18 @@ function loop(){
   pc=renderAutoMask(pc);
   pc=renderColorize(pc);
   pc=renderBloomPost(pc);
+  /* v1.4: composition FX chain (Resolume-style) — applied after post chain */
+  ensureFxChains();
+  if(S.compFx&&S.compFx.length){
+    ensureFxScratch();
+    /* copy pc to scratch, apply chain, use result */
+    gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+    gl.viewport(0,0,fxScratch.w,fxScratch.h);
+    const CP=PROG.copy; gl.useProgram(CP);
+    setTex(CP,'u_tex',0,pc); quadDraw();
+    applyFxChain(fxScratch,S.compFx,t);
+    pc=fxScratch.tex;
+  }
   renderGrade(pc,t);
   /* live clip preview: throttled to every 3rd frame (the readPixels stall was
      the dominant frame cost) and skipped while the node editor covers the deck.
