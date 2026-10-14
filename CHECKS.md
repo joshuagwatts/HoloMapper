@@ -908,3 +908,12 @@ Joshua: "resolume has like another slider for transition controls and wtf the fa
 - His ask: "What the hell does c1 through whatever even do?" → "Replace those with the knobs".
 - What: the COLUMNS bar (C1-C8 scene launchers) is now a MACROS bar with 8 macro knobs. Column fire still works via MIDI (CTRLS['col'+k] preserved), just no UI buttons. Removed the redundant permanent macrobar from the previous commit.
 - Verification: acorn 15/15 clean. **7/7 PASS**: 8 knobs, C1-C8 gone, label MACROS, knobs work, MIDI preserved, zero page errors.
+
+## Desktop layout rebuild: Windows menu + new default (2026-10-14 — checks/desktop_layout.mjs, desktop_migrate.mjs, desktop_func.mjs)
+- His ask: "reset layout gets rid of the preview and composition windows and i cant find like a windows panel to repopulate closed windows....cant find the clip layer or composition panels" + ideal default: "clip layer and comp panels on the right with another tab that has the sources below....and on the left is the layer grid deck...... and below the center is more info u need to make space with but the top middle its the images were projecting or whatever!"
+- What (desktop holomapper.html only):
+  - Split the old Monitors panel into two dockable panels: Output (the #gl projection canvas) and Preview (the #pv canvas). 7 panels now: deck/transport/output/preview/proptabs/browser/clip.
+  - New default layout: transport thin strip on top; left = deck (layer grid); center = Output on top (the projection, prominent) + Preview below; right = Properties (Composition/Layer/Clip tabs) on top + Browser (Effects/Sources) in middle + Clip inspector at bottom.
+  - Windows menu in topbar: checkbox list of all 7 panels — uncheck to hide, check to bring back. Hidden state persists. Reset layout now also restores hidden panels.
+  - Migration: old v1 saved layouts with 'monitors' auto-split into output+preview in place.
+- Verification: acorn 20/20 clean. **15/15 + 7/7 + 5/5 PASS**, zero page errors: all panels render, layout matches spec, hide/show works, reset restores everything, v1 migration works, deck still fires clips after panel drags.
