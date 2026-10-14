@@ -5491,8 +5491,10 @@ function shaderTranslate(code){
     return ST_DECL+body+'\nvoid main(){ mainImage(O, gl_FragCoord.xy); }\n';
   return body;
 }
-/* Reserved uniforms: never knobbed, never scanned as custom. */
-const SH_RESERVED=/^(iResolution|iTime|iTimeDelta|iFrame|iMouse|iDate|iSampleRate|iChannel[0-3]|u_[A-Za-z0-9_]*)$/;
+/* Reserved uniforms: never knobbed, never scanned as custom.
+   Only the engine's own uniforms are reserved — user shaders can use
+   u_* names freely (e.g. u_speed, u_color) and they'll get knobs. */
+const SH_RESERVED=/^(iResolution|iTime|iTimeDelta|iFrame|iMouse|iDate|iSampleRate|iChannel[0-3]|u_time|u_res|u_beat|u_hue|u_speed|u_param1|u_param2|u_audioBass|u_audioMid|u_audioHigh)$/;
 /* Uniform scanner: float -> slider (0-1), int -> stepped slider (0-10),
    bool -> toggle, vec2/3/4 -> per-component sliders (0-1 each).
    Returns descriptors {name, type, init}. An initializer sets the knob
