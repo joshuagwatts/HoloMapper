@@ -648,13 +648,12 @@ body.perform #performbar{display:block}
 <!-- phone pair overlay -->
 <div id="pair"><div class="box">
   <h2>Pair your phone</h2>
-  <div id="pairstat" class="hint">Enable <b>Phone remote</b> first, then the QR appears here.</div>
+  <div id="pairstat" class="hint">Generating pairing code…</div>
   <div id="pairqr"></div>
   <div id="pairurl" class="hint" style="word-break:break-all"></div>
-  <div class="hint">1. On this laptop run <b>python bridge.py</b> (port 8090)<br>
-  2. Phone + laptop on the <b>same Wi-Fi</b><br>
-  3. Scan the QR with the phone camera — the remote opens already connected.<br>
-  No typing needed.</div>
+  <div class="hint">1. Scan the QR with the phone camera<br>
+  2. The remote opens already connected.<br>
+  No typing needed. No Python needed.</div>
   <div id="pairlans" class="hint"></div>
   <div class="krow"><button id="btnPairClose">Close</button><button id="btnPairCopy">Copy URL</button></div>
 </div></div>
@@ -7272,13 +7271,51 @@ function prmHandle(m){
     case 'blackout': S.blackout=!!m.on; broadcastState(); saveState(); break;
   }
 }
+/* ---------- P2P phone pairing (Trystero, no bridge.py needed) ---------- */
+let p2pRoom=null, p2pSendFn=null, p2pCode='', p2pOnPeer=null;
+const P2P_APP='holomapper-v1';
+function p2pGenCode(){
+  const abc='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let c=''; for(let i=0;i<6;i++) c+=abc[Math.floor(Math.random()*abc.length)];
+  return c;
+}
+async function p2pStart(){
+  p2pStop();
+  p2pCode=p2pGenCode();
+  try{
+    const {joinRoom}=await import('https://esm.sh/@trystero-p2p/nostr@0.25.4');
+    const room=joinRoom({appId:P2P_APP}, 'hm-'+p2pCode);
+    p2pRoom=room;
+    const [sendMsg, onMsg]=room.makeAction('hm');
+    p2pSendFn=sendMsg;
+    onMsg((data,peerId)=>{ prmHandle(data); });
+    room.onPeerJoin(()=>{ if(p2pOnPeer) p2pOnPeer(true); prmStatus('phone linked ('+p2pCode+')'); broadcastState(); });
+    room.onPeerLeave(()=>{ if(p2pOnPeer) p2pOnPeer(false); });
+    prmStatus('pairing code '+p2pCode+' — scan QR');
+    renderPair();
+    return true;
+  }catch(e){
+    prmStatus('P2P failed — check network');
+    return false;
+  }
+}
+function p2pStop(){
+  if(p2pRoom){ try{ p2pRoom.leave(); }catch(e){} p2pRoom=null; }
+  p2pSendFn=null; p2pCode='';
+}
+function p2pSend(o){ if(p2pSendFn){ try{ p2pSendFn(o); }catch(e){} } }
+function p2pRemoteUrl(){
+  return p2pCode ? 'https://joshuagwatts.github.io/HoloMapper/remote.html#r='+p2pCode : '';
+}
 function broadcastState(){
-  if(!prmOn || !prmWs || prmWs.readyState!==1) return;
-  prmSend({type:'state',
+  const st={type:'state',
     macros:S.macros.map(m=>({label:m.label,val:+m.val.toFixed(3)})),
     ops:[0,1,2,3].map(i=>+eff('L'+i+'.op').toFixed(3)),
     trails:+eff('P.trails').toFixed(3),
-    blackout:!!S.blackout, bpm:S.bpm});
+    blackout:!!S.blackout, bpm:S.bpm};
+  p2pSend(st);
+  if(!prmOn || !prmWs || prmWs.readyState!==1) return;
+  prmSend(st);
 }
 function presetStep(dir){
   const names=Object.keys(getPresets()).sort();
@@ -7293,16 +7330,17 @@ function presetStep(dir){
 }
 /* pair screen */
 function renderPair(){
-  const has=!!prmRemoteUrl;
+  const url=p2pRemoteUrl()||prmRemoteUrl;
+  const has=!!url;
   $('pairstat').innerHTML=has
-    ? 'Scan with your phone camera — the remote opens already connected:'
-    : 'Enable <b>Phone remote</b> first (bridge.py must be running), then the QR appears here.';
-  $('pairurl').textContent=prmRemoteUrl||'';
+    ? 'Scan with your phone camera — the remote opens already connected:'+(p2pCode?'<br>Code: <b>'+p2pCode+'</b>':'')
+    : 'Starting P2P pairing…';
+  $('pairurl').textContent=url||'';
   const qr=$('pairqr'); qr.innerHTML='';
   if(has){
     try{
       if(typeof QRCode==='undefined') throw new Error('no qr lib');
-      new QRCode(qr,{text:prmRemoteUrl,width:200,height:200,correctLevel:QRCode.CorrectLevel.M});
+      new QRCode(qr,{text:url,width:200,height:200,correctLevel:QRCode.CorrectLevel.M});
     }catch(e){ qr.innerHTML='<span class="hint">QR renderer unavailable</span>'; }
   }
   $('pairlans').textContent=prmLanUrls.length
@@ -7311,7 +7349,12 @@ function renderPair(){
 function togglePair(force){
   const p=$('pair');
   const show=(force!==undefined)?force:!p.classList.contains('show');
-  if(show) renderPair();
+  if(show){
+    if(!p2pCode) p2pStart().then(()=>renderPair());
+    else renderPair();
+  } else {
+    p2pStop();
+  }
   p.classList.toggle('show',show);
 }
 </script>

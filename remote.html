@@ -238,10 +238,27 @@ function scheduleRetry(){
   clearTimeout(retryTimer);
   retryTimer=setTimeout(connect,d);
 }
+let p2pSendFn=null;
 function send(obj){
   const line=JSON.stringify(obj);
   if(MOCK){ tlog('SEND '+line); return; }
+  if(p2pSendFn){ try{ p2pSendFn(obj); }catch(e){} }
   if(ws && ws.readyState===1) ws.send(line);
+}
+/* P2P via Trystero — room code from #r=CODE (QR pairing, no bridge.py) */
+async function p2pConnect(code){
+  setDot('try','linking…');
+  try{
+    const {joinRoom}=await import('https://esm.sh/@trystero-p2p/nostr@0.25.4');
+    const room=joinRoom({appId:'holomapper-v1'}, 'hm-'+code);
+    const [sendMsg, onMsg]=room.makeAction('hm');
+    p2pSendFn=sendMsg;
+    onMsg((data,peerId)=>{ onEngineMsg(data); });
+    room.onPeerJoin(()=>{ setDot('on','connected'); });
+    room.onPeerLeave(()=>{ setDot('try','engine left — waiting…'); });
+  }catch(e){
+    setDot('off','P2P failed — check network');
+  }
 }
 
 /* ---------------- engine -> remote state ---------------- */
@@ -409,7 +426,11 @@ function runSelftest(){
 }
 
 /* ---------------- init ---------------- */
-connect();
+(function(){
+  const m=(location.hash||'').match(/#r=([A-Z0-9]{6})/i);
+  if(m && !MOCK){ p2pConnect(m[1].toUpperCase()); }
+  else connect();
+})();
 if(SELFTEST) setTimeout(runSelftest,400);
 </script>
 </body>
