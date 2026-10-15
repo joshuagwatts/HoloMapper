@@ -1288,7 +1288,7 @@ const PLUGIN_DEFAULT =
 '// Entry point: void main() { ... O = vec4(color, 1.0); }\n' +
 'void main(){\n' +
 '  vec2 uv = (gl_FragCoord.xy - 0.5*u_res)/u_res.y;\n' +
-'  float t = u_time*u_speed;\n' +
+'  float t = u_time;\n' +
 '  vec2 p = uv*3.0;\n' +
 '  p += 0.9*vec2(sin(p.y*2.0 + t*1.1), cos(p.x*2.0 - t*1.4));\n' +
 '  float v = sin(p.x*2.2 + t*2.0) + sin(p.y*1.8 - t*1.5) + sin((p.x+p.y)*1.6 + t*0.7);\n' +
@@ -1814,7 +1814,7 @@ float fbm(vec2 p){
 const SRC_TUNNEL = `
 void main(){
   vec2 uv = (gl_FragCoord.xy-0.5*u_res)/u_res.y;
-  float t = u_time*u_speed;
+  float t = u_time;
   float r = length(uv);
   float a = atan(uv.y,uv.x);
   float pulse = 1.0 + u_audioBass*1.1 + u_beat*0.45;
@@ -1836,7 +1836,7 @@ void main(){
 const SRC_FLOW = `
 void main(){
   vec2 uv = (gl_FragCoord.xy-0.5*u_res)/u_res.y;
-  float t = u_time*u_speed;
+  float t = u_time;
   vec2 p = uv*(2.0+u_param1*3.5);
   for(int i=0;i<3;i++){
     float fi = float(i);
@@ -1857,7 +1857,7 @@ void main(){
 const SRC_NEBULA = `
 void main(){
   vec2 uv = (gl_FragCoord.xy-0.5*u_res)/u_res.y;
-  float t = u_time*u_speed*0.3;
+  float t = u_time*0.3;
   vec2 p = uv*(1.6+u_param1*2.4);
   float q = fbm(p+vec2(t*0.7,0.0));
   float w = fbm(p*1.6 - q*1.4 + vec2(5.2+t*0.4,1.3));
@@ -3533,10 +3533,14 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
   let sp = PARAMS['L'+i+'.speed'].map(eff('L'+i+'.speed'));
   if(S.beatSync) sp=snapBeat(sp);
   gl.useProgram(prog);
-  /* imported shaders: Time Speed ramps the pace via accumulated time
-     (not t*speed, which jumps the timeline when speed changes). */
+  /* Time ramping: accumulate per-layer/per-import time so speed changes
+     ramp the pace instead of jumping the timeline. */
+  if(!S.layerTime) S.layerTime={};
   let tEff=t;
-  if(sidx>=5&&sidx<camIdx()){
+  if(sidx>=0&&sidx<4){
+    S.layerTime['L'+i]=(S.layerTime['L'+i]||0)+sp*shDt;
+    tEff=S.layerTime['L'+i];
+  }else if(sidx>=5&&sidx<camIdx()){
     const tsid='SH'+sidx+'.timeSpeed';
     if(!PARAMS[tsid]) registerImportParams(sidx);
     if(!S.impTime) S.impTime={};
