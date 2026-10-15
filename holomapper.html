@@ -4606,7 +4606,13 @@ function buildDeck(){
         th.appendChild(tlb);
       }
       th.title=(src===null||src===undefined?'Empty slot \u2014 right-click to assign a source':'TRIGGER '+srcName(src)+' on '+LAYER_NAMES[i]+' (quantized: '+(S.snap||'bar')+')');
-      th.addEventListener('click',()=>{ fireClip(i,k); openClipInspector(i,k); });
+      th.addEventListener('click',()=>{
+        if(src===null||src===undefined){
+          /* empty clip: deselect */
+          S.sel=null; saveState(); buildDeck(); buildProps();
+          if(typeof closeClipInspector==='function') closeClipInspector();
+        }else{ fireClip(i,k); openClipInspector(i,k); }
+      });
       const cnm=el('div','cname',src===null||src===undefined?'empty':srcName(src));
       cnm.title='Select clip '+(k+1)+' without triggering';
       cnm.addEventListener('click',(e)=>{ e.stopPropagation(); selectClip(i,k); openClipInspector(i,k); });
