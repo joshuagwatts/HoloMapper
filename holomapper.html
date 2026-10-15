@@ -238,8 +238,10 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .gbtn{background:#2a3444;color:#e2e8f2;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;margin-right:4px}
 .gbtn:hover{background:#22d3ee;color:#08090c}
 .glayers{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
-.glab{font-size:11px;color:#8b95a8;display:flex;align-items:center;gap:4px;cursor:pointer}
-.glab input{cursor:pointer}
+.gempty{font-size:11px;color:#5a6577;font-style:italic}
+.gchip{display:inline-flex;align-items:center;gap:6px;background:#1a2130;border:1px solid #2a3444;border-radius:12px;padding:3px 8px;font-size:11px;color:#e2e8f2}
+.gx{background:none;border:none;color:#8b95a8;font-size:13px;cursor:pointer;padding:0;line-height:1}
+.gx:hover{color:#f0524d}
 .lgut{padding:4px 6px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:3px;min-width:0}
 .lrow1{display:flex;align-items:center;gap:4px}
 .lname{font-weight:800;font-size:11px;min-width:28px;text-align:center;cursor:pointer;border:1px solid transparent;
@@ -4512,19 +4514,15 @@ function buildGroups(host){
     const del=el('button','gbtn','×'); del.title='Delete group';
     del.addEventListener('click',()=>{ S.groups.splice(gi,1); saveState(); buildDeck(); });
     gd.appendChild(del);
-    /* layer assignment */
+    /* member layers — drag layer headers here to add; click × to remove */
     const lr=el('div','glayers');
-    for(let i=0;i<numLayers();i++){
-      const lb=el('label','glab');
-      const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=g.layers.indexOf(i)>=0;
-      cb.addEventListener('change',()=>{
-        if(cb.checked){ if(g.layers.indexOf(i)<0) g.layers.push(i); }
-        else{ g.layers=g.layers.filter(x=>x!==i); }
-        saveState(); buildDeck();
-      });
-      lb.appendChild(cb); lb.appendChild(document.createTextNode(LAYER_NAMES[i]));
-      lr.appendChild(lb);
-    }
+    if(!g.layers.length) lr.appendChild(el('span','gempty','drop layers here'));
+    g.layers.forEach(li=>{
+      const chip=el('span','gchip',LAYER_NAMES[li]||('L'+(li+1)));
+      const x=el('button','gx','×'); x.title='Remove from group';
+      x.addEventListener('click',(e)=>{ e.stopPropagation(); g.layers=g.layers.filter(y=>y!==li); saveState(); buildDeck(); });
+      chip.appendChild(x); lr.appendChild(chip);
+    });
     gd.appendChild(lr);
     gs.appendChild(gd);
   });
