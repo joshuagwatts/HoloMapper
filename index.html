@@ -3633,6 +3633,16 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
     gl.uniform1f(U(prog,'iTimeDelta'),shDt);
     gl.uniform1i(U(prog,'iFrame'),shFrame);
     gl.uniform4f(U(prog,'iMouse'),shMouse[0],shMouse[1],shMouse[2],shMouse[3]);
+    /* iChannel0..3 texture inputs */
+    for(let ch=0;ch<4;ch++){
+      const loc=gl.getUniformLocation(prog,'iChannel'+ch);
+      if(loc){
+        gl.activeTexture(gl.TEXTURE4+ch);
+        gl.bindTexture(gl.TEXTURE_2D,getIchTex(ch));
+        gl.uniform1i(loc,4+ch);
+      }
+    }
+    gl.activeTexture(gl.TEXTURE0);
   }
   if(sidx>=5&&sidx<camIdx()){ /* auto-knob uniforms, per scanShaderUniforms */
     const im=S.imports[sidx-5];
@@ -5871,6 +5881,57 @@ function shaderTranslate(code){
     return ST_DECL+body+'\nvoid main(){ mainImage(O, gl_FragCoord.xy); }\n';
   return body;
 }
+/* iChannel default textures: procedural noise/gradient, like Shadertoy's defaults.
+   Stored in ICH_TEX[0..3] as WebGL textures. User can override via UI. */
+let ICH_TEX=[null,null,null,null];
+let ICH_IMG=[null,null,null,null]; /* user-assigned HTMLImageElement or null */
+function makeIchTex(idx){
+  const sz=256, cv=document.createElement('canvas'); cv.width=cv.height=sz;
+  const g=cv.getContext('2d'), img=g.createImageData(sz,sz), d=img.data;
+  let seed=1234+idx*777;
+  const rnd=()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; };
+  for(let y=0;y<sz;y++)for(let x=0;x<sz;x++){
+    const o=(y*sz+x)*4;
+    if(idx===0){ /* value noise */
+      const v=Math.floor(rnd()*255);
+      d[o]=d[o+1]=d[o+2]=v; d[o+3]=255;
+    }else if(idx===1){ /* gradient */
+      d[o]=Math.floor(x/sz*255); d[o+1]=Math.floor(y/sz*255); d[o+2]=128; d[o+3]=255;
+    }else if(idx===2){ /* checker */
+      const c=((x>>5)+(y>>5))%2?255:0;
+      d[o]=d[o+1]=d[o+2]=c; d[o+3]=255;
+    }else{ /* plasma */
+      const v=Math.floor(128+127*Math.sin(x*0.1)*Math.cos(y*0.1));
+      d[o]=v; d[o+1]=Math.floor(v*0.7); d[o+2]=Math.floor(255-v); d[o+3]=255;
+    }
+  }
+  g.putImageData(img,0,0);
+  const tex=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,cv);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  return tex;
+}
+function getIchTex(idx){
+  if(ICH_IMG[idx]){
+    /* user image — upload once, cache */
+    if(!ICH_IMG[idx]._tex){
+      const tex=gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D,tex);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,ICH_IMG[idx]);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+      ICH_IMG[idx]._tex=tex;
+    }
+    return ICH_IMG[idx]._tex;
+  }
+  if(!ICH_TEX[idx]) ICH_TEX[idx]=makeIchTex(idx);
+  return ICH_TEX[idx];
+}
 /* Reserved uniforms: never knobbed, never scanned as custom.
    Only the engine's own uniforms are reserved — user shaders can use
    u_* names freely (e.g. u_speed, u_color) and they'll get knobs. */
@@ -6040,10 +6101,7 @@ function importShader(name, code){
   const conv=convertConstFloats(raw);
   code=conv.code;
   for(let k=0;k<S.imports.length;k++) if(S.imports[k].code===code||S.imports[k].code===raw) return 5+k;
-  if(/iChannel\d/.test(code)){
-    lastGlslErr='iChannel0..3 texture inputs are not supported by this loader (no texture inputs yet).';
-    return -1;
-  }
+  /* iChannel0..3 supported — bound to default procedural textures (or user-assigned) */
   lastGlslErr='';
   let pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
   let defs=conv.defs;
