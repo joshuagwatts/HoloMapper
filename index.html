@@ -66,6 +66,10 @@ input[type=checkbox]{accent-color:var(--sel);width:13px;height:13px}
 .dockhead .dgrip{font-size:11px;letter-spacing:3px;line-height:1;color:var(--dim)}
 .dockhead:hover .dgrip{color:var(--acc2)}
 .dockpanel.dragsrc{opacity:.35}
+.dockhdiv{height:6px;flex:none;cursor:ns-resize;background:transparent;position:relative;z-index:5}
+.dockhdiv:hover{background:rgba(45,212,191,.25)}
+.dockhdiv::after{content:'';position:absolute;left:0;right:0;top:2px;height:2px;background:var(--line)}
+.dockhdiv:hover::after{background:var(--acc)}
 .dockbody{flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;position:relative}
 .dockbody>#gridzone,.dockbody>#outmonwrap,.dockbody>#pvmonwrap,.dockbody>#proptabs,.dockbody>#browser,.dockbody>#clipinsp{flex:1 1 auto;min-height:0;min-width:0}
 .dockbody>#transport{flex:1 1 auto;min-height:0}
@@ -764,10 +768,15 @@ function dockRender(){
         r.appendChild(dv);
       }
       const c=el('div','dockcol');c.style.flex=dockFlexDim(col.w);col._el=c;c._mcol=col;
-      for(const p of col.panels){
+      col.panels.forEach((p,pi)=>{
+        if(pi>0){
+          const dh=el('div','dockhdiv');dh.title='Drag to resize panels';
+          dh.addEventListener('pointerdown',(e)=>dockHDivDown(e,c,pi-1,pi));
+          c.appendChild(dh);
+        }
         const w=dockWraps[p.id];w.style.flex=dockFlexDim(p.size||'1fr');
         c.appendChild(w);
-      }
+      });
       r.appendChild(c);
     });
     main.appendChild(r);
@@ -797,6 +806,31 @@ function dockDivDown(e){
     window.removeEventListener('pointerup',up);
     window.removeEventListener('pointercancel',up);
     dv.classList.remove('on');dockSave();
+  };
+  window.addEventListener('pointermove',move);
+  window.addEventListener('pointerup',up);
+  window.addEventListener('pointercancel',up);
+}
+function dockHDivDown(e,colEl,pi1,pi2){
+  e.preventDefault(); e.stopPropagation();
+  const panels=[...colEl.querySelectorAll(':scope > .dockpanel')];
+  const top=panels[pi1], bot=panels[pi2];
+  if(!top||!bot) return;
+  const th=top.getBoundingClientRect().height, bh=bot.getBoundingClientRect().height;
+  top.style.flex='0 0 '+Math.max(60,Math.round(th))+'px';
+  bot.style.flex='0 0 '+Math.max(60,Math.round(bh))+'px';
+  const dv=e.currentTarget; dv.classList.add('on');
+  const sy=e.clientY;
+  const move=(ev)=>{
+    const d=ev.clientY-sy;
+    const nth=Math.max(60,Math.round(th+d)), nbh=Math.max(60,Math.round(bh-d));
+    top.style.flex='0 0 '+nth+'px'; bot.style.flex='0 0 '+nbh+'px';
+  };
+  const up=()=>{
+    window.removeEventListener('pointermove',move);
+    window.removeEventListener('pointerup',up);
+    window.removeEventListener('pointercancel',up);
+    dv.classList.remove('on'); dockSave();
   };
   window.addEventListener('pointermove',move);
   window.addEventListener('pointerup',up);
