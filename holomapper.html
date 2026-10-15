@@ -232,6 +232,7 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .groups{margin-top:6px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px}
 .ghead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:12px;font-weight:600;color:#e2e8f2}
 .group{background:#0e1117;border:1px solid #232b38;border-radius:6px;padding:8px;margin-bottom:6px}
+.group.gdrop{outline:2px dashed #22d3ee;outline-offset:-2px;background:rgba(34,211,238,.12)}
 .gname{background:#161b24;border:1px solid #2a3444;color:#e2e8f2;font-size:12px;padding:4px 8px;border-radius:4px;width:120px;margin-right:8px}
 .gop{width:100px;vertical-align:middle;margin-right:8px}
 .gbtn{background:#2a3444;color:#e2e8f2;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;margin-right:4px}
@@ -4485,6 +4486,18 @@ function buildGroups(host){
   gh.appendChild(nb); gs.appendChild(gh);
   (S.groups||[]).forEach((g,gi)=>{
     const gd=el('div','group');
+    gd.addEventListener('dragover',(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; gd.classList.add('gdrop'); });
+    gd.addEventListener('dragleave',()=>gd.classList.remove('gdrop'));
+    gd.addEventListener('drop',(e)=>{
+      e.preventDefault(); gd.classList.remove('gdrop');
+      const li=e.dataTransfer.getData('text/hm-layer');
+      if(li!==''&&!isNaN(parseInt(li,10))){
+        const idx=parseInt(li,10);
+        S.groups.forEach(gg=>{ gg.layers=gg.layers.filter(x=>x!==idx); });
+        if(g.layers.indexOf(idx)<0) g.layers.push(idx);
+        saveState(); buildDeck();
+      }
+    });
     const nm=document.createElement('input'); nm.type='text'; nm.value=g.name; nm.className='gname';
     nm.addEventListener('change',()=>{ g.name=nm.value.slice(0,16)||('Group '+(gi+1)); saveState(); });
     gd.appendChild(nm);
@@ -4570,7 +4583,9 @@ function buildDeck(){
     const gut=el('div','lgut');
     const r1=el('div','lrow1');
     const nm=el('button','lname','L'+(i+1));
-    nm.title='Select layer (key '+(i+1)+') \u2014 double-click opens the node graph';
+    nm.title='Select layer (key '+(i+1)+') \u2014 double-click opens the node graph \u2014 drag into a group';
+    nm.draggable=true;
+    nm.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/hm-layer',String(i)); e.dataTransfer.effectAllowed='move'; });
     nm.addEventListener('click',()=>selectLayer(i));
     nm.addEventListener('dblclick',(e)=>{ e.stopPropagation(); if(typeof openNodes==='function') openNodes(i); });
     /* v1.4: FX drop target — drag FX from browser onto layer */
