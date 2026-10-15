@@ -149,6 +149,7 @@ details.sec>summary .x{color:var(--dim);font-weight:400;font-size:10px;text-tran
 /* ---- shadertoy .txt drop (v1.4; per-clip highlight, 2026-10-11) ---- */
 .clip.drophl{border-color:var(--play);box-shadow:0 0 14px rgba(45,212,191,.75);outline:2px solid var(--play);outline-offset:-2px}
 .clip.fxdrop,.lname.fxdrop{outline:2px dashed var(--acc);outline-offset:-2px;background:rgba(45,212,191,.12)}
+.clip.msel{outline:2px solid var(--sel);outline-offset:-2px}
 .fxrack{display:flex;flex-direction:column;gap:8px}
 .fxcard{background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:8px}
 .fxcard.off{opacity:.45}
@@ -1597,7 +1598,7 @@ function defaultState(){
   for(const id in PARAMS) params[id]=PARAMS[id].def;
   return {
     v:1, quality:'auto', selLayer:0, sel:{kind:'layer', i:0}, graphs:null,
-    numLayers:4, groups:[],
+    numLayers:4, groups:[], clipSel:[],
     layers:[
       {src:0, blend:0, bypass:false, solo:false, ejected:false},
       {src:2, blend:2, bypass:false, solo:false, ejected:false},
@@ -4513,6 +4514,46 @@ function setNumLayers(n){
   if(S.selLayer>=n){ S.selLayer=n-1; S.sel={kind:'layer', i:n-1}; }
   saveState(); buildDeck(); buildProps();
 }
+let clipClipboard=null; /* {mode:'copy'|'cut', clips:[{src, fx}]} */
+function toggleClipSel(i,k,additive){
+  if(!S.clipSel) S.clipSel=[];
+  const idx=S.clipSel.findIndex(c=>c.i===i&&c.k===k);
+  if(additive){
+    if(idx>=0) S.clipSel.splice(idx,1);
+    else S.clipSel.push({i,k});
+  }else{
+    S.clipSel=(idx>=0&&S.clipSel.length===1)?[]:[{i,k}];
+  }
+  saveState(); buildDeck();
+}
+function copyClips(cut){
+  if(!S.clipSel||!S.clipSel.length) return;
+  clipClipboard={mode:cut?'cut':'copy', clips:S.clipSel.map(c=>({
+    src:S.clips[c.i][c.k],
+    fx:JSON.parse(JSON.stringify((S.clipFx[c.i]&&S.clipFx[c.i][c.k])||[]))
+  }))};
+  if(cut){
+    S.clipSel.forEach(c=>{ S.clips[c.i][c.k]=null; if(S.clipFx[c.i]) S.clipFx[c.i][c.k]=[]; });
+    S.clipSel=[];
+  }
+  saveState(); buildDeck();
+  toast((cut?'Cut ':'Copied ')+clipClipboard.clips.length+' clip(s)');
+}
+function pasteClips(ti,tk){
+  if(!clipClipboard||!clipClipboard.clips.length) return;
+  /* paste starting at target, wrapping rows */
+  clipClipboard.clips.forEach((cc,n)=>{
+    const di=ti+Math.floor((tk+n)/8), dk=(tk+n)%8;
+    if(di<numLayers()&&S.clips[di]){
+      S.clips[di][dk]=cc.src;
+      if(S.clipFx[di]) S.clipFx[di][dk]=JSON.parse(JSON.stringify(cc.fx));
+    }
+  });
+  const n=clipClipboard.clips.length;
+  if(clipClipboard.mode==='cut') clipClipboard=null;
+  saveState(); buildDeck();
+  toast('Pasted '+n+' clip(s)');
+}
 function buildDeck(){
   buildDeckTabs();
   buildColHead();
@@ -4597,7 +4638,8 @@ function buildDeck(){
     if(!S.clips[i]) S.clips[i]=Array.from({length:8},()=>null);
     for(let k=0;k<8;k++){
       const src=S.clips[i][k];
-      const c=el('div','clip'+(src===null||src===undefined?' empty':'')+((S.fired[i]===k)?' fired':'')+((S.sel&&S.sel.kind==='clip'&&S.sel.i===i&&S.sel.c===k)?' selc':''));
+      const isMulti=S.clipSel&&S.clipSel.some(cc=>cc.i===i&&cc.k===k);
+      const c=el('div','clip'+(src===null||src===undefined?' empty':'')+((S.fired[i]===k)?' fired':'')+((S.sel&&S.sel.kind==='clip'&&S.sel.i===i&&S.sel.c===k)?' selc':'')+(isMulti?' msel':''));
       c.dataset.i=i; c.dataset.k=k;
       const th=el('div','cthumb');
       if(src===null||src===undefined){ th.textContent='+'; }
@@ -4618,7 +4660,11 @@ function buildDeck(){
       });
       const cnm=el('div','cname',src===null||src===undefined?'empty':srcName(src));
       cnm.title='Select clip '+(k+1)+' without triggering';
-      cnm.addEventListener('click',(e)=>{ e.stopPropagation(); selectClip(i,k); openClipInspector(i,k); });
+      cnm.addEventListener('click',(e)=>{
+        e.stopPropagation();
+        if(e.ctrlKey||e.metaKey||e.shiftKey){ toggleClipSel(i,k,true); }
+        else{ selectClip(i,k); openClipInspector(i,k); toggleClipSel(i,k,false); }
+      });
       c.appendChild(th); c.appendChild(cnm);
       c.setAttribute('data-ctrl','clip'+i+'.'+k);
       CTRLS['clip'+i+'.'+k]={set:((ii,kk)=>v=>{ if(v>=0.5) fireClip(ii,kk); })(i,k), label:'Fire '+LAYER_NAMES[i]+' clip '+(k+1)};
@@ -6378,6 +6424,14 @@ function wireStatic(){
     const t=e.target;
     if(t && (t.matches('input,textarea,select') || t.isContentEditable)) return;
     const k=e.key;
+    if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='c'){ e.preventDefault(); copyClips(false); return; }
+    if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='x'){ e.preventDefault(); copyClips(true); return; }
+    if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='v'){
+      e.preventDefault();
+      if(S.sel&&S.sel.kind==='clip') pasteClips(S.sel.i,S.sel.c);
+      else if(S.selLayer!==undefined) pasteClips(S.selLayer,0);
+      return;
+    }
     if(k==='f'||k==='F') toggleFullscreen();
     else if(k==='p'||k==='P') togglePerform();
     else if(k==='m'||k==='M') setLearn(!learnArmed);
