@@ -1678,6 +1678,8 @@ try{
 if(['auto','high','medium','low'].indexOf(S.quality)<0) S.quality='auto';
 /* v1.4: imported shaders are first-class sources (S.imports). Sanitize. */
 if(!Array.isArray(S.imports)) S.imports=[];
+/* v1.4: imported videos (S.videos: {name, url, el}) */
+if(!Array.isArray(S.videos)) S.videos=[];
 if(!S.mods||typeof S.mods!=='object') S.mods={};
 S.imports=S.imports.filter(im=>im&&typeof im.name==='string'&&typeof im.code==='string');
 /* variable layers: extend old 4-layer states to MAX_LAYERS */
@@ -3470,6 +3472,24 @@ function camSlate(){
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
   camSlateTex=t; return t;
 }
+function renderVideo(i,sidx,t,T){
+  const vi=videoIdx(sidx), v=S.videos[vi];
+  if(!v||!v.el||v.el.readyState<2) return;
+  if(!v._tex){ v._tex=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,v._tex);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  }
+  gl.bindTexture(gl.TEXTURE_2D,v._tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,v.el);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+  const P=PROG.copy;
+  if(!P) return;
+  gl.useProgram(P); setTex(P,'u_tex',0,v._tex);
+  quadDraw();
+}
 function renderWebcam(i,t,T){
   gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
   if(camState==='live'&&camVideo&&camVideo.readyState>=2&&camTex){
@@ -3628,6 +3648,7 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
   const sidx=(srcOv===undefined)?S.layers[i].src:srcOv;
   if(sidx===4){ renderCloner(i,t,T); return; }
   if(sidx===camIdx()){ renderWebcam(i,t,T); return; }
+  if(isVideoSrc(sidx)){ renderVideo(i,sidx,t,T); return; }
   gl.clearColor(0,0,0,1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   if(!ignByp && !layerEnabled(i)) return;
@@ -5518,6 +5539,17 @@ function buildFxBrowser(){
 function buildSrcBrowser(){
   const host=$('btab-src'); if(!host) return; host.innerHTML='';
   host.appendChild(mkHint('Drag a source onto any clip to assign it.'));
+  const vb=el('button','srcrow');
+  vb.appendChild(el('span','sdot'));
+  vb.appendChild(el('span',null,'+ Import Video'));
+  vb.title='Import a video file (mp4/webm/mov)';
+  vb.addEventListener('click',()=>{
+    const inp=document.createElement('input');
+    inp.type='file'; inp.accept='video/*';
+    inp.onchange=()=>{ if(inp.files[0]) importVideo(inp.files[0]); };
+    inp.click();
+  });
+  host.appendChild(vb);
   srcOptions().forEach((s,si)=>{
     const b=el('button','srcrow');
     b.appendChild(el('span','sdot'));
@@ -5526,10 +5558,20 @@ function buildSrcBrowser(){
     b.draggable=true;
     b.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/hm-src',String(si)); e.dataTransfer.effectAllowed='copy'; });
     host.appendChild(b);
-    if(si>=5){ /* imported shader: × removes it (clips/layers remapped) */
+    if(si>=5&&si<5+S.imports.length){ /* imported shader: × removes it */
       const x=el('button','srcdel','\u2715');
       x.title='Remove imported source "'+s+'"';
       x.addEventListener('click',(e)=>{ e.stopPropagation(); removeImport(si-5); });
+      b.appendChild(x);
+    }else if(isVideoSrc(si)){
+      const x=el('button','srcdel','\u2715');
+      x.title='Remove video "'+s+'"';
+      x.addEventListener('click',(e)=>{
+        e.stopPropagation();
+        const vi=videoIdx(si);
+        if(S.videos[vi]){ URL.revokeObjectURL(S.videos[vi].url); S.videos.splice(vi,1); }
+        saveState(); buildSrcBrowser(); buildDeck();
+      });
       b.appendChild(x);
     }
   });
@@ -5886,7 +5928,7 @@ if(!PROG.imports) PROG.imports=[];
    so old presets and localStorage (which store absolute indices) never
    shift. srcCount() grows by one; removeImport() already decrements any
    src > dead, which keeps webcam clips pointing at the webcam. */
-function camIdx(){ return 5+S.imports.length; }
+function camIdx(){ return 5+S.imports.length+S.videos.length; }
 function srcCount(){ return 6+S.imports.length; }
 function srcName(s){
   s|=0;
@@ -5965,6 +6007,15 @@ function getIchTex(idx){
   }
   if(!ICH_TEX[idx]) ICH_TEX[idx]=makeIchTex(idx);
   return ICH_TEX[idx];
+}
+function importVideo(file){
+  const url=URL.createObjectURL(file);
+  const el=document.createElement('video');
+  el.src=url; el.loop=true; el.muted=true; el.playsInline=true;
+  el.play().catch(()=>{});
+  S.videos.push({name:file.name.replace(/\.[^.]+$/,''), url, el});
+  saveState(); buildSrcBrowser();
+  toast('Video imported: '+file.name);
 }
 /* Reserved uniforms: never knobbed, never scanned as custom.
    Only the engine's own uniforms are reserved — user shaders can use
