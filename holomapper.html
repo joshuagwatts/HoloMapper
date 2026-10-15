@@ -4588,6 +4588,7 @@ function buildDeck(){
     gut.appendChild(r1);
     st.appendChild(gut);
     const grid=el('div','clipgrid');
+    if(!S.clips[i]) S.clips[i]=Array.from({length:8},()=>null);
     for(let k=0;k<8;k++){
       const src=S.clips[i][k];
       const c=el('div','clip'+(src===null||src===undefined?' empty':'')+((S.fired[i]===k)?' fired':'')+((S.sel&&S.sel.kind==='clip'&&S.sel.i===i&&S.sel.c===k)?' selc':''));
