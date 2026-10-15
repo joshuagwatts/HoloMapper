@@ -1928,7 +1928,6 @@ uniform sampler2D u_l[8];
 uniform float u_op[8];
 uniform float u_blend[8];
 uniform float u_en[8];
-uniform int u_nlayer;
 vec3 applyBlend(vec3 d, vec3 s, int m){
   if(m==1) return d+s;
   if(m==2) return 1.0-(1.0-d)*(1.0-s);
@@ -1944,7 +1943,6 @@ vec3 applyBlend(vec3 d, vec3 s, int m){
 void main(){
   vec3 acc = vec3(0.0);
   for(int i=0;i<8;i++){
-    if(i>=u_nlayer) break;
     vec3 s = texture(u_l[i],v_uv).rgb;
     acc = mix(acc, applyBlend(acc,s,int(u_blend[i]+0.5)), u_op[i]*u_en[i]);
   }
@@ -3712,6 +3710,7 @@ function renderCombine(){
   gl.useProgram(P);
   for(let i=0;i<numLayers();i++) setTex(P,'u_l['+i+']',i,layerT[i].tex);
   const op=_cbOp,bl=_cbBl,en=_cbEn;
+  for(let i=0;i<8;i++){ op[i]=0; bl[i]=0; en[i]=0; }
   for(let i=0;i<numLayers();i++){
     op[i]=eff('L'+i+'.op')*groupOpacity(i);
     bl[i]=S.layers[i].blend;
@@ -3720,7 +3719,7 @@ function renderCombine(){
   gl.uniform1fv(U(P,'u_op'),op);
   gl.uniform1fv(U(P,'u_blend'),bl);
   gl.uniform1fv(U(P,'u_en'),en);
-  gl.uniform1i(U(P,'u_nlayer'),numLayers());
+
   quadDraw();
 }
 function renderFeedback(){
