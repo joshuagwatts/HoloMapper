@@ -207,9 +207,9 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .vfad{position:relative;flex:1;min-height:80px;max-height:100%;width:36px;cursor:ns-resize;touch-action:none;
   outline:none;border-radius:6px;flex:none;overflow:hidden}
 .vfad:focus-visible{box-shadow:0 0 0 2px var(--sel)}
-.vfad-track{position:absolute;left:50%;top:2px;bottom:2px;width:10px;transform:translateX(-50%);
+.vfad-track{position:absolute;left:50%;top:12px;bottom:12px;width:10px;transform:translateX(-50%);
   background:#0b0c0f;border:1px solid var(--line);border-radius:5px;pointer-events:none}
-.vfad-fill{position:absolute;left:50%;bottom:2px;width:10px;transform:translateX(-50%);
+.vfad-fill{position:absolute;left:50%;bottom:12px;width:10px;transform:translateX(-50%);
   background:#3aa76d;border-radius:5px;pointer-events:none}
 .vfad-handle{position:absolute;left:50%;transform:translate(-50%,50%);width:36px;height:22px;
   background:#3aa76d;border:1px solid #3aa76d;border-radius:6px;pointer-events:none}
@@ -4437,8 +4437,8 @@ function buildVFader(i){
   const cur=()=> (S.params[id]!==undefined)?S.params[id]:1;
   const paint=(v)=>{
     const p=clamp(v,0,1)*100;
-    fill.style.height='calc('+p+'% - 2px)';
-    han.style.bottom=p+'%';
+    fill.style.height='calc(12px + '+p+'% * 0.01 * (100% - 24px) - 2px)';
+    han.style.bottom='calc(12px + '+p+'% * 0.01 * (100% - 24px) - 11px)';
     root.setAttribute('aria-valuenow',String(Math.round(p)));
     const fv=root.parentElement&&root.parentElement.querySelector('.fval');
     if(fv) fv.textContent=Math.round(p)+'%';
@@ -4447,8 +4447,8 @@ function buildVFader(i){
   paint(cur());
   const setFromY=(clientY)=>{
     const r=root.getBoundingClientRect();
-    if(r.height<=0) return;
-    const v=clamp(1-(clientY-r.top)/r.height,0,1);
+    if(r.height<=24) return;
+    const v=clamp(1-(clientY-r.top-12)/(r.height-24),0,1);
     setParam(id,v,root);
     paint(v);
   };
