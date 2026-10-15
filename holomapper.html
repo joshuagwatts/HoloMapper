@@ -225,6 +225,10 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .tsl{width:44px;margin:0;cursor:ew-resize}
 .tval{font-size:8px;font-weight:800;color:var(--dim);line-height:1}
 .lstrip.sel{border-color:var(--sel)}
+.layerctl{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px}
+.lbtn{width:28px;height:28px;font-size:18px;background:#2a3444;color:#e2e8f2;border:none;border-radius:4px;cursor:pointer}
+.lbtn:hover{background:#22d3ee;color:#08090c}
+.lcount{font-size:12px;color:#8b95a8;flex:1;text-align:center}
 .lgut{padding:4px 6px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:3px;min-width:0}
 .lrow1{display:flex;align-items:center;gap:4px}
 .lname{font-weight:800;font-size:11px;min-width:28px;text-align:center;cursor:pointer;border:1px solid transparent;
@@ -1307,8 +1311,10 @@ function defParam(id, label, defN, map, fmt){
     map: map || (v=>v),
     fmt: fmt || (v=>Math.round(v*100)+'%') };
 }
-const LAYER_NAMES = ['L1','L2','L3','L4'];
-const LAYER_HUES  = [0.02, 0.38, 0.62, 0.15];
+const MAX_LAYERS = 8;
+const LAYER_NAMES = Array.from({length:MAX_LAYERS},(_,i)=>'L'+(i+1));
+const LAYER_HUES  = [0.02, 0.38, 0.62, 0.15, 0.5, 0.8, 0.3, 0.7];
+function numLayers(){ return Math.min(MAX_LAYERS, Math.max(1, S.numLayers||4)); }
 const LAYER_SRC   = ['Tunnel','Flow Field','Nebula','Plugin','Cloner 3D'];
 const BLENDS      = ['Normal','Add','Screen','Multiply','Overlay','Difference'];
 /* Cloner 3D option lists (shared by param defs and UI builders) */
@@ -1317,7 +1323,7 @@ const CL_MESHES=['Icosahedron','Torus Knot','Box','Tetra','Torus','Cone','Cylind
 const CL_FALLS=['Infinite','Linear','Sphere','Box'];
 const CL_SND=['Bass','Mid','High','Beat'];
 const CL_PLANES=['XY','XZ','YZ'];
-for(let i=0;i<4;i++){
+for(let i=0;i<MAX_LAYERS;i++){
   const p = 'L'+i+'.';
   defParam(p+'op',   LAYER_NAMES[i]+' Opacity', 1,   v=>v, v=>Math.round(v*100)+'%');
   defParam(p+'speed',LAYER_NAMES[i]+' Speed',   0.5, v=>v*2, v=>(v*2).toFixed(2)+'x');
@@ -1341,10 +1347,10 @@ const clTglFmt=v=>(v>=0.5?'on':'off');
    loop keeps reading S.layers[i].src; PARAM_HOOKS (registered in the deck
    section below) mirrors the param into it. */
 const SRC_DEF=[0, 0.5, 0.25, 0.75]; /* default src index /4 per layer */
-for(let i=0;i<4;i++){
+for(let i=0;i<MAX_LAYERS;i++){
   defParam('L'+i+'.src', LAYER_NAMES[i]+' Source', SRC_DEF[i], v=>srcIdxMap(v), v=>srcIdxFmt(v));
 }
-for(let i=0;i<4;i++){
+for(let i=0;i<MAX_LAYERS;i++){
   const c='L'+i+'.cl', LB=LAYER_NAMES[i]+' ';
   /* cloner mode */
   defParam(c+'Mode',LB+'Cloner Mode',0, clDiscMap(3), clDiscFmt(CL_MODES));
@@ -1472,7 +1478,7 @@ for(let i=0;i<4;i++){
   }
 }
 /* discrete option counts, so discVal() works even before the UI is built */
-for(let i=0;i<4;i++){
+for(let i=0;i<MAX_LAYERS;i++){
   const c='L'+i+'.cl';
   PARAMS[c+'Mode'].nopts=3; PARAMS[c+'Plane'].nopts=3;
   PARAMS[c+'Mesh'].nopts=14; PARAMS[c+'PFall'].nopts=4; PARAMS[c+'SndSrc'].nopts=4;
@@ -1511,7 +1517,7 @@ defParam('P.czhueA','CZ Hue A',0.05, v=>v, v=>Math.round(v*360)+'\u00B0');
 defParam('P.czhueB','CZ Hue B',0.13, v=>v, v=>Math.round(v*360)+'\u00B0');
 defParam('P.blthr','Bloom Thr',0.55, v=>v*2.5, v=>(v*2.5).toFixed(2));
 defParam('P.blstr','Bloom Str',0.4, v=>v*3, v=>(v*3).toFixed(2));
-for(let i=0;i<4;i++) defParam('L'+i+'.camFlip',LAYER_NAMES[i]+' Cam Flip',1, v=>v, clTglFmt);
+for(let i=0;i<MAX_LAYERS;i++) defParam('L'+i+'.camFlip',LAYER_NAMES[i]+' Cam Flip',1, v=>v, clTglFmt);
 /* discrete option counts for the new mode params */
 PARAMS['P.mirmode'].nopts=3; PARAMS['P.ammode'].nopts=2; PARAMS['P.czpal'].nopts=5;
 
@@ -1526,7 +1532,7 @@ function defaultMod(){
 }
 function defaultMods(){
   const a=[];
-  for(let i=0;i<4;i++){ const l=[]; for(let m=0;m<6;m++) l.push(defaultMod()); a.push(l); }
+  for(let i=0;i<MAX_LAYERS;i++){ const l=[]; for(let m=0;m<6;m++) l.push(defaultMod()); a.push(l); }
   return a;
 }
 function sanitizeMods(m){
@@ -1554,12 +1560,12 @@ function sanitizeMods(m){
 }
 function defaultClips(){
   const c=[];
-  for(let i=0;i<4;i++){ const r=[]; for(let k=0;k<8;k++) r.push(k<5?k:null); c.push(r); }
+  for(let i=0;i<MAX_LAYERS;i++){ const r=[]; for(let k=0;k<8;k++) r.push(k<5?k:null); c.push(r); }
   return c;
 }
 function validClips(c){
-  if(!Array.isArray(c)||c.length!==4) return null;
-  for(let i=0;i<4;i++){
+  if(!Array.isArray(c)||c.length!==MAX_LAYERS) return null;
+  for(let i=0;i<MAX_LAYERS;i++){
     if(!Array.isArray(c[i])||c[i].length!==8) return null;
     for(let k=0;k<8;k++){ const v=c[i][k]; if(v!==null&&(typeof v!=='number'||v<0||!Number.isInteger(v))) return null; }
   }
@@ -1570,20 +1576,25 @@ function defaultState(){
   for(const id in PARAMS) params[id]=PARAMS[id].def;
   return {
     v:1, quality:'auto', selLayer:0, sel:{kind:'layer', i:0}, graphs:null,
+    numLayers:4,
     layers:[
       {src:0, blend:0, bypass:false, solo:false, ejected:false},
       {src:2, blend:2, bypass:false, solo:false, ejected:false},
       {src:1, blend:1, bypass:false, solo:false, ejected:false},
-      {src:3, blend:1, bypass:true,  solo:false, ejected:false}
+      {src:3, blend:1, bypass:true,  solo:false, ejected:false},
+      {src:0, blend:0, bypass:true,  solo:false, ejected:false},
+      {src:0, blend:0, bypass:true,  solo:false, ejected:false},
+      {src:0, blend:0, bypass:true,  solo:false, ejected:false},
+      {src:0, blend:0, bypass:true,  solo:false, ejected:false}
     ],
-    clips:defaultClips(), fired:[null,null,null,null], snap:'bar',
+    clips:defaultClips(), fired:Array(MAX_LAYERS).fill(null), snap:'bar',
     decks:[{name:'SOURCES',clips:defaultClips()},{name:'HOLOWATTS',clips:defaultClips()}],
     deckIdx:0, autopilot:false,
     params:params, assigns:{}, mods:{},
     postBypass:{feedback:false, kaleido:true, glitch:true, mirror:true, automask:true, colorize:true, bloompost:true},
     strobeOn:false, beatSync:false, bpm:120, blackout:false, knobSmooth:0,
-    layerFx:[[],[],[],[]],
-    clipFx:[[],[],[],[]].map(()=>Array.from({length:8},()=>[])),
+    layerFx:Array.from({length:MAX_LAYERS},()=>[]),
+    clipFx:Array.from({length:MAX_LAYERS},()=>Array.from({length:8},()=>[])),
     compFx:[],
     macros:Array.from({length:8},(_,i)=>({label:'M'+(i+1), val:0.5})),
     midi:[], pluginCode:PLUGIN_DEFAULT, imports:[], mods:defaultMods()
@@ -1610,6 +1621,14 @@ if(['auto','high','medium','low'].indexOf(S.quality)<0) S.quality='auto';
 if(!Array.isArray(S.imports)) S.imports=[];
 if(!S.mods||typeof S.mods!=='object') S.mods={};
 S.imports=S.imports.filter(im=>im&&typeof im.name==='string'&&typeof im.code==='string');
+/* variable layers: extend old 4-layer states to MAX_LAYERS */
+if(!S.numLayers||S.numLayers<1||S.numLayers>MAX_LAYERS) S.numLayers=4;
+while(S.layers.length<MAX_LAYERS) S.layers.push({src:0, blend:0, bypass:true, solo:false, ejected:false});
+while(S.fired.length<MAX_LAYERS) S.fired.push(null);
+while(S.layerFx.length<MAX_LAYERS) S.layerFx.push([]);
+while(S.clipFx.length<MAX_LAYERS) S.clipFx.push(Array.from({length:8},()=>[]));
+if(S.clips.length<MAX_LAYERS){ const dc=defaultClips(); while(S.clips.length<MAX_LAYERS) S.clips.push(dc[S.clips.length]); }
+S.decks.forEach(dk=>{ while(dk.clips.length<MAX_LAYERS) dk.clips.push(Array.from({length:8},()=>null)); });
 /* content wave: normalize postBypass for states saved before the new FX existed */
 if(!S.postBypass||typeof S.postBypass!=='object') S.postBypass={};
 for(const k of ['mirror','automask','colorize','bloompost']) if(S.postBypass[k]===undefined) S.postBypass[k]=true;
@@ -1748,7 +1767,7 @@ function modValue(i,m,t){
 /* Rebuild MOD_OFF once per frame, before any renderLayer call. */
 function evalModulators(t){
   for(const k in MOD_OFF) delete MOD_OFF[k];
-  for(let i=0;i<4;i++){
+  for(let i=0;i<MAX_LAYERS;i++){
     for(let m=0;m<6;m++){
       const L=MOD_LETTERS[m], cfg=S.mods[i][m];
       if(!cfg.targets.length) continue;
@@ -1884,13 +1903,11 @@ const SRC_COMBINE = `#version 300 es
 precision highp float;
 out vec4 O;
 in vec2 v_uv;
-uniform sampler2D u_l0;
-uniform sampler2D u_l1;
-uniform sampler2D u_l2;
-uniform sampler2D u_l3;
-uniform vec4 u_op;
-uniform vec4 u_blend;
-uniform vec4 u_en;
+uniform sampler2D u_l[8];
+uniform float u_op[8];
+uniform float u_blend[8];
+uniform float u_en[8];
+uniform int u_nlayer;
 vec3 applyBlend(vec3 d, vec3 s, int m){
   if(m==1) return d+s;
   if(m==2) return 1.0-(1.0-d)*(1.0-s);
@@ -1905,14 +1922,11 @@ vec3 applyBlend(vec3 d, vec3 s, int m){
 }
 void main(){
   vec3 acc = vec3(0.0);
-  vec3 s = texture(u_l0,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend.x+0.5)), u_op.x*u_en.x);
-  s = texture(u_l1,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend.y+0.5)), u_op.y*u_en.y);
-  s = texture(u_l2,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend.z+0.5)), u_op.z*u_en.z);
-  s = texture(u_l3,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend.w+0.5)), u_op.w*u_en.w);
+  for(int i=0;i<8;i++){
+    if(i>=u_nlayer) break;
+    vec3 s = texture(u_l[i],v_uv).rgb;
+    acc = mix(acc, applyBlend(acc,s,int(u_blend[i]+0.5)), u_op[i]*u_en[i]);
+  }
   O = vec4(acc,1.0);
 }
 `;
@@ -2292,7 +2306,7 @@ function buildTargets(){
   canvas.width=BASE_W; canvas.height=BASE_H;
   RW=Math.max(2,Math.round(BASE_W*effScale()));
   RH=Math.max(2,Math.round(BASE_H*effScale()));
-  layerT=[makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true),makeTarget(RW,RH,true)];
+  layerT=Array.from({length:MAX_LAYERS},()=>makeTarget(RW,RH,true));
   compT=makeTarget(RW,RH);
   fbT=[makeTarget(RW,RH),makeTarget(RW,RH)];
   postT=[makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH),makeTarget(RW,RH)];
@@ -3658,22 +3672,23 @@ function renderTransMix(i,now){
   gl.blitFramebuffer(0,0,Mx.w,Mx.h,0,0,L.w,L.h,gl.COLOR_BUFFER_BIT,gl.NEAREST);
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
 }
-const _cbOp=[0,0,0,0], _cbBl=[0,0,0,0], _cbEn=[0,0,0,0]; /* reused per frame: no allocs */
+const _cbOp=new Float32Array(8), _cbBl=new Float32Array(8), _cbEn=new Float32Array(8); /* reused per frame: no allocs */
 function renderCombine(){
   const P=PROG.combine;
   gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
   gl.viewport(0,0,compT.w,compT.h);
   gl.useProgram(P);
-  for(let i=0;i<4;i++) setTex(P,'u_l'+i,i,layerT[i].tex);
+  for(let i=0;i<numLayers();i++) setTex(P,'u_l['+i+']',i,layerT[i].tex);
   const op=_cbOp,bl=_cbBl,en=_cbEn;
-  for(let i=0;i<4;i++){
+  for(let i=0;i<numLayers();i++){
     op[i]=eff('L'+i+'.op');
     bl[i]=S.layers[i].blend;
     en[i]=layerEnabled(i)?1:0;
   }
-  gl.uniform4fv(U(P,'u_op'),op);
-  gl.uniform4fv(U(P,'u_blend'),bl);
-  gl.uniform4fv(U(P,'u_en'),en);
+  gl.uniform1fv(U(P,'u_op'),op);
+  gl.uniform1fv(U(P,'u_blend'),bl);
+  gl.uniform1fv(U(P,'u_en'),en);
+  gl.uniform1i(U(P,'u_nlayer'),numLayers());
   quadDraw();
 }
 function renderFeedback(){
@@ -3928,7 +3943,7 @@ function processPending(){
 }
 function fireColumn(k){
   S.firedCol=k;
-  for(let i=0;i<4;i++){ if(S.clips[i][k]!==null&&S.clips[i][k]!==undefined) quantizeFire(i,k); }
+  for(let i=0;i<numLayers();i++){ if(S.clips[i][k]!==null&&S.clips[i][k]!==undefined) quantizeFire(i,k); }
   syncDeckSel(); saveState();
 }
 /* ================= DECKS =================
@@ -3976,7 +3991,7 @@ function buildDeckTabs(){
   const add=el('button','decktab add','+');
   add.title='New empty deck';
   add.addEventListener('click',()=>{
-    const empty=[]; for(let i=0;i<4;i++){ const r=[]; for(let k=0;k<8;k++) r.push(null); empty.push(r); }
+    const empty=[]; for(let i=0;i<MAX_LAYERS;i++){ const r=[]; for(let k=0;k<8;k++) r.push(null); empty.push(r); }
     S.decks.push({name:'DECK '+(S.decks.length+1), clips:empty});
     saveState(); buildDeckTabs();
   });
@@ -3999,7 +4014,7 @@ function autopilotTick(){
   if(cur!==apLastQ){
     apLastQ=cur;
     const k=(S.firedCol===null||S.firedCol===undefined)?0:(S.firedCol+1)%8;
-    for(let i=0;i<4;i++){ const src=S.clips[i][k]; if(src!==null&&src!==undefined) fireClipNow(i,k); }
+    for(let i=0;i<numLayers();i++){ const src=S.clips[i][k]; if(src!==null&&src!==undefined) fireClipNow(i,k); }
     S.firedCol=k; syncDeckSel();
   }
 }
@@ -4257,7 +4272,7 @@ document.addEventListener('click',(e)=>{ const p=$('modpop'); if(p&&!p.contains(
    layer THROUGH setParam('L{i}.src') so MIDI learn / macro / preset / phone
    remote integration keeps working. PARAM_HOOKS mirrors the param into
    S.layers[i].src (which the render loop reads) and refreshes highlights. */
-for(let i=0;i<4;i++){
+for(let i=0;i<MAX_LAYERS;i++){
   PARAM_HOOKS['L'+i+'.src']=[((ii)=>()=>{
     const pk='L'+ii+'.src';
     const v=(S.params[pk]!==undefined)?S.params[pk]:SRC_DEF[ii];
@@ -4435,11 +4450,24 @@ function dropFxOnLayer(key,i){
   buildDeck();
   if(typeof refreshFxRack==='function') refreshFxRack();
 }
+function setNumLayers(n){
+  n=Math.min(MAX_LAYERS, Math.max(1, n));
+  if(n===S.numLayers) return;
+  S.numLayers=n;
+  if(S.selLayer>=n){ S.selLayer=n-1; S.sel={kind:'layer', i:n-1}; }
+  saveState(); buildDeck(); buildProps();
+}
 function buildDeck(){
   buildDeckTabs();
   buildColHead();
   const host=$('deck'); host.innerHTML='';
-  for(let di=3;di>=0;di--){ /* Layer 1 sits at the BOTTOM of the stack, like Resolume */
+  /* layer +/- controls */
+  const lc=el('div','layerctl');
+  const lm=el('button','lbtn','−'); lm.title='Remove layer'; lm.addEventListener('click',()=>setNumLayers(numLayers()-1));
+  const lp=el('button','lbtn','+'); lp.title='Add layer'; lp.addEventListener('click',()=>setNumLayers(numLayers()+1));
+  const lct=el('span','lcount',numLayers()+' layers');
+  lc.appendChild(lm); lc.appendChild(lct); lc.appendChild(lp); host.appendChild(lc);
+  for(let di=numLayers()-1;di>=0;di--){ /* Layer 1 sits at the BOTTOM of the stack, like Resolume */
     const i=di, L=S.layers[i];
     const st=el('div','lstrip'+((S.sel&&S.sel.kind==='layer'&&S.sel.i===i)?' sel':''));
     st.dataset.i=i;
@@ -4539,7 +4567,7 @@ function buildDeck(){
   if(typeof refreshClipInspector==='function') refreshClipInspector();
   /* thumbnails: repaint cached pixels into the fresh canvases, queue the rest */
   if(typeof queueThumbs==='function'){
-    for(let qi=0;qi<4;qi++) for(let qk=0;qk<8;qk++){
+    for(let qi=0;qi<numLayers();qi++) for(let qk=0;qk<8;qk++){
       const qs=S.clips[qi][qk];
       if(typeof qs==='number') paintThumb(qi,qk,qs);
     }
@@ -4940,7 +4968,7 @@ const CL_LAYOUT_IDS=['Mode','CntX','CntY','CntZ','SpX','SpY','SpZ','RCnt','Rad',
    even when that layer's cloner UI isn't built (UI only builds for layers
    with src == Cloner 3D). Bound CCs then work regardless of visible UI;
    discreteRow/toggleRow re-register the same semantics when the UI builds. */
-for(let _ri=0;_ri<4;_ri++){
+for(let _ri=0;_ri<numLayers();_ri++){
   const _rp='L'+_ri+'.cl';
   Object.keys(PARAMS).forEach(_pid=>{
     if(_pid.indexOf(_rp)===0 && !CTRLS[_pid]){
@@ -4954,7 +4982,7 @@ for(let _ri=0;_ri<4;_ri++){
    cloner param flags that layer's instance buffer for rebuild; Mode changes
    also retoggle the conditional subgroups. This covers MIDI, phone remote,
    macro, and preset-driven changes — not just direct UI interaction. */
-for(let _hi=0;_hi<4;_hi++){
+for(let _hi=0;_hi<numLayers();_hi++){
   const _pre='L'+_hi+'.cl';
   CL_LAYOUT_IDS.forEach(suf=>{
     const _id=_pre+suf;
@@ -5120,7 +5148,7 @@ function buildCompTab(){
   const bC=el('div','secbody'); sComp.appendChild(bC); host.appendChild(sComp);
   const krow=el('div','krow');
   const bX=el('button',null,'X'); bX.title='Eject ALL clips';
-  bX.addEventListener('click',()=>{ for(let i=0;i<4;i++){ S.layers[i].ejected=true; S.fired[i]=null; } S.firedCol=null; saveState(); syncDeckSel(); });
+  bX.addEventListener('click',()=>{ for(let i=0;i<numLayers();i++){ S.layers[i].ejected=true; S.fired[i]=null; } S.firedCol=null; saveState(); syncDeckSel(); });
   const bB=el('button',null,'B'); bB.title='Bypass whole output';
   bB.addEventListener('click',()=>toggleBlackout());
   krow.appendChild(el('span','dim','Output:')); krow.appendChild(bX); krow.appendChild(bB);
@@ -5390,7 +5418,7 @@ function thumbKey(i,k,src){
 function queueThumbs(){
   thumbQueue.length=0;
   for(const k in thumbQueued) delete thumbQueued[k];
-  for(let i=0;i<4;i++) for(let k=0;k<8;k++){
+  for(let i=0;i<numLayers();i++) for(let k=0;k<8;k++){
     const src=S.clips[i][k];
     if(typeof src!=='number') continue;
     const key=thumbKey(i,k,src), ik=i+','+k;
@@ -5858,7 +5886,7 @@ function removeImport(k){
   if(PROG.imports[k]) gl.deleteProgram(PROG.imports[k]);
   S.imports.splice(k,1); PROG.imports.splice(k,1);
   const dead=5+k, n=srcCount()-1;
-  for(let i=0;i<4;i++){
+  for(let i=0;i<MAX_LAYERS;i++){
     if(S.layers[i].src===dead) S.layers[i].src=0;
     else if(S.layers[i].src>dead) S.layers[i].src--;
     S.params['L'+i+'.src']=S.layers[i].src/Math.max(1,n);
@@ -6044,7 +6072,7 @@ function applySnapshot(snap){
     recompileImports();
   }
   /* source authority: absolute layers[].src wins when valid; else the L{i}.src param */
-  for(let i=0;i<4;i++){
+  for(let i=0;i<MAX_LAYERS;i++){
     const pk='L'+i+'.src', nS=srcCount()-1;
     const absSrc=(snap.layers&&snap.layers[i]&&Number.isInteger(snap.layers[i].src))?snap.layers[i].src:null;
     if(absSrc!==null&&absSrc>=0&&absSrc<=nS) S.layers[i].src=absSrc;
@@ -6154,7 +6182,7 @@ function wireStatic(){
   $('help').addEventListener('click',(e)=>{ if(e.target===$('help')) toggleHelp(false); });
   /* composition eject / bypass */
   $('btnCompX').addEventListener('click',()=>{
-    for(let i=0;i<4;i++){ S.layers[i].ejected=true; S.fired[i]=null; }
+    for(let i=0;i<numLayers();i++){ S.layers[i].ejected=true; S.fired[i]=null; }
     S.firedCol=null; saveState(); syncDeckSel();
   });
   $('btnCompB').addEventListener('click',()=>toggleBlackout());
@@ -6363,8 +6391,8 @@ function repairGraph(i,g){
   return g;
 }
 function ensureAllGraphs(){
-  if(!Array.isArray(S.graphs)||S.graphs.length!==4) S.graphs=[null,null,null,null];
-  for(let i=0;i<4;i++){
+  if(!Array.isArray(S.graphs)||S.graphs.length!==MAX_LAYERS) S.graphs=Array(MAX_LAYERS).fill(null);
+  for(let i=0;i<MAX_LAYERS;i++){
     let g=validGraph(S.graphs[i]);
     if(!g) g=defaultGraph(i);
     g=repairGraph(i,g);
@@ -7289,7 +7317,7 @@ function loop(){
   beatPulse=Math.max(pulse,audioBeat);
   evalModulators(t);
   pumpWebcam(); /* one texture upload per frame max, shared by all layers */
-  for(let i=0;i<4;i++){ renderLayer(i,t); renderTransMix(i,now); }
+  for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
   renderCombine();
   renderFeedback();
   /* post chain threads one texture through; bypassed stages are skipped
@@ -7338,7 +7366,7 @@ function init(){
   if(!validClips(S.clips)) S.clips=defaultClips();
   if(!Array.isArray(S.fired)||S.fired.length!==4) S.fired=[null,null,null,null];
   if(!S.sel||typeof S.sel.i!=='number') S.sel={kind:'layer',i:0};
-  for(let i=0;i<4;i++){ S.params['L'+i+'.src']=S.layers[i].src/Math.max(1,srcCount()-1); syncFiredToSrc(i); }
+  for(let i=0;i<numLayers();i++){ S.params['L'+i+'.src']=S.layers[i].src/Math.max(1,srcCount()-1); syncFiredToSrc(i); }
   buildDeck(); buildProps(); buildCompTab();
   buildFxBrowser(); buildSrcBrowser();
   buildPerform();
