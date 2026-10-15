@@ -4791,11 +4791,11 @@ function buildClipInspector(){
   host.appendChild(fxsec);
   const tsec=el('div','psec');
   tsec.appendChild(el('div','plab','Trigger'));
-  tsec.appendChild(el('div','dim','Quantize: '+(S.snap||'bar')+' \u2014 fires on the next boundary'));
+  tsec.appendChild(el('div','dim','Fires immediately'));
   const row=el('div','krow'); row.style.marginTop='6px';
   const bf=el('button','cibtn','Fire clip'); bf.id='cifire';
-  bf.title='Fire this clip on '+LAYER_NAMES[i]+' (quantized to Beat Snap)';
-  bf.addEventListener('click',()=>{ fireClip(i,k); updateClipInspectorState(); });
+  bf.title='Fire this clip on '+LAYER_NAMES[i]+' immediately';
+  bf.addEventListener('click',()=>{ fireClipNow(i,k); updateClipInspectorState(); });
   row.appendChild(bf); tsec.appendChild(row);
   host.appendChild(tsec);
   updateClipInspectorState();
