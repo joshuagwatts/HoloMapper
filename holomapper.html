@@ -732,7 +732,7 @@ function dockWrapPanels(){
     const p=el('div','dockpanel');p.dataset.panel=id;
     if(id!=='transport'){
       const h=el('div','dockhead');
-      h.appendChild(el('span','dgrip',''));
+      h.appendChild(el('span','dgrip','⠿'));
       h.appendChild(el('span',null,DOCK_TITLES[id]));
       h.title='Drag to move the '+DOCK_TITLES[id]+' panel';
       h.addEventListener('pointerdown',(e)=>dockGripDown(e,id));
@@ -743,7 +743,7 @@ function dockWrapPanels(){
     p.appendChild(b);
     dockWraps[id]=p;
   }
-  const tg=el('span','tgrip','');tg.title='Drag to move the Transport panel';
+  const tg=el('span','tgrip','⠿');tg.title='Drag to move the Transport panel';
   tg.addEventListener('pointerdown',(e)=>dockGripDown(e,'transport'));
   dockWraps.transport.querySelector('#transport').prepend(tg);
   const lz=$('lowerzone');if(lz)lz.remove();
