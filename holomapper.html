@@ -1622,6 +1622,9 @@ function defaultState(){
 }
 let S = defaultState();
 try{
+  if(new URLSearchParams(location.search).get('fresh')==='1'){
+    try{ localStorage.removeItem(LS_STATE); localStorage.removeItem(LS_MIDI); }catch(e){}
+  }
   const raw = localStorage.getItem(LS_STATE);
   if(raw){ const s=JSON.parse(raw); if(s && s.v===1) S=Object.assign(defaultState(), s); }
   ensureFxChains();
