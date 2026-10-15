@@ -4695,6 +4695,8 @@ function buildDeck(){
       if(typeof qs==='number') paintThumb(qi,qk,qs);
     }
     queueThumbs();
+    /* force-pump 8 immediately so thumbnails appear without waiting for rAF */
+    if(typeof pumpThumbs==='function'){ try{ pumpThumbs(performance.now()/1000, 8); }catch(e){} }
   }
 }
 /* clip source-assign popup */
