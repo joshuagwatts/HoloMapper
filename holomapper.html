@@ -4481,7 +4481,7 @@ function dropFxOnLayer(key,i){
 function buildGroups(host){
   const gs=el('div','groups');
   const gh=el('div','ghead');
-  gh.appendChild(el('span',null,'Groups — drag layers here by the ⠿ handle'));
+  gh.appendChild(el('span',null,'Groups'));
   const nb=el('button','lbtn','+'); nb.title='New group'; nb.style.width='24px'; nb.style.height='24px'; nb.style.fontSize='14px';
   nb.addEventListener('click',()=>{
     if(!S.groups) S.groups=[];
