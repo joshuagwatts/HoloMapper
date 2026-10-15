@@ -270,9 +270,7 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .clip{position:relative;height:72px;min-height:52px;border-radius:var(--r);background:#141518;border:1px solid #2b2e35;
   color:var(--dim);font-size:9px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;
   align-items:stretch;justify-content:center;text-align:center;padding:0;line-height:1.15;user-select:none;overflow:hidden}
-.clip .cthumb{position:absolute;left:0;right:0;bottom:0;padding:2px 4px;font-size:9px;
-  background:linear-gradient(transparent,rgba(0,0,0,.85));text-align:left;pointer-events:none;z-index:2}
-.clip .cfire{position:absolute;top:2px;left:2px;z-index:2}
+.clip .cthumb{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;padding:0;position:relative;overflow:hidden;cursor:pointer;background:#0a0b0e}
 /* live visual thumbnails: canvas fills the box, name stays as a readable overlay label */
 .thcv{position:absolute;inset:0;width:100%;height:100%;display:block}
 .thlab{position:absolute;left:0;right:0;bottom:0;font-size:8px;line-height:1.2;padding:1px 3px 2px;text-align:center;
