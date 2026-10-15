@@ -3484,6 +3484,32 @@ function camSlate(){
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
   camSlateTex=t; return t;
 }
+/* Layer router: use another layer's (or group's) output as this clip's source.
+   Uses the previous frame's texture to avoid ordering/feedback issues. */
+function renderRoute(i,sidx,t,T){
+  const ri=routeLayerIdx(sidx);
+  const nL=numLayers();
+  let srcTex=null;
+  if(ri<nL){
+    /* layer route — prevent self-feedback */
+    if(ri===i) return;
+    const LT=layerT[ri];
+    if(LT&&LT.tex) srcTex=LT.tex;
+  }else{
+    /* group route — use first layer's texture in group */
+    const gi=ri-nL, g=(S.groups||[])[gi];
+    if(g&&g.layers&&g.layers.length){
+      const LT=layerT[g.layers[0]];
+      if(LT&&LT.tex) srcTex=LT.tex;
+    }
+  }
+  if(!srcTex) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+  const P=PROG.copy;
+  if(!P) return;
+  gl.useProgram(P); setTex(P,'u_tex',0,srcTex);
+  quadDraw();
+}
 function renderVideo(i,sidx,t,T){
   const vi=videoIdx(sidx), v=S.videos[vi];
   if(!v||!v.el||v.el.readyState<2) return;
@@ -3661,11 +3687,12 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
   if(sidx===4){ renderCloner(i,t,T); return; }
   if(sidx===camIdx()){ renderWebcam(i,t,T); return; }
   if(isVideoSrc(sidx)){ renderVideo(i,sidx,t,T); return; }
+  if(isRouteSrc(sidx)){ renderRoute(i,sidx,t,T); return; }
   gl.clearColor(0,0,0,1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   if(!ignByp && !layerEnabled(i)) return;
   const L=S.layers[i];
-  const prog=(sidx>=5&&sidx<camIdx())?PROG.imports[sidx-5]:PROG[SRC_KEYS[sidx]];
+  const prog=(sidx>=5&&sidx<5+S.imports.length)?PROG.imports[sidx-5]:PROG[SRC_KEYS[sidx]];
   if(!prog) return;
   const aud = eff('L'+i+'.audio')*eff('P.aamt');
   let sp = PARAMS['L'+i+'.speed'].map(eff('L'+i+'.speed'));
@@ -4809,8 +4836,16 @@ function buildDeck(){
         saveState(); buildDeck();
       }
     });
-    /* group header with fader */
+    /* group header with fader — draggable to reorder groups */
     const gh=el('div','ghead2');
+    gh.draggable=true;
+    gh.addEventListener('dragstart',(e)=>{
+      e.dataTransfer.setData('text/hm-group',String(gi));
+      e.dataTransfer.effectAllowed='move';
+    });
+    const grip=el('span','lgrip','\u2630'); grip.title='Drag to reorder group';
+    grip.style.cursor='grab';
+    gh.insertBefore(grip, gh.firstChild);
     const nm=document.createElement('input'); nm.type='text'; nm.value=g.name; nm.className='gname';
     nm.addEventListener('change',()=>{ g.name=nm.value.slice(0,16)||('Group '+(gi+1)); saveState(); });
     gh.appendChild(nm);
@@ -4826,6 +4861,21 @@ function buildDeck(){
     del.addEventListener('click',()=>{ S.groups.splice(gi,1); saveState(); buildDeck(); });
     gh.appendChild(del);
     gd.appendChild(gh);
+    gd.addEventListener('dragover',(e)=>{
+      if(e.dataTransfer.types.includes('text/hm-group')){ e.preventDefault(); e.dataTransfer.dropEffect='move'; }
+    });
+    gd.addEventListener('drop',(e)=>{
+      const gsrc=e.dataTransfer.getData('text/hm-group');
+      if(gsrc!==''&&!isNaN(parseInt(gsrc,10))){
+        e.preventDefault(); e.stopPropagation();
+        const from=parseInt(gsrc,10);
+        if(from!==gi){
+          const mv=S.groups.splice(from,1)[0];
+          S.groups.splice(gi,0,mv);
+          saveState(); buildDeck();
+        }
+      }
+    });
     /* nested layers */
     const glayers=el('div','gnest');
     (g.layers||[]).forEach(li=>{ if(strips[li]) glayers.appendChild(strips[li]); });
@@ -5944,7 +5994,7 @@ if(!PROG.imports) PROG.imports=[];
    so old presets and localStorage (which store absolute indices) never
    shift. srcCount() grows by one; removeImport() already decrements any
    src > dead, which keeps webcam clips pointing at the webcam. */
-function camIdx(){ return 5+S.imports.length+S.videos.length; }
+function camIdx(){ return routeBase()+numLayers()+(S.groups||[]).length; }
 function srcCount(){ return 6+S.imports.length; }
 function srcName(s){
   s|=0;
@@ -5953,7 +6003,15 @@ function srcName(s){
   const im=S.imports[s-5];
   return im?im.name:'?';
 }
-function srcOptions(){ return LAYER_SRC.concat(S.imports.map(im=>im.name)).concat(['Webcam']); }
+function srcOptions(){
+  const routes=[];
+  for(let li=0;li<numLayers();li++) routes.push('\u2192 '+LAYER_NAMES[li]);
+  (S.groups||[]).forEach((g,gi)=>routes.push('\u2192 '+g.name));
+  return LAYER_SRC.concat(S.imports.map(im=>im.name)).concat((S.videos||[]).map(v=>v.name)).concat(routes).concat(['Webcam']);
+}
+function routeBase(){ return 5+S.imports.length+(S.videos||[]).length; }
+function isRouteSrc(si){ const rb=routeBase(); return si>=rb&&si<rb+numLayers()+(S.groups||[]).length; }
+function routeLayerIdx(si){ return si-routeBase(); }
 function srcNodeOptions(){ return ['Layer Input'].concat(srcOptions()); }
 function srcIdxMap(v){ const n=srcCount()-1; return Math.min(n,Math.max(0,Math.round(clamp(v,0,1)*n))); }
 function srcIdxFmt(v){ return srcName(srcIdxMap(v)); }
