@@ -4789,15 +4789,6 @@ function buildClipInspector(){
   const fxhost=el('div'); fxsec.appendChild(fxhost);
   buildFxRack(fxhost,S.clipFx[i][k],()=>buildClipInspector());
   host.appendChild(fxsec);
-  const tsec=el('div','psec');
-  tsec.appendChild(el('div','plab','Trigger'));
-  tsec.appendChild(el('div','dim','Fires immediately'));
-  const row=el('div','krow'); row.style.marginTop='6px';
-  const bf=el('button','cibtn','Fire clip'); bf.id='cifire';
-  bf.title='Fire this clip on '+LAYER_NAMES[i]+' immediately';
-  bf.addEventListener('click',()=>{ fireClipNow(i,k); updateClipInspectorState(); });
-  row.appendChild(bf); tsec.appendChild(row);
-  host.appendChild(tsec);
   updateClipInspectorState();
 }
 /* Lightweight state sync: badges only, never rebuilds (slider drags survive). */
