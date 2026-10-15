@@ -233,6 +233,10 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .ghead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:12px;font-weight:600;color:#e2e8f2}
 .group{background:#0e1117;border:1px solid #232b38;border-radius:6px;padding:8px;margin-bottom:6px}
 .group.gdrop{outline:2px dashed #22d3ee;outline-offset:-2px;background:rgba(34,211,238,.12)}
+.maindeck.gdrop{outline:2px dashed #22d3ee;outline-offset:-2px}
+.ghead2{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #232b38}
+.gnest{display:flex;flex-direction:column;gap:6px}
+.gnest .lstrip{margin:0}
 .gname{background:#161b24;border:1px solid #2a3444;color:#e2e8f2;font-size:12px;padding:4px 8px;border-radius:4px;width:120px;margin-right:8px}
 .gop{width:100px;vertical-align:middle;margin-right:8px}
 .gbtn{background:#2a3444;color:#e2e8f2;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;margin-right:4px}
@@ -4478,59 +4482,6 @@ function dropFxOnLayer(key,i){
   buildDeck();
   if(typeof refreshFxRack==='function') refreshFxRack();
 }
-function buildGroups(host){
-  const gs=el('div','groups');
-  const gh=el('div','ghead');
-  gh.appendChild(el('span',null,'Groups'));
-  const nb=el('button','lbtn','+'); nb.title='New group'; nb.style.width='24px'; nb.style.height='24px'; nb.style.fontSize='14px';
-  nb.addEventListener('click',()=>{
-    if(!S.groups) S.groups=[];
-    S.groups.push({name:'Group '+(S.groups.length+1), layers:[], opacity:1, bypass:false});
-    saveState(); buildDeck();
-  });
-  gh.appendChild(nb); gs.appendChild(gh);
-  (S.groups||[]).forEach((g,gi)=>{
-    const gd=el('div','group');
-    gd.addEventListener('dragover',(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; gd.classList.add('gdrop'); });
-    gd.addEventListener('dragleave',()=>gd.classList.remove('gdrop'));
-    gd.addEventListener('drop',(e)=>{
-      e.preventDefault(); gd.classList.remove('gdrop');
-      const li=e.dataTransfer.getData('text/hm-layer');
-      if(li!==''&&!isNaN(parseInt(li,10))){
-        const idx=parseInt(li,10);
-        S.groups.forEach(gg=>{ gg.layers=gg.layers.filter(x=>x!==idx); });
-        if(g.layers.indexOf(idx)<0) g.layers.push(idx);
-        saveState(); buildDeck();
-      }
-    });
-    const nm=document.createElement('input'); nm.type='text'; nm.value=g.name; nm.className='gname';
-    nm.addEventListener('change',()=>{ g.name=nm.value.slice(0,16)||('Group '+(gi+1)); saveState(); });
-    gd.appendChild(nm);
-    const op=document.createElement('input'); op.type='range'; op.min=0; op.max=1; op.step=0.01; op.value=g.opacity!==undefined?g.opacity:1;
-    op.className='gop'; op.title='Group opacity';
-    op.addEventListener('input',()=>{ g.opacity=parseFloat(op.value); saveState(); });
-    gd.appendChild(op);
-    const by=el('button','gbtn',g.bypass?'BYPASSED':'BYPASS'); by.title='Bypass group';
-    if(g.bypass) by.style.background='#f0524d';
-    by.addEventListener('click',()=>{ g.bypass=!g.bypass; saveState(); buildDeck(); });
-    gd.appendChild(by);
-    const del=el('button','gbtn','×'); del.title='Delete group';
-    del.addEventListener('click',()=>{ S.groups.splice(gi,1); saveState(); buildDeck(); });
-    gd.appendChild(del);
-    /* member layers — drag layer headers here to add; click × to remove */
-    const lr=el('div','glayers');
-    if(!g.layers.length) lr.appendChild(el('span','gempty','drop layers here'));
-    g.layers.forEach(li=>{
-      const chip=el('span','gchip',LAYER_NAMES[li]||('L'+(li+1)));
-      const x=el('button','gx','×'); x.title='Remove from group';
-      x.addEventListener('click',(e)=>{ e.stopPropagation(); g.layers=g.layers.filter(y=>y!==li); saveState(); buildDeck(); });
-      chip.appendChild(x); lr.appendChild(chip);
-    });
-    gd.appendChild(lr);
-    gs.appendChild(gd);
-  });
-  host.appendChild(gs);
-}
 function setNumLayers(n){
   n=Math.min(MAX_LAYERS, Math.max(1, n));
   if(n===S.numLayers) return;
@@ -4547,8 +4498,15 @@ function buildDeck(){
   const lm=el('button','lbtn','−'); lm.title='Remove layer'; lm.addEventListener('click',()=>setNumLayers(numLayers()-1));
   const lp=el('button','lbtn','+'); lp.title='Add layer'; lp.addEventListener('click',()=>setNumLayers(numLayers()+1));
   const lct=el('span','lcount',numLayers()+' layers');
-  lc.appendChild(lm); lc.appendChild(lct); lc.appendChild(lp); host.appendChild(lc);
-  buildGroups(host);
+  lc.appendChild(lm); lc.appendChild(lct); lc.appendChild(lp);
+  const ng=el('button','lbtn','G'); ng.title='New group'; ng.style.fontSize='12px';
+  ng.addEventListener('click',()=>{
+    if(!S.groups) S.groups=[];
+    S.groups.push({name:'Group '+(S.groups.length+1), layers:[], opacity:1, bypass:false});
+    saveState(); buildDeck();
+  });
+  lc.appendChild(ng); host.appendChild(lc);
+  const strips={};
   for(let di=numLayers()-1;di>=0;di--){ /* Layer 1 sits at the BOTTOM of the stack, like Resolume */
     const i=di, L=S.layers[i];
     const st=el('div','lstrip'+((S.sel&&S.sel.kind==='layer'&&S.sel.i===i)?' sel':''));
@@ -4647,8 +4605,68 @@ function buildDeck(){
       grid.appendChild(c);
     }
     st.appendChild(grid);
-    host.appendChild(st);
+    strips[i]=st;
   }
+  /* Place strips: grouped layers nest inside their group containers,
+     ungrouped layers go in the main deck area. */
+  const grouped=new Set();
+  (S.groups||[]).forEach(g=>{ (g.layers||[]).forEach(li=>grouped.add(li)); });
+  /* main deck drop target (drag here to ungroup) */
+  const mainDeck=el('div','maindeck');
+  mainDeck.addEventListener('dragover',(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; mainDeck.classList.add('gdrop'); });
+  mainDeck.addEventListener('dragleave',()=>mainDeck.classList.remove('gdrop'));
+  mainDeck.addEventListener('drop',(e)=>{
+    e.preventDefault(); mainDeck.classList.remove('gdrop');
+    const li=e.dataTransfer.getData('text/hm-layer');
+    if(li!==''&&!isNaN(parseInt(li,10))){
+      const idx=parseInt(li,10);
+      S.groups.forEach(gg=>{ gg.layers=gg.layers.filter(x=>x!==idx); });
+      saveState(); buildDeck();
+    }
+  });
+  for(let di=numLayers()-1;di>=0;di--){
+    if(!grouped.has(di)&&strips[di]) mainDeck.appendChild(strips[di]);
+  }
+  host.appendChild(mainDeck);
+  /* group containers with nested layers */
+  (S.groups||[]).forEach((g,gi)=>{
+    const gd=el('div','group');
+    gd.addEventListener('dragover',(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; gd.classList.add('gdrop'); });
+    gd.addEventListener('dragleave',()=>gd.classList.remove('gdrop'));
+    gd.addEventListener('drop',(e)=>{
+      e.preventDefault(); gd.classList.remove('gdrop');
+      const li=e.dataTransfer.getData('text/hm-layer');
+      if(li!==''&&!isNaN(parseInt(li,10))){
+        const idx=parseInt(li,10);
+        S.groups.forEach(gg=>{ gg.layers=gg.layers.filter(x=>x!==idx); });
+        if(g.layers.indexOf(idx)<0) g.layers.push(idx);
+        saveState(); buildDeck();
+      }
+    });
+    /* group header with fader */
+    const gh=el('div','ghead2');
+    const nm=document.createElement('input'); nm.type='text'; nm.value=g.name; nm.className='gname';
+    nm.addEventListener('change',()=>{ g.name=nm.value.slice(0,16)||('Group '+(gi+1)); saveState(); });
+    gh.appendChild(nm);
+    const op=document.createElement('input'); op.type='range'; op.min=0; op.max=1; op.step=0.01;
+    op.value=g.opacity!==undefined?g.opacity:1; op.className='gop'; op.title='Group opacity';
+    op.addEventListener('input',()=>{ g.opacity=parseFloat(op.value); saveState(); });
+    gh.appendChild(op);
+    const by=el('button','gbtn',g.bypass?'BYPASSED':'BYPASS');
+    if(g.bypass) by.style.background='#f0524d';
+    by.addEventListener('click',()=>{ g.bypass=!g.bypass; saveState(); buildDeck(); });
+    gh.appendChild(by);
+    const del=el('button','gbtn','×'); del.title='Delete group (layers return to deck)';
+    del.addEventListener('click',()=>{ S.groups.splice(gi,1); saveState(); buildDeck(); });
+    gh.appendChild(del);
+    gd.appendChild(gh);
+    /* nested layers */
+    const glayers=el('div','gnest');
+    (g.layers||[]).forEach(li=>{ if(strips[li]) glayers.appendChild(strips[li]); });
+    if(!g.layers.length) glayers.appendChild(el('div','gempty','Drop layers here'));
+    gd.appendChild(glayers);
+    host.appendChild(gd);
+  });
   if(typeof refreshClipInspector==='function') refreshClipInspector();
   /* thumbnails: repaint cached pixels into the fresh canvases, queue the rest */
   if(typeof queueThumbs==='function'){
