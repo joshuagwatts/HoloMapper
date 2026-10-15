@@ -4642,7 +4642,11 @@ function buildDeck(){
     const st=el('div','lstrip'+((S.sel&&S.sel.kind==='layer'&&S.sel.i===i)?' sel':''));
     st.dataset.i=i;
     /* clicking deck background (not a clip, not the V fader) dismisses the clip inspector */
-    st.addEventListener('click',(e)=>{ if(e.target.closest('.vfad')) return; if(!e.target.closest('.clip')) closeClipInspector(); });
+    st.addEventListener('click',(e)=>{
+      if(e.target.closest('.vfad')) return;
+      /* touching anywhere on the layer selects it */
+      if(!e.target.closest('.clip')){ selectLayer(i); closeClipInspector(); }
+    });
     /* Chunky Resolume-style V fader on the strip's left edge (custom component) */
     const fad=el('div','lfad');
     const op=buildVFader(i);
