@@ -1649,6 +1649,8 @@ function applyMod(id, v){
   }
   if(!ok) return v;
   if(mod.invert) mv=1-mv;
+  const mn=(mod.min!==undefined)?mod.min:0, mx=(mod.max!==undefined)?mod.max:1;
+  mv=mn+clamp(mv,0,1)*(mx-mn);
   const d=(mod.depth!==undefined)?mod.depth:0.5;
   return v+(mv-v)*d;
 }
@@ -4203,6 +4205,19 @@ function openModPopup(id, anchorBtn){
   depthSl.addEventListener('input',()=>{ depthVal.textContent=Math.round(depthSl.value*100)+'%'; });
   const dr=el('div','modrow'); dr.appendChild(el('span','modlab','Depth')); dr.appendChild(depthSl); dr.appendChild(depthVal);
   pop.appendChild(dr);
+  /* clamp min/max */
+  const minSl=document.createElement('input'); minSl.type='range'; minSl.min=0; minSl.max=1; minSl.step=0.01;
+  minSl.value=(mod.min!==undefined)?mod.min:0;
+  const minVal=el('span','modval',Math.round(minSl.value*100)+'%');
+  minSl.addEventListener('input',()=>{ minVal.textContent=Math.round(minSl.value*100)+'%'; if(parseFloat(minSl.value)>parseFloat(maxSl.value)){ maxSl.value=minSl.value; maxVal.textContent=minVal.textContent; } });
+  const minR=el('div','modrow'); minR.appendChild(el('span','modlab','Min')); minR.appendChild(minSl); minR.appendChild(minVal);
+  pop.appendChild(minR);
+  const maxSl=document.createElement('input'); maxSl.type='range'; maxSl.min=0; maxSl.max=1; maxSl.step=0.01;
+  maxSl.value=(mod.max!==undefined)?mod.max:1;
+  const maxVal=el('span','modval',Math.round(maxSl.value*100)+'%');
+  maxSl.addEventListener('input',()=>{ maxVal.textContent=Math.round(maxSl.value*100)+'%'; if(parseFloat(maxSl.value)<parseFloat(minSl.value)){ minSl.value=maxSl.value; minVal.textContent=maxVal.textContent; } });
+  const maxR=el('div','modrow'); maxR.appendChild(el('span','modlab','Max')); maxR.appendChild(maxSl); maxR.appendChild(maxVal);
+  pop.appendChild(maxR);
   /* invert */
   const invCb=document.createElement('input'); invCb.type='checkbox'; invCb.checked=!!mod.invert;
   const ir=el('div','modrow'); ir.appendChild(el('span','modlab','Invert')); ir.appendChild(invCb);
@@ -4215,7 +4230,8 @@ function openModPopup(id, anchorBtn){
     if(src==='none'){ delete S.mods[id]; }
     else{
       S.mods[id]={src:src, wave:waveSel.value, rate:parseFloat(rateSel.value),
-        band:bandSel.value, depth:parseFloat(depthSl.value), invert:invCb.checked?1:0};
+        band:bandSel.value, depth:parseFloat(depthSl.value), invert:invCb.checked?1:0,
+        min:parseFloat(minSl.value), max:parseFloat(maxSl.value)};
     }
     saveState(); closeModPopup();
     document.querySelectorAll('[data-ctrl="'+id+'"]').forEach(()=>{});
@@ -5533,7 +5549,9 @@ function buildDashboard(){
       const pid=e.dataTransfer.getData('text/hm-param');
       if(pid && PARAMS[pid]){
         const cur=S.assigns[pid]||{d:1,inv:0};
-        cur.m=m; S.assigns[pid]=cur; saveState(); buildDashboard(); buildProps();
+        cur.m=m; S.assigns[pid]=cur;
+        S.macros[m].val=0.5;
+        saveState(); buildDashboard(); buildProps();
       }
     });
     d.addEventListener('contextmenu',(e)=>{
