@@ -207,7 +207,7 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .coltab:hover{color:var(--txt)}
 #deck{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;padding:4px 8px 8px;gap:3px}
 .lstrip{flex:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
-  display:grid;grid-template-columns:54px 80px minmax(0,1fr);overflow:hidden;height:88px}
+  display:grid;grid-template-columns:54px 80px minmax(0,1fr);overflow:hidden;height:120px}
 /* Resolume-style V fader + mix mode on the strip's left edge — contained inside */
 .lfad{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;min-height:0;overflow:hidden}
 /* Thick Resolume-style V fader — solid green, inside the layer box */
@@ -267,7 +267,7 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .lrow2{display:flex;align-items:center;gap:4px}
 .lbsel{max-width:86px;font-size:10px}
 .clipgrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;padding:4px;min-width:0}
-.clip{position:relative;min-height:52px;border-radius:var(--r);background:#141518;border:1px solid #2b2e35;
+.clip{position:relative;aspect-ratio:16/9;min-height:52px;border-radius:var(--r);background:#141518;border:1px solid #2b2e35;
   color:var(--dim);font-size:9px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;
   align-items:stretch;justify-content:center;text-align:center;padding:0;line-height:1.15;user-select:none;overflow:hidden}
 .clip .cthumb{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;padding:0;position:relative;overflow:hidden;cursor:pointer;background:#0a0b0e}
@@ -813,6 +813,29 @@ function dockDivDown(e){
 }
 function dockHDivDown(e,colEl,pi1,pi2){
   e.preventDefault(); e.stopPropagation();
+  /* double-click: toggle hide/show, triple-click: reset to default */
+  if(e.detail===2){
+    const panels=[...colEl.querySelectorAll(':scope > .dockpanel')];
+    const tgt=panels[pi1];
+    if(!tgt) return;
+    if(tgt.dataset.hidden==='1'){
+      tgt.dataset.hidden='0';
+      tgt.style.display='';
+      tgt.style.flex=tgt.dataset.prevFlex||'1fr';
+    }else{
+      tgt.dataset.hidden='1';
+      tgt.dataset.prevFlex=tgt.style.flex||'1fr';
+      tgt.style.display='none';
+    }
+    dockSave(); return;
+  }
+  if(e.detail===3){
+    const panels=[...colEl.querySelectorAll(':scope > .dockpanel')];
+    const top=panels[pi1], bot=panels[pi2];
+    if(top){ top.style.flex=''; top.dataset.hidden='0'; top.style.display=''; }
+    if(bot){ bot.style.flex=''; bot.dataset.hidden='0'; bot.style.display=''; }
+    dockSave(); dockRender(); return;
+  }
   const panels=[...colEl.querySelectorAll(':scope > .dockpanel')];
   const top=panels[pi1], bot=panels[pi2];
   if(!top||!bot) return;
