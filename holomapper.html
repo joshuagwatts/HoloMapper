@@ -5427,16 +5427,14 @@ function buildFxBrowser(){
 }
 function buildSrcBrowser(){
   const host=$('btab-src'); if(!host) return; host.innerHTML='';
-  const i=Math.min(3,Math.max(0,S.selLayer||0));
-  host.appendChild(mkHint('Target: '+LAYER_NAMES[i]+' — click a source to load it on the selected layer.'));
+  host.appendChild(mkHint('Drag a source onto any clip to assign it.'));
   srcOptions().forEach((s,si)=>{
-    const b=el('button','srcrow'+(S.layers[i].src===si?' cur':''));
+    const b=el('button','srcrow');
     b.appendChild(el('span','sdot'));
     b.appendChild(el('span',null,s));
-    b.title='Load '+s+' on '+LAYER_NAMES[i]+' — drag onto a clip to assign';
+    b.title='Drag onto a clip to assign '+s;
     b.draggable=true;
     b.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/hm-src',String(si)); e.dataTransfer.effectAllowed='copy'; });
-    b.addEventListener('click',()=>{ setParam('L'+i+'.src',si/Math.max(1,srcCount()-1)); buildSrcBrowser(); });
     host.appendChild(b);
     if(si>=5){ /* imported shader: × removes it (clips/layers remapped) */
       const x=el('button','srcdel','\u2715');
