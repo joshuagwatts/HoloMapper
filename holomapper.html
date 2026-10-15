@@ -229,6 +229,16 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .lbtn{width:28px;height:28px;font-size:18px;background:#2a3444;color:#e2e8f2;border:none;border-radius:4px;cursor:pointer}
 .lbtn:hover{background:#22d3ee;color:#08090c}
 .lcount{font-size:12px;color:#8b95a8;flex:1;text-align:center}
+.groups{margin-top:6px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px}
+.ghead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:12px;font-weight:600;color:#e2e8f2}
+.group{background:#0e1117;border:1px solid #232b38;border-radius:6px;padding:8px;margin-bottom:6px}
+.gname{background:#161b24;border:1px solid #2a3444;color:#e2e8f2;font-size:12px;padding:4px 8px;border-radius:4px;width:120px;margin-right:8px}
+.gop{width:100px;vertical-align:middle;margin-right:8px}
+.gbtn{background:#2a3444;color:#e2e8f2;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;margin-right:4px}
+.gbtn:hover{background:#22d3ee;color:#08090c}
+.glayers{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.glab{font-size:11px;color:#8b95a8;display:flex;align-items:center;gap:4px;cursor:pointer}
+.glab input{cursor:pointer}
 .lgut{padding:4px 6px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:3px;min-width:0}
 .lrow1{display:flex;align-items:center;gap:4px}
 .lname{font-weight:800;font-size:11px;min-width:28px;text-align:center;cursor:pointer;border:1px solid transparent;
@@ -1576,7 +1586,7 @@ function defaultState(){
   for(const id in PARAMS) params[id]=PARAMS[id].def;
   return {
     v:1, quality:'auto', selLayer:0, sel:{kind:'layer', i:0}, graphs:null,
-    numLayers:4,
+    numLayers:4, groups:[],
     layers:[
       {src:0, blend:0, bypass:false, solo:false, ejected:false},
       {src:2, blend:2, bypass:false, solo:false, ejected:false},
@@ -1623,6 +1633,7 @@ if(!S.mods||typeof S.mods!=='object') S.mods={};
 S.imports=S.imports.filter(im=>im&&typeof im.name==='string'&&typeof im.code==='string');
 /* variable layers: extend old 4-layer states to MAX_LAYERS */
 if(!S.numLayers||S.numLayers<1||S.numLayers>MAX_LAYERS) S.numLayers=4;
+if(!Array.isArray(S.groups)) S.groups=[];
 while(S.layers.length<MAX_LAYERS) S.layers.push({src:0, blend:0, bypass:true, solo:false, ejected:false});
 while(S.fired.length<MAX_LAYERS) S.fired.push(null);
 while(S.layerFx.length<MAX_LAYERS) S.layerFx.push([]);
@@ -3309,8 +3320,19 @@ function snapBeat(v){
   for(const d of divs) if(Math.abs(d-v)<Math.abs(best-v)) best=d;
   return clamp(best,0,2);
 }
+function layerGroup(i){
+  if(!S.groups) return null;
+  for(const g of S.groups){ if(g.layers&&g.layers.indexOf(i)>=0) return g; }
+  return null;
+}
+function groupOpacity(i){
+  const g=layerGroup(i);
+  return g ? (g.opacity!==undefined?g.opacity:1) : 1;
+}
 function layerEnabled(i){
   const L=S.layers[i];
+  const g=layerGroup(i);
+  if(g&&g.bypass) return false;
   const anySolo=S.layers.some(l=>l.solo);
   return !L.bypass && !L.ejected && (!anySolo || L.solo);
 }
@@ -3681,7 +3703,7 @@ function renderCombine(){
   for(let i=0;i<numLayers();i++) setTex(P,'u_l['+i+']',i,layerT[i].tex);
   const op=_cbOp,bl=_cbBl,en=_cbEn;
   for(let i=0;i<numLayers();i++){
-    op[i]=eff('L'+i+'.op');
+    op[i]=eff('L'+i+'.op')*groupOpacity(i);
     bl[i]=S.layers[i].blend;
     en[i]=layerEnabled(i)?1:0;
   }
@@ -4450,6 +4472,51 @@ function dropFxOnLayer(key,i){
   buildDeck();
   if(typeof refreshFxRack==='function') refreshFxRack();
 }
+function buildGroups(host){
+  const gs=el('div','groups');
+  const gh=el('div','ghead');
+  gh.appendChild(el('span',null,'Groups'));
+  const nb=el('button','lbtn','+'); nb.title='New group'; nb.style.width='24px'; nb.style.height='24px'; nb.style.fontSize='14px';
+  nb.addEventListener('click',()=>{
+    if(!S.groups) S.groups=[];
+    S.groups.push({name:'Group '+(S.groups.length+1), layers:[], opacity:1, bypass:false});
+    saveState(); buildDeck();
+  });
+  gh.appendChild(nb); gs.appendChild(gh);
+  (S.groups||[]).forEach((g,gi)=>{
+    const gd=el('div','group');
+    const nm=document.createElement('input'); nm.type='text'; nm.value=g.name; nm.className='gname';
+    nm.addEventListener('change',()=>{ g.name=nm.value.slice(0,16)||('Group '+(gi+1)); saveState(); });
+    gd.appendChild(nm);
+    const op=document.createElement('input'); op.type='range'; op.min=0; op.max=1; op.step=0.01; op.value=g.opacity!==undefined?g.opacity:1;
+    op.className='gop'; op.title='Group opacity';
+    op.addEventListener('input',()=>{ g.opacity=parseFloat(op.value); saveState(); });
+    gd.appendChild(op);
+    const by=el('button','gbtn',g.bypass?'BYPASSED':'BYPASS'); by.title='Bypass group';
+    if(g.bypass) by.style.background='#f0524d';
+    by.addEventListener('click',()=>{ g.bypass=!g.bypass; saveState(); buildDeck(); });
+    gd.appendChild(by);
+    const del=el('button','gbtn','×'); del.title='Delete group';
+    del.addEventListener('click',()=>{ S.groups.splice(gi,1); saveState(); buildDeck(); });
+    gd.appendChild(del);
+    /* layer assignment */
+    const lr=el('div','glayers');
+    for(let i=0;i<numLayers();i++){
+      const lb=el('label','glab');
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=g.layers.indexOf(i)>=0;
+      cb.addEventListener('change',()=>{
+        if(cb.checked){ if(g.layers.indexOf(i)<0) g.layers.push(i); }
+        else{ g.layers=g.layers.filter(x=>x!==i); }
+        saveState(); buildDeck();
+      });
+      lb.appendChild(cb); lb.appendChild(document.createTextNode(LAYER_NAMES[i]));
+      lr.appendChild(lb);
+    }
+    gd.appendChild(lr);
+    gs.appendChild(gd);
+  });
+  host.appendChild(gs);
+}
 function setNumLayers(n){
   n=Math.min(MAX_LAYERS, Math.max(1, n));
   if(n===S.numLayers) return;
@@ -4467,6 +4534,7 @@ function buildDeck(){
   const lp=el('button','lbtn','+'); lp.title='Add layer'; lp.addEventListener('click',()=>setNumLayers(numLayers()+1));
   const lct=el('span','lcount',numLayers()+' layers');
   lc.appendChild(lm); lc.appendChild(lct); lc.appendChild(lp); host.appendChild(lc);
+  buildGroups(host);
   for(let di=numLayers()-1;di>=0;di--){ /* Layer 1 sits at the BOTTOM of the stack, like Resolume */
     const i=di, L=S.layers[i];
     const st=el('div','lstrip'+((S.sel&&S.sel.kind==='layer'&&S.sel.i===i)?' sel':''));
