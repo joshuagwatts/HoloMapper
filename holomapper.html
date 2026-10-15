@@ -199,20 +199,17 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .lstrip{flex:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
   display:grid;grid-template-columns:54px 196px minmax(0,1fr)}
 /* Resolume-style V fader + mix mode on the strip's left edge */
-.lfad{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px 6px;
-  border-right:1px solid var(--line);min-height:0}
-/* Chunky Resolume-style V fader — custom pointer-drag component. Wide track,
-   big grabbable handle, full strip height. Replaces the thin native vertical
-   range input (much easier to grab onto and move around). */
-.vfad{position:relative;flex:1;min-height:104px;width:36px;cursor:ns-resize;touch-action:none;
-  outline:none;border-radius:6px;flex:none}
+.lfad{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px 6px;min-height:0}
+/* Thin Resolume-style V fader — inside the layer box, not separated */
+.vfad{position:relative;flex:1;min-height:104px;width:22px;cursor:ns-resize;touch-action:none;
+  outline:none;border-radius:4px;flex:none}
 .vfad:focus-visible{box-shadow:0 0 0 2px var(--sel)}
-.vfad-track{position:absolute;left:50%;top:2px;bottom:2px;width:12px;transform:translateX(-50%);
-  background:#0b0c0f;border:1px solid var(--line);border-radius:6px;pointer-events:none}
-.vfad-fill{position:absolute;left:50%;bottom:2px;width:12px;transform:translateX(-50%);
-  background:linear-gradient(to top,#1f6f5c,var(--play));border-radius:6px;pointer-events:none}
-.vfad-handle{position:absolute;left:50%;transform:translate(-50%,50%);width:32px;height:46px;
-  background:linear-gradient(#41474f,#262a31);border:1px solid #565e69;border-radius:7px;
+.vfad-track{position:absolute;left:50%;top:2px;bottom:2px;width:6px;transform:translateX(-50%);
+  background:#0b0c0f;border:1px solid var(--line);border-radius:3px;pointer-events:none}
+.vfad-fill{position:absolute;left:50%;bottom:2px;width:6px;transform:translateX(-50%);
+  background:linear-gradient(to top,#1f6f5c,var(--play));border-radius:3px;pointer-events:none}
+.vfad-handle{position:absolute;left:50%;transform:translate(-50%,50%);width:18px;height:28px;
+  background:linear-gradient(#41474f,#262a31);border:1px solid #565e69;border-radius:4px;
   box-shadow:0 2px 8px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.12);pointer-events:none}
 .vfad-handle::after{content:'';position:absolute;left:6px;right:6px;top:50%;height:3px;
   transform:translateY(-50%);background:var(--play);border-radius:2px;
@@ -730,7 +727,7 @@ function dockWrapPanels(){
     const p=el('div','dockpanel');p.dataset.panel=id;
     if(id!=='transport'){
       const h=el('div','dockhead');
-      h.appendChild(el('span','dgrip','\u28ff\u28ff'));
+      h.appendChild(el('span','dgrip','\u28ff'));
       h.appendChild(el('span',null,DOCK_TITLES[id]));
       h.title='Drag to move the '+DOCK_TITLES[id]+' panel';
       h.addEventListener('pointerdown',(e)=>dockGripDown(e,id));
@@ -741,7 +738,7 @@ function dockWrapPanels(){
     p.appendChild(b);
     dockWraps[id]=p;
   }
-  const tg=el('span','tgrip','\u28ff\u28ff');tg.title='Drag to move the Transport panel';
+  const tg=el('span','tgrip','\u28ff');tg.title='Drag to move the Transport panel';
   tg.addEventListener('pointerdown',(e)=>dockGripDown(e,'transport'));
   dockWraps.transport.querySelector('#transport').prepend(tg);
   const lz=$('lowerzone');if(lz)lz.remove();
@@ -4452,6 +4449,7 @@ function buildVFader(i){
   };
   root.addEventListener('pointerdown',(e)=>{
     if(e.pointerType==='mouse'&&e.button!==0) return;
+    e.preventDefault();
     /* MIDI-learn capture runs first (capture phase) and stops propagation
        when armed, so this never moves the fader during mapping. */
     try{ root.setPointerCapture(e.pointerId); }catch(err){}
