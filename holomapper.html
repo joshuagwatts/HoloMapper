@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>HoloMapper</title>
 <style>
 /* ============ HoloMapper — Resolume Arena console language ============
@@ -245,8 +248,11 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .gx:hover{color:#f0524d}
 .lgut{padding:4px 6px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:3px;min-width:0}
 .lrow1{display:flex;align-items:center;gap:4px}
-.lname{font-weight:800;font-size:11px;min-width:28px;text-align:center;cursor:grab;border:1px solid transparent;
+.lname{font-weight:800;font-size:11px;min-width:28px;text-align:center;cursor:pointer;border:1px solid transparent;
   background:none;color:var(--txt);padding:2px 4px;border-radius:var(--r)}
+.lgrip{cursor:grab;color:#8b95a8;font-size:13px;padding:2px 6px;user-select:none;-webkit-user-select:none;touch-action:none}
+.lgrip:hover{color:#22d3ee}
+.lgrip:active{cursor:grabbing}
 .lname:hover{border-color:var(--line)}
 .lstrip.sel .lname{background:var(--sel);border-color:var(--sel);color:#fff}
 .tbtn{padding:2px 0;width:24px;font-size:10px;font-weight:800;text-align:center}
@@ -4558,10 +4564,11 @@ function buildDeck(){
     st.appendChild(fad);
     const gut=el('div','lgut');
     const r1=el('div','lrow1');
+    const grip=el('span','lgrip','\u2630'); grip.title='Drag layer into a group';
+    grip.draggable=true;
+    grip.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/hm-layer',String(i)); e.dataTransfer.effectAllowed='move'; });
     const nm=el('button','lname','L'+(i+1));
-    nm.title='Select layer (key '+(i+1)+') \u2014 double-click opens the node graph \u2014 drag to move into a group';
-    nm.draggable=true;
-    nm.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/hm-layer',String(i)); e.dataTransfer.effectAllowed='move'; });
+    nm.title='Select layer (key '+(i+1)+') \u2014 double-click opens the node graph';
     nm.title='Select layer (key '+(i+1)+') \u2014 double-click opens the node graph';
     nm.addEventListener('click',()=>selectLayer(i));
     nm.addEventListener('dblclick',(e)=>{ e.stopPropagation(); if(typeof openNodes==='function') openNodes(i); });
@@ -4582,7 +4589,7 @@ function buildDeck(){
     bB.addEventListener('click',()=>toggleBypass(i));
     const bS=el('button','tbtn bSolo'+(L.solo?' onS':''),'S'); bS.title='Solo layer';
     bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); syncDeckSel(); });
-    r1.appendChild(nm); r1.appendChild(bX); r1.appendChild(bB); r1.appendChild(bS);
+    r1.appendChild(grip); r1.appendChild(nm); r1.appendChild(bX); r1.appendChild(bB); r1.appendChild(bS);
     gut.appendChild(r1);
     st.appendChild(gut);
     const grid=el('div','clipgrid');
