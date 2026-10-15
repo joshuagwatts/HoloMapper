@@ -6303,8 +6303,22 @@ async function loadShaderFiles(files){
    slot (per-clip drop target, 2026-10-11). Selects + quantized-fires it,
    like clicking the clip's fire box. Extra files become Sources entries. */
 async function loadShaderFilesOnto(files, i, k){
-  const list=Array.from(files||[]).filter(f=>/\.(txt|glsl|frag|fs)$/i.test(f.name||''));
-  if(!list.length){ shtoast('No .txt / .glsl / .frag shader files in that drop.'); return; }
+  const arr=Array.from(files||[]);
+  /* videos go straight to a clip */
+  const vids=arr.filter(f=>/^video\//.test(f.type||'')||/\.(mp4|webm|mov|m4v|ogv)$/i.test(f.name||''));
+  if(vids.length){
+    for(const vf of vids){
+      importVideo(vf);
+      const vi=S.videos.length-1;
+      const si=5+S.imports.length+vi;
+      S.clips[i][k]=si;
+    }
+    saveState(); buildDeck(); buildSrcBrowser();
+    toast(vids.length+' video(s) → '+LAYER_NAMES[i]+' clip '+(k+1));
+    return;
+  }
+  const list=arr.filter(f=>/\.(txt|glsl|frag|fs)$/i.test(f.name||''));
+  if(!list.length){ shtoast('No .txt / .glsl / .frag shader or video files in that drop.'); return; }
   let firstIdx=-1, firstName=null;
   for(const f of list){
     let text=null;
