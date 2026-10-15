@@ -6010,6 +6010,8 @@ function srcOptions(){
   return LAYER_SRC.concat(S.imports.map(im=>im.name)).concat((S.videos||[]).map(v=>v.name)).concat(routes).concat(['Webcam']);
 }
 function routeBase(){ return 5+S.imports.length+(S.videos||[]).length; }
+function videoIdx(si){ return si-5-S.imports.length; }
+function isVideoSrc(si){ const vi=videoIdx(si); return vi>=0&&vi<(S.videos||[]).length; }
 function isRouteSrc(si){ const rb=routeBase(); return si>=rb&&si<rb+numLayers()+(S.groups||[]).length; }
 function routeLayerIdx(si){ return si-routeBase(); }
 function srcNodeOptions(){ return ['Layer Input'].concat(srcOptions()); }
