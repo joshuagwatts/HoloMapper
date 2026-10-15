@@ -93,7 +93,7 @@ body.dockdragging,body.dockdragging *{cursor:grabbing!important;user-select:none
 #lowerzone{display:grid;grid-template-columns:392px minmax(0,1fr) 228px;min-height:0;min-width:0}
 #outmonwrap,#pvmonwrap{background:#101114;border-right:1px solid var(--line);display:flex;flex-direction:column;
   min-height:0;position:relative;overflow:hidden}
-#proptabs{background:var(--panel);display:flex;flex-direction:column;min-height:0;min-width:0}
+#proptabs{background:var(--panel);display:flex;flex-direction:column;min-height:0;max-height:100%;min-width:0;overflow:hidden}
 #browser{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;
   min-height:120px;min-width:0}
 .tsep{width:1px;height:18px;background:var(--line);flex:none}
@@ -335,7 +335,7 @@ body.perform #performbar{display:block}
 #ptabbar button{border-bottom:none;border-radius:var(--r) var(--r) 0 0;color:var(--dim);font-weight:700;
   text-transform:uppercase;letter-spacing:.05em;font-size:10px}
 #ptabbar button.on{background:var(--panel2);color:var(--play);border-color:var(--line)}
-.ptab{flex:1;min-height:0;overflow-y:auto;display:none;padding:6px 8px}
+.ptab{flex:1 1 0;min-height:0;max-height:100%;overflow-y:auto;display:none;padding:6px 8px}
 .ptab.on{display:block}
 /* ============ dashboard dials ============ */
 #dashdials{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;padding:6px 4px;
