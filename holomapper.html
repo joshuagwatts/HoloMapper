@@ -246,6 +246,9 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .lrow1{display:flex;align-items:center;gap:4px}
 .lname{font-weight:800;font-size:11px;min-width:28px;text-align:center;cursor:pointer;border:1px solid transparent;
   background:none;color:var(--txt);padding:2px 4px;border-radius:var(--r)}
+.lgrip{cursor:grab;color:#5a6577;font-size:14px;padding:2px 4px;user-select:none}
+.lgrip:hover{color:#22d3ee}
+.lgrip:active{cursor:grabbing}
 .lname:hover{border-color:var(--line)}
 .lstrip.sel .lname{background:var(--sel);border-color:var(--sel);color:#fff}
 .tbtn{padding:2px 0;width:24px;font-size:10px;font-weight:800;text-align:center}
@@ -4478,7 +4481,7 @@ function dropFxOnLayer(key,i){
 function buildGroups(host){
   const gs=el('div','groups');
   const gh=el('div','ghead');
-  gh.appendChild(el('span',null,'Groups'));
+  gh.appendChild(el('span',null,'Groups — drag layers here by the ⠿ handle'));
   const nb=el('button','lbtn','+'); nb.title='New group'; nb.style.width='24px'; nb.style.height='24px'; nb.style.fontSize='14px';
   nb.addEventListener('click',()=>{
     if(!S.groups) S.groups=[];
@@ -4580,10 +4583,11 @@ function buildDeck(){
     st.appendChild(fad);
     const gut=el('div','lgut');
     const r1=el('div','lrow1');
+    const grip=el('span','lgrip','\u283f'); grip.title='Drag layer into a group';
+    grip.draggable=true;
+    grip.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/hm-layer',String(i)); e.dataTransfer.effectAllowed='move'; });
     const nm=el('button','lname','L'+(i+1));
-    nm.title='Select layer (key '+(i+1)+') \u2014 double-click opens the node graph \u2014 drag into a group';
-    nm.draggable=true;
-    nm.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/hm-layer',String(i)); e.dataTransfer.effectAllowed='move'; });
+    nm.title='Select layer (key '+(i+1)+') \u2014 double-click opens the node graph';
     nm.addEventListener('click',()=>selectLayer(i));
     nm.addEventListener('dblclick',(e)=>{ e.stopPropagation(); if(typeof openNodes==='function') openNodes(i); });
     /* v1.4: FX drop target — drag FX from browser onto layer */
@@ -4603,7 +4607,7 @@ function buildDeck(){
     bB.addEventListener('click',()=>toggleBypass(i));
     const bS=el('button','tbtn bSolo'+(L.solo?' onS':''),'S'); bS.title='Solo layer';
     bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); syncDeckSel(); });
-    r1.appendChild(nm); r1.appendChild(bX); r1.appendChild(bB); r1.appendChild(bS);
+    r1.appendChild(grip); r1.appendChild(nm); r1.appendChild(bX); r1.appendChild(bB); r1.appendChild(bS);
     gut.appendChild(r1);
     st.appendChild(gut);
     const grid=el('div','clipgrid');
