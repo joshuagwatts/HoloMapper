@@ -106,6 +106,19 @@ body.dockdragging,body.dockdragging *{cursor:grabbing!important;user-select:none
 .psub .mlab{color:#5b6474;font-size:10px}
 .msel{font-size:10px;padding:2px}
 .mdep{height:12px}
+.mmod{background:none;border:none;color:#8b95a8;font-size:14px;cursor:pointer;padding:2px 6px}
+.mmod:hover{color:#22d3ee}
+.modpop{position:fixed;z-index:9999;background:#161b24;border:1px solid #2a3444;border-radius:8px;padding:12px;min-width:220px;box-shadow:0 8px 32px rgba(0,0,0,.6)}
+.modtitle{font-size:12px;font-weight:600;margin-bottom:8px;color:#e2e8f2}
+.modrow{display:flex;align-items:center;gap:8px;margin:6px 0}
+.modlab{font-size:11px;color:#8b95a8;min-width:50px}
+.modrow select{flex:1;font-size:11px;padding:3px;background:#0e1117;color:#e2e8f2;border:1px solid #2a3444;border-radius:4px}
+.modrow input[type=range]{flex:1}
+.modval{font-size:11px;color:#22d3ee;min-width:36px;text-align:right}
+.modbox{border-top:1px solid #232b38;margin-top:6px;padding-top:6px}
+.modbtns{display:flex;gap:8px;margin-top:10px}
+.modbtns button{flex:1;padding:6px;font-size:12px;background:#22d3ee;color:#08090c;border:none;border-radius:4px;cursor:pointer;font-weight:600}
+.modbtns button:last-child{background:#2a3444;color:#e2e8f2}
 .minv{accent-color:var(--sel);width:13px;height:13px;cursor:pointer}
 /* collapsible sections (Composition tab) */
 details.sec{border-bottom:1px solid var(--line)}
@@ -1566,7 +1579,7 @@ function defaultState(){
     clips:defaultClips(), fired:[null,null,null,null], snap:'bar',
     decks:[{name:'SOURCES',clips:defaultClips()},{name:'HOLOWATTS',clips:defaultClips()}],
     deckIdx:0, autopilot:false,
-    params:params, assigns:{},
+    params:params, assigns:{}, mods:{},
     postBypass:{feedback:false, kaleido:true, glitch:true, mirror:true, automask:true, colorize:true, bloompost:true},
     strobeOn:false, beatSync:false, bpm:120, blackout:false,
     layerFx:[[],[],[],[]],
@@ -1595,6 +1608,7 @@ try{
 if(['auto','high','medium','low'].indexOf(S.quality)<0) S.quality='auto';
 /* v1.4: imported shaders are first-class sources (S.imports). Sanitize. */
 if(!Array.isArray(S.imports)) S.imports=[];
+if(!S.mods||typeof S.mods!=='object') S.mods={};
 S.imports=S.imports.filter(im=>im&&typeof im.name==='string'&&typeof im.code==='string');
 /* content wave: normalize postBypass for states saved before the new FX existed */
 if(!S.postBypass||typeof S.postBypass!=='object') S.postBypass={};
@@ -1609,6 +1623,35 @@ const saveState = debounce(()=>{
 /* Effective value: base + macro contribution (scaled by depth) + modulator
    offsets, clamped. MOD_OFF is rebuilt every frame by evalModulators(). */
 const MOD_OFF={};
+/* LFO waveforms for BPM sync modulation. phase 0-1. */
+function lfoWave(wave, phase){
+  switch(wave){
+    case 'saw': return phase;
+    case 'square': return phase<0.5?0:1;
+    case 'tri': return phase<0.5?phase*2:2-phase*2;
+    default: return 0.5+0.5*Math.sin(phase*Math.PI*2);
+  }
+}
+/* Per-parameter modulation: S.mods[id] = {src:'bpm'|'fft', wave, rate, band, depth, invert}.
+   depth 0 = base value, 1 = full modulation. */
+function applyMod(id, v){
+  const mod=S.mods&&S.mods[id];
+  if(!mod||!mod.src) return v;
+  let mv=0.5, ok=false;
+  if(mod.src==='bpm'){
+    const beats=(performance.now()/1000)*(S.bpm||120)/60;
+    const rate=mod.rate||1;
+    mv=lfoWave(mod.wave||'sine', (beats/rate)%1);
+    ok=true;
+  }else if(mod.src==='fft'&&audioOn){
+    mv=mod.band==='mid'?midSm:(mod.band==='high'?highSm:bassSm);
+    ok=true;
+  }
+  if(!ok) return v;
+  if(mod.invert) mv=1-mv;
+  const d=(mod.depth!==undefined)?mod.depth:0.5;
+  return v+(mv-v)*d;
+}
 function eff(id){
   let v = (S.params[id]!==undefined) ? S.params[id] : PARAMS[id].def;
   const a = S.assigns[id];
@@ -1618,6 +1661,7 @@ function eff(id){
   }
   const mo = MOD_OFF[id];
   if(mo) v += mo;
+  v = applyMod(id, v);
   return clamp(v,0,1);
 }
 /* Control registry: every MIDI-learnable control registers here. */
@@ -4086,9 +4130,85 @@ function paramRow(parent, id, short, step){
     cur.inv=iv.checked?1:0; S.assigns[id]=cur; saveState();
   });
   sub.appendChild(iv);
+  const mb=document.createElement('button'); mb.className='mmod'; mb.textContent='\u223f'; mb.title='BPM / Audio modulation';
+  mb.addEventListener('click',(e)=>{ e.stopPropagation(); openModPopup(id, mb); });
+  const updModBtn=()=>{ mb.style.color=(S.mods&&S.mods[id]&&S.mods[id].src)?'#22d3ee':''; mb.style.fontWeight=(S.mods&&S.mods[id]&&S.mods[id].src)?'bold':''; };
+  updModBtn(); mb._updModBtn=updModBtn;
+  sub.appendChild(mb);
   wrap.appendChild(sub);
   parent.appendChild(wrap);
 }
+
+/* ---------- modulation popup ---------- */
+function openModPopup(id, anchorBtn){
+  closeModPopup();
+  const mod=(S.mods&&S.mods[id])||{};
+  const pop=el('div','modpop');
+  pop.id='modpop';
+  const title=el('div','modtitle','Modulate: '+(PARAMS[id]?PARAMS[id].label:id));
+  pop.appendChild(title);
+  const mkRow=(label, ctrl)=>{ const r=el('div','modrow'); r.appendChild(el('span','modlab',label)); r.appendChild(ctrl); pop.appendChild(r); return r; };
+  /* source */
+  const srcSel=document.createElement('select');
+  ['none','bpm','fft'].forEach(v=>srcSel.appendChild(new Option(v==='none'?'None':(v==='bpm'?'BPM Sync':'Audio FFT'), v)));
+  srcSel.value=mod.src||'none';
+  mkRow('Source', srcSel);
+  /* bpm controls */
+  const bpmBox=el('div','modbox');
+  const waveSel=document.createElement('select');
+  ['sine','tri','saw','square'].forEach(w=>waveSel.appendChild(new Option(w[0].toUpperCase()+w.slice(1), w)));
+  waveSel.value=mod.wave||'sine';
+  const rateSel=document.createElement('select');
+  [['4 beats',4],['2 beats',2],['1 beat',1],['1/2 beat',0.5],['1/4 beat',0.25]].forEach(([l,v])=>rateSel.appendChild(new Option(l,String(v))));
+  rateSel.value=String(mod.rate||1);
+  const rr=el('div','modrow'); rr.appendChild(el('span','modlab','Rate')); rr.appendChild(rateSel); bpmBox.appendChild(rr);
+  const wr=el('div','modrow'); wr.appendChild(el('span','modlab','Wave')); wr.appendChild(waveSel); bpmBox.insertBefore(wr, bpmBox.firstChild);
+  pop.appendChild(bpmBox);
+  /* fft controls */
+  const fftBox=el('div','modbox');
+  const bandSel=document.createElement('select');
+  ['bass','mid','high'].forEach(b=>bandSel.appendChild(new Option(b[0].toUpperCase()+b.slice(1), b)));
+  bandSel.value=mod.band||'bass';
+  const br=el('div','modrow'); br.appendChild(el('span','modlab','Band')); br.appendChild(bandSel); fftBox.appendChild(br);
+  pop.appendChild(fftBox);
+  /* depth */
+  const depthSl=document.createElement('input'); depthSl.type='range'; depthSl.min=0; depthSl.max=1; depthSl.step=0.01;
+  depthSl.value=(mod.depth!==undefined)?mod.depth:0.5;
+  const depthVal=el('span','modval',Math.round(depthSl.value*100)+'%');
+  depthSl.addEventListener('input',()=>{ depthVal.textContent=Math.round(depthSl.value*100)+'%'; });
+  const dr=el('div','modrow'); dr.appendChild(el('span','modlab','Depth')); dr.appendChild(depthSl); dr.appendChild(depthVal);
+  pop.appendChild(dr);
+  /* invert */
+  const invCb=document.createElement('input'); invCb.type='checkbox'; invCb.checked=!!mod.invert;
+  const ir=el('div','modrow'); ir.appendChild(el('span','modlab','Invert')); ir.appendChild(invCb);
+  pop.appendChild(ir);
+  /* buttons */
+  const btnRow=el('div','modbtns');
+  const applyB=el('button',null,'Apply'); applyB.addEventListener('click',()=>{
+    if(!S.mods) S.mods={};
+    const src=srcSel.value;
+    if(src==='none'){ delete S.mods[id]; }
+    else{
+      S.mods[id]={src:src, wave:waveSel.value, rate:parseFloat(rateSel.value),
+        band:bandSel.value, depth:parseFloat(depthSl.value), invert:invCb.checked?1:0};
+    }
+    saveState(); closeModPopup();
+    document.querySelectorAll('[data-ctrl="'+id+'"]').forEach(()=>{});
+    if(anchorBtn&&anchorBtn._updModBtn) anchorBtn._updModBtn();
+    buildProps();
+  });
+  const cancelB=el('button',null,'Cancel'); cancelB.addEventListener('click',closeModPopup);
+  btnRow.appendChild(applyB); btnRow.appendChild(cancelB); pop.appendChild(btnRow);
+  /* show/hide boxes */
+  const syncBoxes=()=>{ bpmBox.style.display=srcSel.value==='bpm'?'':'none'; fftBox.style.display=srcSel.value==='fft'?'':'none'; };
+  srcSel.addEventListener('change',syncBoxes); syncBoxes();
+  document.body.appendChild(pop);
+  const r=anchorBtn.getBoundingClientRect();
+  pop.style.left=Math.min(r.left, window.innerWidth-240)+'px';
+  pop.style.top=(r.bottom+4)+'px';
+}
+function closeModPopup(){ const p=$('modpop'); if(p) p.remove(); }
+document.addEventListener('click',(e)=>{ const p=$('modpop'); if(p&&!p.contains(e.target)) closeModPopup(); });
 
 /* ---------- layer cards ---------- */
 /* ================= RESOLUME-STYLE DECK =================
