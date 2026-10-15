@@ -1680,6 +1680,14 @@ if(['auto','high','medium','low'].indexOf(S.quality)<0) S.quality='auto';
 if(!Array.isArray(S.imports)) S.imports=[];
 /* v1.4: imported videos (S.videos: {name, url, el}) */
 if(!Array.isArray(S.videos)) S.videos=[];
+/* videos don't survive reload (blob URLs) — clear stale clip refs */
+else if(S.videos.length===0&&S.clips){
+  const maxSi=5+S.imports.length-1;
+  for(let i=0;i<S.clips.length;i++)for(let k=0;k<8;k++){
+    const si=S.clips[i]&&S.clips[i][k];
+    if(typeof si==='number'&&si>maxSi&&si<camIdx()) S.clips[i][k]=null;
+  }
+}
 if(!S.mods||typeof S.mods!=='object') S.mods={};
 S.imports=S.imports.filter(im=>im&&typeof im.name==='string'&&typeof im.code==='string');
 /* variable layers: extend old 4-layer states to MAX_LAYERS */
@@ -1696,7 +1704,11 @@ if(!S.postBypass||typeof S.postBypass!=='object') S.postBypass={};
 for(const k of ['mirror','automask','colorize','bloompost']) if(S.postBypass[k]===undefined) S.postBypass[k]=true;
 const saveState = debounce(()=>{
   try{
-    localStorage.setItem(LS_STATE, JSON.stringify(S));
+    /* strip non-serializable (video elements, blob URLs die on reload anyway) */
+    const sc=Object.assign({},S);
+    delete sc.videos;
+    /* also strip video element refs from clips (they store indices, fine) */
+    localStorage.setItem(LS_STATE, JSON.stringify(sc));
     localStorage.setItem(LS_MIDI, JSON.stringify(S.midi));
   }catch(e){/* storage full / private mode — keep going */}
 },400);
