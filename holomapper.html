@@ -231,8 +231,7 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .lcount{font-size:12px;color:#8b95a8;flex:1;text-align:center}
 .groups{margin-top:6px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px}
 .ghead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:12px;font-weight:600;color:#e2e8f2}
-.group{background:rgba(34,211,238,.06);border:2px solid #22d3ee;border-radius:10px;padding:12px;margin:8px 0;position:relative}
-.group::before{content:'GROUP';position:absolute;top:-10px;left:12px;background:#0e1117;color:#22d3ee;font-size:10px;font-weight:800;letter-spacing:1px;padding:0 8px}
+.group{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin:8px 0;position:relative}
 .group.gdrop{outline:2px dashed #22d3ee;outline-offset:-2px;background:rgba(34,211,238,.12)}
 .maindeck.gdrop{outline:2px dashed #22d3ee;outline-offset:-2px}
 .ghead2{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #232b38}
@@ -339,7 +338,7 @@ body.perform #performbar{display:block}
 /* ============ dashboard dials ============ */
 #dashdials{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;padding:6px 4px;
   border-bottom:1px solid var(--line);margin-bottom:6px}
-.dial{position:relative;text-align:center;min-width:0;cursor:ns-resize;border:1px solid transparent;border-radius:var(--r);padding:2px}
+.dial{position:relative;text-align:center;min-width:0;cursor:ns-resize;border:1px solid transparent;border-radius:var(--r);padding:2px;touch-action:none;user-select:none;-webkit-user-select:none}
 .dial:hover{border-color:var(--line)}
 .dial.drop{border-color:var(--play);background:#123b38}
 .dial .dknob{width:40px;height:40px;margin:0 auto;border-radius:50%;position:relative;
