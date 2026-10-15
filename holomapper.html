@@ -6,6 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<script>/* force fresh load: if no timestamp, add one */
+if(!location.search.includes('t=')){location.replace(location.pathname+'?t='+Date.now());}</script>
 <title>HoloMapper</title>
 <style>
 /* ============ HoloMapper — Resolume Arena console language ============
@@ -4631,6 +4633,13 @@ function buildDeck(){
           const key=data.slice(3);
           dropFxOnClip(key,i,k);
         }
+        const src=e.dataTransfer.getData('text/hm-src');
+        if(src!==''&&!isNaN(parseInt(src,10))){
+          const si=parseInt(src,10);
+          S.clips[i][k]=si;
+          saveState(); buildDeck();
+          toast(srcName(si)+' → '+LAYER_NAMES[i]+' clip '+(k+1));
+        }
       });
       grid.appendChild(c);
     }
@@ -5424,7 +5433,9 @@ function buildSrcBrowser(){
     const b=el('button','srcrow'+(S.layers[i].src===si?' cur':''));
     b.appendChild(el('span','sdot'));
     b.appendChild(el('span',null,s));
-    b.title='Load '+s+' on '+LAYER_NAMES[i];
+    b.title='Load '+s+' on '+LAYER_NAMES[i]+' — drag onto a clip to assign';
+    b.draggable=true;
+    b.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/hm-src',String(si)); e.dataTransfer.effectAllowed='copy'; });
     b.addEventListener('click',()=>{ setParam('L'+i+'.src',si/Math.max(1,srcCount()-1)); buildSrcBrowser(); });
     host.appendChild(b);
     if(si>=5){ /* imported shader: × removes it (clips/layers remapped) */
