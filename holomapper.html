@@ -1820,6 +1820,14 @@ function setParam(id, v01, fromEl){
   document.querySelectorAll('.vfad').forEach(f=>{
     if(f._vfId===id&&f._vfPaint&&f!==fromEl) f._vfPaint(v01);
   });
+  /* sync inspector sliders (they use data-ctrl with SYNC_FN) */
+  const sel2='[data-ctrl="'+id+'"]';
+  document.querySelectorAll(sel2).forEach(elm=>{
+    if(elm!==fromEl){
+      const fn=SYNC_FN[id];
+      if(fn) fn(elm,v01); else if('value' in elm) elm.value=v01;
+    }
+  });
   const sel='[data-ctrl="'+id+'"]';
   document.querySelectorAll(sel).forEach(elm=>{ if(elm!==fromEl){ const fn=SYNC_FN[id]; if(fn) fn(elm,v01); else elm.value=v01; } });
   document.querySelectorAll('[data-val="'+id+'"]').forEach(sp=>{ sp.textContent=PARAMS[id].fmt(v01); });
@@ -4752,6 +4760,17 @@ function buildVFader(i){
   return root;
 }
 /* v1.4: FX drag-and-drop handlers */
+function dropFxOnLayer(key,i){
+  ensureFxChains();
+  const inst=makeFxInst(key);
+  if(!inst){ toast('Unknown FX: '+key); return; }
+  if(!S.layerFx[i]) S.layerFx[i]=[];
+  S.layerFx[i].push(inst);
+  saveState();
+  toast(fxInstLabel(inst)+' → '+LAYER_NAMES[i]);
+  buildDeck();
+  if(typeof refreshFxRack==='function') refreshFxRack();
+}
 function dropFxOnClip(key,i,k){
   ensureFxChains();
   const inst=makeFxInst(key);
@@ -5746,6 +5765,13 @@ function buildFxBrowser(){
       e.dataTransfer.setData('text/plain','fx:'+def.key);
       e.dataTransfer.effectAllowed='copy';
     });
+    r.addEventListener('click',()=>{
+      /* click = add to selected clip, else selected layer */
+      const sel=(S.clipSel&&S.clipSel[0])||null;
+      if(sel){ dropFxOnClip(def.key, sel.i, sel.k); }
+      else{ dropFxOnLayer(def.key, S.selLayer||0); }
+    });
+    r.title='Drag onto a clip/layer, or click to add to selected';
     host.appendChild(r);
   });
   host.appendChild(el('div','fxsep','— Composition FX —'));
