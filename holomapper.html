@@ -5221,8 +5221,16 @@ function buildDeck(){
       if(typeof qs==='number') paintThumb(qi,qk,qs);
     }
     queueThumbs();
-    /* force-pump 8 immediately so thumbnails appear without waiting for rAF */
-    if(typeof pumpThumbs==='function'){ try{ pumpThumbs(performance.now()/1000, 8); }catch(e){} }
+    /* force-pump ALL immediately so thumbnails appear without waiting for rAF */
+    if(typeof pumpThumbs==='function'){ try{ pumpThumbs(performance.now()/1000, 64); }catch(e){} }
+    /* delayed re-pump: catch any that raced init (shaders not yet compiled) */
+    if(!window._thumbReumpT){ window._thumbReumpT=1; setTimeout(function(){
+      try{
+        /* clear cache: earlier pumps may have cached black (bypassed) renders */
+        if(typeof thumbCache!=='undefined') for(const k in thumbCache) delete thumbCache[k];
+        queueThumbs(); pumpThumbs(performance.now()/1000, 64);
+      }catch(e){}
+    },2500); }
   }
 }
 /* clip source-assign popup */
@@ -6127,7 +6135,11 @@ function pumpThumbs(t,n){
     const q=thumbQueue.shift();
     delete thumbQueued[q.key];
     try{
-      renderClipSource(q.i,t,q.src,thT);
+      /* thumbnails ignore layer bypass — show the source, not black */
+      var _byp=S.layers[q.i]&&S.layers[q.i].bypass;
+      if(S.layers[q.i])S.layers[q.i].bypass=false;
+      try{ renderClipSource(q.i,t,q.src,thT); }
+      finally{ if(S.layers[q.i])S.layers[q.i].bypass=_byp; }
       if(!thImg){
         const off=document.createElement('canvas'); off.width=THW; off.height=THH;
         thImg=off.getContext('2d').createImageData(THW,THH);
@@ -6135,7 +6147,10 @@ function pumpThumbs(t,n){
       blitTargetFlipped(thT,thRead,thImg);
       /* copy: thImg is reused scratch */
       const copy=new ImageData(new Uint8ClampedArray(thImg.data),THW,THH);
-      thumbCache[q.i+','+q.k]={key:q.key,img:copy};
+      /* don't cache black renders — re-queue for retry (e.g. raced init) */
+      let _sum=0; for(let _px=0;_px<copy.data.length;_px+=16)_sum+=copy.data[_px]+copy.data[_px+1]+copy.data[_px+2];
+      if(_sum>0){ thumbCache[q.i+','+q.k]={key:q.key,img:copy}; }
+      else{ q._retries=(q._retries||0)+1; if(q._retries<5){ thumbQueue.push(q); thumbQueued[q.key]=true; } }
       const cv=document.querySelector('.clip[data-i="'+q.i+'"][data-k="'+q.k+'"] .thcv');
       if(cv) cv.getContext('2d').putImageData(copy,0,0);
     }catch(err){ /* failed shader: keep the dark box, never break the queue */ }
@@ -8119,7 +8134,7 @@ function loop(){
   if(!neOpen && (pvTick=(pvTick+1)%3)===0) updatePreview(t);
   /* deck thumbnails: amortized — 2 renders/frame max until the queue drains,
      zero per-frame cost afterwards */
-  if(!neOpen && thumbQueue.length) pumpThumbs(t,(window.HM_DEVICE&&HM_DEVICE.device==='phone')?1:2);
+  if(!neOpen && thumbQueue.length) pumpThumbs(t,2);
   frames++;
   if(now-fpsT>0.5){
     /* rolling 1s fps average + effective render scale, always honest */
