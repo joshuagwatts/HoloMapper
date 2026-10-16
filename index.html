@@ -1573,6 +1573,11 @@ defParam('P.fbsat', 'FB Saturate',  0.5, v=>v*2,            v=>(v*2).toFixed(2)+
 defParam('P.kseg',  'Kaleido Seg',  0.4, v=>Math.round(2+v*10), v=>String(Math.round(2+v*10)));
 defParam('P.kang',  'Kaleido Angle',0,   v=>v*6.2832,       v=>Math.round(v*360)+'\u00B0');
 defParam('P.gamt',  'Glitch Amt',   0.35);
+defParam('P.twitchamt','Twitch Amt', 0.5);
+defParam('P.warpamt','Warp Amt',     0.5);
+defParam('P.warpmode','Warp Mode',   0.0);
+defParam('P.cpspeed','Phase Speed',  0.5);
+defParam('P.cpamt',  'Phase Blend',  1.0);
 defParam('P.bri',   'Brightness',   0.5, v=>0.2+v*1.6,      v=>(0.2+v*1.6).toFixed(2));
 defParam('P.con',   'Contrast',     0.5, v=>v*2,            v=>(v*2).toFixed(2));
 defParam('P.sat',   'Saturation',   0.5, v=>v*2,            v=>(v*2).toFixed(2));
@@ -2143,6 +2148,91 @@ void main(){
 }
 `;
 
+const SRC_TWITCH = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_amt;
+uniform float u_time;
+uniform float u_bypass;
+float h21(vec2 p){
+  vec3 p3 = fract(vec3(p.xyx)*0.1031);
+  p3 += dot(p3,p3.yzx+33.33);
+  return fract((p3.x+p3.y)*p3.z);
+}
+void main(){
+  vec2 uv = v_uv;
+  float tw = step(0.7, h21(vec2(floor(u_time*24.0), 1.0))) * u_amt;
+  uv.x += (h21(vec2(floor(u_time*24.0), 2.0))-0.5) * 0.2 * tw;
+  uv.y += (h21(vec2(floor(u_time*24.0), 3.0))-0.5) * 0.1 * tw;
+  float rgb = h21(vec2(floor(u_time*24.0), 4.0)) * tw * 0.05;
+  vec3 c;
+  c.r = texture(u_tex, uv+vec2(rgb,0.)).r;
+  c.g = texture(u_tex, uv).g;
+  c.b = texture(u_tex, uv-vec2(rgb,0.)).b;
+  O = vec4(mix(texture(u_tex,v_uv).rgb, c, step(0.001,tw)), 1.0);
+}`;
+
+const SRC_WARP = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_amt;
+uniform float u_mode;
+uniform float u_time;
+uniform float u_bypass;
+void main(){
+  vec2 uv = v_uv;
+  vec2 c = uv - 0.5;
+  float r = length(c);
+  float a = atan(c.y, c.x);
+  int m = int(u_mode*3.99);
+  if(m==0){ /* swirl */
+    a += u_amt * 3.0 * (1.0-r);
+  }else if(m==1){ /* wave */
+    uv.x += sin(uv.y*20.0+u_time*3.0)*0.05*u_amt;
+    uv.y += cos(uv.x*20.0-u_time*2.0)*0.05*u_amt;
+  }else if(m==2){ /* pinch */
+    r = pow(r, 1.0+u_amt*2.0);
+  }else{ /* ripple */
+    r += sin(r*30.0-u_time*5.0)*0.03*u_amt;
+  }
+  if(m==0||m==2||m==3){ uv = vec2(cos(a),sin(a))*r+0.5; }
+  O = vec4(texture(u_tex,uv).rgb, 1.0);
+}`;
+
+const SRC_COLORPHASE = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_speed;
+uniform float u_amt;
+uniform float u_time;
+uniform float u_bypass;
+vec3 rgb2hsv(vec3 c){
+  vec4 K = vec4(0.,-1./3.,2./3.,-1.);
+  vec4 p = mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g));
+  vec4 q = mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r));
+  float d = q.x-min(q.w,q.y);
+  float e = 1e-10;
+  return vec3(abs(q.z+(q.w-q.y)/(6.*d+e)),d/(q.x+e),q.x);
+}
+vec3 hsv2rgb(vec3 c){
+  vec4 K = vec4(1.,2./3.,1./3.,3.);
+  vec3 p = abs(fract(c.xxx+K.xyz)*6.-K.www);
+  return c.z*mix(K.xxx,clamp(p-K.xxx,0.,1.),c.y);
+}
+void main(){
+  vec3 c = texture(u_tex,v_uv).rgb;
+  vec3 h = rgb2hsv(c);
+  h.x = fract(h.x + u_time*u_speed*0.1);
+  vec3 shifted = hsv2rgb(h);
+  O = vec4(mix(c, shifted, u_amt), 1.0);
+}`;
+
 const SRC_GRADE = `#version 300 es
 precision highp float;
 out vec4 O;
@@ -2452,6 +2542,9 @@ function compileAll(){
     ['feedback',SRC_FEEDBACK],
     ['kaleido', SRC_KALEIDO],
     ['glitch',  SRC_GLITCH],
+    ['twitch',  SRC_TWITCH],
+    ['warp',    SRC_WARP],
+    ['colorphase', SRC_COLORPHASE],
     ['grade',   SRC_GRADE],
     ['mirror',  SRC_MIRROR],
     ['automask',SRC_AUTOMASK],
@@ -3618,6 +3711,44 @@ function applyGlitchChain(T,inst,t){
   quadDraw();
   fxCopyBack(T);
 }
+function applyTwitchChain(T,inst,t){
+  ensureFxScratch();
+  const P=PROG.twitch; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_amt'),fxVal(inst,'P.twitchamt'));
+  gl.uniform1f(U(P,'u_time'),t);
+  quadDraw();
+  fxCopyBack(T);
+}
+function applyWarpChain(T,inst,t){
+  ensureFxScratch();
+  const P=PROG.warp; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_amt'),fxVal(inst,'P.warpamt'));
+  gl.uniform1f(U(P,'u_mode'),fxVal(inst,'P.warpmode'));
+  gl.uniform1f(U(P,'u_time'),t);
+  quadDraw();
+  fxCopyBack(T);
+}
+function applyColorPhaseChain(T,inst,t){
+  ensureFxScratch();
+  const P=PROG.colorphase; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_speed'),fxVal(inst,'P.cpspeed'));
+  gl.uniform1f(U(P,'u_amt'),fxVal(inst,'P.cpamt'));
+  gl.uniform1f(U(P,'u_time'),t);
+  quadDraw();
+  fxCopyBack(T);
+}
 function applyMirrorChain(T,inst){
   ensureFxScratch();
   const P=PROG.mirror; if(!P) return;
@@ -3698,6 +3829,9 @@ function applyFxChain(T,chain,t){
   for(const inst of active){
     if(inst.k==='kaleido') applyKaleidoChain(T,inst);
     else if(inst.k==='glitch') applyGlitchChain(T,inst,t);
+    else if(inst.k==='twitch') applyTwitchChain(T,inst,t);
+    else if(inst.k==='warp') applyWarpChain(T,inst,t);
+    else if(inst.k==='colorphase') applyColorPhaseChain(T,inst,t);
     else if(inst.k==='mirror') applyMirrorChain(T,inst);
     else if(inst.k==='automask') applyAutoMaskChain(T,inst);
     else if(inst.k==='colorize') applyColorizeChain(T,inst);
@@ -5563,13 +5697,16 @@ function buildCompTab(){
   buildPostFx(); buildMaster(); buildDashboard(); renderMidiList();
 }
 /* ---------- browser: effects / sources ---------- */
-const FXLIST=[['feedback','Feedback'],['kaleido','Kaleidoscope'],['glitch','RGB Split / Glitch'],['mirror','Mirror'],['automask','Auto Mask'],['colorize','Colorize'],['bloompost','Bloom'],['grade','Grade']];
+const FXLIST=[['feedback','Feedback'],['kaleido','Kaleidoscope'],['glitch','RGB Split / Glitch'],['twitch','Twitch'],['warp','Motion Warp'],['colorphase','Color Phase'],['mirror','Mirror'],['automask','Auto Mask'],['colorize','Colorize'],['bloompost','Bloom'],['grade','Grade']];
 /* ---- FX chain definitions (v1.4): Resolume-style per-clip/per-layer/per-comp
    chains. Each instance {k:key, on:bool, v:{pid:0-1}} has OWN knobs. ---- */
 const FXDEFS=[
   {group:'Warp', key:'kaleido', name:'Kaleido', sub:'kaleidoscope', params:[['P.kseg','Segments'],['P.kang','Rotation']]},
   {group:'Warp', key:'mirror', name:'Mirror', sub:'fold mirror', params:[['P.mirmode','Mirror Mode'],['P.mirpos','Fold Position']]},
   {group:'Time', key:'glitch', name:'RGB Split', sub:'glitchy color split', params:[['P.gamt','Split Amount']]},
+  {group:'Time', key:'twitch', name:'Twitch', sub:'random jump glitch', params:[['P.twitchamt','Twitch Amount']]},
+  {group:'Warp', key:'warp', name:'Motion Warp', sub:'swirl/wave/pinch/ripple', params:[['P.warpamt','Warp Amount'],['P.warpmode','Warp Mode']]},
+  {group:'Color', key:'colorphase', name:'Color Phase', sub:'hue rotator', params:[['P.cpspeed','Phase Speed'],['P.cpamt','Blend Amount']]},
   {group:'Color', key:'colorize', name:'Colorize', sub:'duotone color', params:[['P.czpal','Palette'],['P.czamt','Blend Amount'],['P.czhueA','Shadow Hue'],['P.czhueB','Highlight Hue']]},
   {group:'Color', key:'grade', name:'Grade', sub:'color grade', params:[['P.bri','Brightness'],['P.con','Contrast'],['P.sat','Saturation'],['P.vig','Vignette'],['P.grain','Film Grain']]},
   {group:'Look', key:'automask', name:'Auto Mask', sub:'luma/chroma key', params:[['P.ammode','Key Mode'],['P.amthr','Threshold'],['P.amsoft','Edge Softness'],['P.amkey','Key Hue'],['P.aminv','Invert Mask']]},
