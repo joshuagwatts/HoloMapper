@@ -207,7 +207,7 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .coltab:hover{color:var(--txt)}
 #deck{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;padding:4px 8px 8px;gap:3px}
 .lstrip{flex:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
-  display:grid;grid-template-columns:40px 110px minmax(0,1fr);overflow:hidden;min-height:76px}
+  display:grid;grid-template-columns:40px 110px minmax(0,1fr);overflow:hidden;height:76px}
 /* Resolume-style V fader + mix mode on the strip's left edge — contained inside */
 .lfad{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 2px;min-height:0;overflow:hidden}
 /* Thick Resolume-style V fader — solid green, inside the layer box */
@@ -267,12 +267,12 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .lrow2{display:flex;align-items:center;gap:4px}
 .lbsel{max-width:86px;font-size:10px}
 .clipgrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;padding:4px;min-width:0}
-.clip{position:relative;height:64px;min-height:48px;border-radius:var(--r);background:#141518;border:1px solid #2b2e35;
+.clip{position:relative;height:100%;min-height:0;border-radius:var(--r);background:#141518;border:1px solid #2b2e35;
   color:var(--dim);font-size:9px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;
   align-items:stretch;justify-content:center;text-align:center;padding:0;line-height:1.15;user-select:none;overflow:hidden}
 .clip .cthumb{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;padding:0;position:relative;overflow:hidden;cursor:pointer;background:#0a0b0e}
 /* live visual thumbnails: canvas fills the box, name stays as a readable overlay label */
-.thcv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.thcv{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:100%;aspect-ratio:16/9;display:block;max-width:none}
 .thlab{position:absolute;left:0;right:0;bottom:0;font-size:8px;line-height:1.2;padding:1px 3px 2px;text-align:center;
   color:#dfe3ea;background:linear-gradient(transparent,rgba(0,0,0,.72));white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;pointer-events:none}
