@@ -2662,7 +2662,7 @@ const BASE_W=1280, BASE_H=720;
 const Q_SCALES=[1.0, 0.75, 0.5];
 const Q_LABEL={auto:'Auto', high:'High', medium:'Medium', low:'Low'};
 let qScaleIdx=0; /* effective scale index: 0=1.0x, 1=0.75x, 2=0.5x */
-if(window.HM_DEVICE&&HM_DEVICE.device==='phone')qScaleIdx=1; /* phones start at 0.75x */
+if(window.HM_DEVICE&&HM_DEVICE.device==='phone')qScaleIdx=2; /* phones start at 0.5x */
 function effScale(){ return Q_SCALES[qScaleIdx]; }
 function buildTargets(){
   /* Render quality: the display canvas always stays at the full base
@@ -5221,14 +5221,14 @@ function buildDeck(){
       if(typeof qs==='number') paintThumb(qi,qk,qs);
     }
     queueThumbs();
-    /* force-pump ALL immediately so thumbnails appear without waiting for rAF */
-    if(typeof pumpThumbs==='function'){ try{ pumpThumbs(performance.now()/1000, 64); }catch(e){} }
+    /* force-pump visible thumbnails immediately (don't block phone on load) */
+    if(typeof pumpThumbs==='function'){ try{ pumpThumbs(performance.now()/1000, 12); }catch(e){} }
     /* delayed re-pump: catch any that raced init (shaders not yet compiled) */
     if(!window._thumbReumpT){ window._thumbReumpT=1; setTimeout(function(){
       try{
         /* clear cache: earlier pumps may have cached black (bypassed) renders */
         if(typeof thumbCache!=='undefined') for(const k in thumbCache) delete thumbCache[k];
-        queueThumbs(); pumpThumbs(performance.now()/1000, 64);
+        queueThumbs(); pumpThumbs(performance.now()/1000, 12);
       }catch(e){}
     },2500); }
   }
@@ -6147,10 +6147,8 @@ function pumpThumbs(t,n){
       blitTargetFlipped(thT,thRead,thImg);
       /* copy: thImg is reused scratch */
       const copy=new ImageData(new Uint8ClampedArray(thImg.data),THW,THH);
-      /* don't cache black renders — re-queue for retry (e.g. raced init) */
-      let _sum=0; for(let _px=0;_px<copy.data.length;_px+=16)_sum+=copy.data[_px]+copy.data[_px+1]+copy.data[_px+2];
-      if(_sum>0){ thumbCache[q.i+','+q.k]={key:q.key,img:copy}; }
-      else{ q._retries=(q._retries||0)+1; if(q._retries<5){ thumbQueue.push(q); thumbQueued[q.key]=true; } }
+      /* cache it (bypass is ignored above, so black = genuinely black source) */
+      thumbCache[q.i+','+q.k]={key:q.key,img:copy};
       const cv=document.querySelector('.clip[data-i="'+q.i+'"][data-k="'+q.k+'"] .thcv');
       if(cv) cv.getContext('2d').putImageData(copy,0,0);
     }catch(err){ /* failed shader: keep the dark box, never break the queue */ }
@@ -8087,8 +8085,10 @@ function syncQualityUI(){
   if(s){ s.value=S.quality; s.title='Render quality ('+Q_LABEL[S.quality]+
     '): internal render scale '+effScale()+'x — display stays full-size'; }
 }
+let _watchdogT=0;
 function loop(){
   requestAnimationFrame(loop);
+  _watchdogT=performance.now();
   const now=performance.now()/1000;
   const t=now-tStart;
   qualityAutoTick(now);
@@ -8176,6 +8176,14 @@ function init(){
   initShaderIO();
   initMidi();
   requestAnimationFrame(loop);
+  /* watchdog: if the rAF loop stalls (mobile browsers throttle/kill it),
+     restart it. Runs on setInterval so it survives rAF death. */
+  setInterval(function(){
+    if(performance.now()-_watchdogT>3000){
+      _watchdogT=performance.now();
+      try{ requestAnimationFrame(loop); }catch(e){}
+    }
+  },2000);
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
 else init();
