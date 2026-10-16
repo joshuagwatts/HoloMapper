@@ -2,7 +2,47 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>/* device detection: phone/tablet/desktop + os, before first paint */
+(function(){
+  try{
+    var ua=navigator.userAgent||'', pl=navigator.platform||'';
+    var touch=('ontouchstart' in window)||navigator.maxTouchPoints>0;
+    var coarse=false;
+    try{coarse=window.matchMedia&&matchMedia('(pointer: coarse)').matches;}catch(e){}
+    var small=Math.min(screen.width||9999,screen.height||9999);
+    var iPhone=/iPhone|iPod/i.test(ua);
+    var iPad=/iPad/i.test(ua)||(pl==='MacIntel'&&touch&&navigator.maxTouchPoints>1);
+    var android=/Android/i.test(ua);
+    var ios=iPhone||iPad||/iPhone|iPad|iPod/i.test(ua);
+    var mac=/Mac/i.test(pl)&&!iPad;
+    var dev;
+    if(iPhone)dev='phone';
+    else if(iPad)dev='tablet';
+    else if(android&&touch&&small<600)dev='phone';
+    else if(android&&touch&&small<1100)dev='tablet';
+    else if(touch&&coarse&&small<600)dev='phone';
+    else if(touch&&coarse&&small<1100)dev='tablet';
+    else dev='desktop';
+    var os=ios?'ios':(android?'android':(mac?'mac':(/Win/i.test(pl)?'windows':'linux')));
+    var h=document.documentElement;
+    h.dataset.device=dev;h.dataset.os=os;
+    if(touch)h.dataset.touch='1';
+    if(iPhone)h.dataset.iphone='1';
+    window.HM_DEVICE={device:dev,os:os,touch:!!touch,iphone:iPhone,
+      detect:function(){ /* re-run (orientation/resize); returns true if category changed */
+        var w=Math.min(window.innerWidth||9999,window.innerHeight||9999);
+        var nd=dev;
+        if(!(iPhone||iPad||android)){
+          if(touch&&coarse&&w<600)nd='phone';
+          else if(touch&&coarse&&w<1100)nd='tablet';
+          else nd='desktop';
+        }
+        if(nd!==dev){dev=nd;h.dataset.device=nd;window.HM_DEVICE.device=nd;return true;}
+        return false;
+      }};
+  }catch(e){window.HM_DEVICE={device:'desktop',os:'linux',touch:false,iphone:false};}
+})();</script>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -434,6 +474,40 @@ body.perform #performbar{display:block}
   background:var(--panel2);color:var(--txt);border-radius:var(--r);cursor:pointer}
 .mbtn:hover{border-color:var(--sel)}
 .mbtn.on{border-color:var(--sel);color:var(--sel)}
+
+/* ============ device-adaptive layout (phone/tablet/desktop) ============ */
+/* phone: stacked panels, big touch targets, roomier clip grid */
+html[data-device="phone"] #main{overflow-y:auto;-webkit-overflow-scrolling:touch}
+html[data-device="phone"] .dockdiv{display:none}
+html[data-device="phone"] .dockpanel{min-height:0}
+html[data-device="phone"] .dockbody{overflow:visible}
+html[data-device="phone"] header#topbar{flex-wrap:wrap;height:auto;min-height:44px}
+html[data-device="phone"] .clipgrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:6px}
+html[data-device="phone"] .lstrip{grid-template-columns:44px 84px minmax(0,1fr);height:96px}
+html[data-device="phone"] .clip{font-size:10px}
+html[data-device="phone"] button{min-height:40px;min-width:40px;font-size:13px}
+html[data-device="phone"] .tbtn2{min-height:40px;padding:6px 12px;font-size:13px}
+html[data-device="phone"] .cbtn{min-height:36px;min-width:36px}
+html[data-device="phone"] .fxbtn{min-height:36px;min-width:36px}
+html[data-device="phone"] select{min-height:40px;font-size:14px}
+html[data-device="phone"] input[type="range"]{min-height:40px}
+html[data-device="phone"] .vfad{width:44px;touch-action:none}
+html[data-device="phone"] #transport{flex-wrap:wrap;height:auto;row-gap:6px}
+html[data-device="phone"] .dockhead{font-size:13px;padding:8px 10px}
+/* tablet: stacked too, but denser grid + slightly smaller targets than phone */
+html[data-device="tablet"] #main{overflow-y:auto;-webkit-overflow-scrolling:touch}
+html[data-device="tablet"] .dockdiv{display:none}
+html[data-device="tablet"] .clipgrid{grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
+html[data-device="tablet"] button{min-height:38px;min-width:38px}
+html[data-device="tablet"] select{min-height:38px;font-size:13px}
+html[data-device="tablet"] #transport{flex-wrap:wrap;height:auto;row-gap:6px}
+html[data-device="tablet"] .lstrip{height:88px}
+/* touch: no hover-only affordances, kill text selection on controls */
+html[data-touch="1"] .dockpanel,html[data-touch="1"] #transport{-webkit-user-select:none;user-select:none}
+html[data-touch="1"] .clip{touch-action:manipulation}
+/* iPhone notch / home indicator safe areas */
+html[data-iphone="1"] body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+html[data-iphone="1"] #transport{padding-bottom:env(safe-area-inset-bottom)}
 </style>
 <style>
 /* status bar */
@@ -717,11 +791,24 @@ body.perform #performbar{display:block}
    Layout persists in localStorage; Reset layout restores the default. */
 const DOCK_IDS=['deck','transport','output','preview','proptabs','browser','clip'];
 const DOCK_TITLES={deck:'Deck',transport:'Transport',output:'Output',preview:'Preview',proptabs:'Properties',browser:'Browser',clip:'Clip'};
-const DOCK_KEY='holomapper.dock.v1';
+const DOCK_KEY_BASE='holomapper.dock.v1';
+function dockKey(){var d=(window.HM_DEVICE&&HM_DEVICE.device)||'desktop';return DOCK_KEY_BASE+'.'+d;}
 let dockLayout=null;
 const dockWraps={}; /* id -> .dockpanel element (inner content preserved) */
 
-function dockDefault(){return{v:2,hidden:[],rows:[
+function dockDefault(){
+var _dev=(window.HM_DEVICE&&HM_DEVICE.device)||'desktop';
+if(_dev==='phone'||_dev==='tablet'){
+  /* stacked single-column: transport, deck, output, preview, then inspector tabs */
+  return{v:2,hidden:[],rows:[
+    {h:'auto',cols:[{w:'1fr',panels:[{id:'transport',size:'auto'}]}]},
+    {h:'auto',cols:[{w:'1fr',panels:[{id:'deck',size:'auto'}]}]},
+    {h:'auto',cols:[{w:'1fr',panels:[{id:'output',size:'auto'}]}]},
+    {h:'auto',cols:[{w:'1fr',panels:[{id:'preview',size:'auto'}]}]},
+    {h:'auto',cols:[{w:'1fr',panels:[{id:'proptabs',size:'auto'},{id:'browser',size:'auto'},{id:'clip',size:'auto'}]}]}
+  ]};
+}
+return{v:2,hidden:[],rows:[
   {h:'auto',cols:[{w:'1fr',panels:[{id:'transport',size:'auto'}]}]},
   {h:'1fr',cols:[{w:'1.35fr',panels:[{id:'deck',size:'1fr'}]},
                  {w:'1fr',panels:[{id:'output',size:'1.65fr'},{id:'preview',size:'1fr'}]},
@@ -1017,6 +1104,23 @@ function dockApplyOp(pid,op){
   }
 }
 
+/* re-detect device on viewport change; if phone<->desktop flips, rebuild dock */
+(function(){
+  var rt=null;
+  function onRs(){
+    if(rt)clearTimeout(rt);
+    rt=setTimeout(function(){
+      try{
+        if(window.HM_DEVICE&&HM_DEVICE.detect&&HM_DEVICE.detect()){
+          dockLayout=dockDefault();dockRender();dockSave();
+          if(typeof toast==='function')toast('Layout: '+HM_DEVICE.device+' mode');
+        }
+      }catch(e){}
+    },600);
+  }
+  window.addEventListener('orientationchange',onRs);
+  window.addEventListener('resize',onRs);
+})();
 function dockPrune(){
   for(const r of dockLayout.rows)r.cols=r.cols.filter(c=>c.panels.length>0);
   dockLayout.rows=dockLayout.rows.filter(r=>r.cols.length>0);
@@ -1024,10 +1128,10 @@ function dockPrune(){
 }
 
 /* ---------- persistence ---------- */
-function dockSave(){try{localStorage.setItem(DOCK_KEY,dockSer());}catch(e){}}
+function dockSave(){try{localStorage.setItem(dockKey(),dockSer());}catch(e){}}
 function dockLoad(){
   try{
-    const raw=localStorage.getItem(DOCK_KEY);if(!raw)return null;
+    const raw=localStorage.getItem(dockKey());if(!raw)return null;
     const L=JSON.parse(raw);
     if(!L||!Array.isArray(L.rows))return null;
     /* v1->v2 migration: split the old 'monitors' panel into 'output'+'preview'
@@ -2514,6 +2618,7 @@ const BASE_W=1280, BASE_H=720;
 const Q_SCALES=[1.0, 0.75, 0.5];
 const Q_LABEL={auto:'Auto', high:'High', medium:'Medium', low:'Low'};
 let qScaleIdx=0; /* effective scale index: 0=1.0x, 1=0.75x, 2=0.5x */
+if(window.HM_DEVICE&&HM_DEVICE.device==='phone')qScaleIdx=1; /* phones start at 0.75x */
 function effScale(){ return Q_SCALES[qScaleIdx]; }
 function buildTargets(){
   /* Render quality: the display canvas always stays at the full base
