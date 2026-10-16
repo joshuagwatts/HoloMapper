@@ -1811,6 +1811,10 @@ const PARAM_HOOKS = {};
 function setParam(id, v01, fromEl){
   v01 = clamp(v01,0,1);
   S.params[id]=v01;
+  /* repaint faders bound to this param */
+  document.querySelectorAll('.vfad').forEach(f=>{
+    if(f._vfId===id&&f._vfPaint&&f!==fromEl) f._vfPaint(v01);
+  });
   const sel='[data-ctrl="'+id+'"]';
   document.querySelectorAll(sel).forEach(elm=>{ if(elm!==fromEl){ const fn=SYNC_FN[id]; if(fn) fn(elm,v01); else elm.value=v01; } });
   document.querySelectorAll('[data-val="'+id+'"]').forEach(sp=>{ sp.textContent=PARAMS[id].fmt(v01); });
@@ -4566,14 +4570,15 @@ function buildVFader(i){
   const han=el('div','vfad-handle'); root.appendChild(han);
   const cur=()=> (S.params[id]!==undefined)?S.params[id]:1;
   const paint=(v)=>{
-    const p=clamp(v,0,1)*100;
-    fill.style.height='calc(12px + '+p+'% * 0.01 * (100% - 24px) - 2px)';
-    han.style.bottom='calc(12px + '+p+'% * 0.01 * (100% - 24px) - 11px)';
-    root.setAttribute('aria-valuenow',String(Math.round(p)));
+    const p=clamp(v,0,1), f=(p).toFixed(4);
+    fill.style.height='calc(12px + '+f+' * (100% - 24px) - 2px)';
+    han.style.bottom='calc(12px + '+f+' * (100% - 24px) - 11px)';
+    root.setAttribute('aria-valuenow',String(Math.round(p*100)));
     const fv=root.parentElement&&root.parentElement.querySelector('.fval');
-    if(fv) fv.textContent=Math.round(p)+'%';
+    if(fv) fv.textContent=Math.round(p*100)+'%';
   };
   root._vfPaint=paint;
+  root._vfId=id;
   paint(cur());
   const setFromY=(clientY)=>{
     const r=root.getBoundingClientRect();
