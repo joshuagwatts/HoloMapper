@@ -1761,7 +1761,9 @@ function sanitizeMods(m){
 }
 function defaultClips(){
   const c=[];
-  for(let i=0;i<MAX_LAYERS;i++){ const r=[]; for(let k=0;k<8;k++) r.push(k<5?k:null); c.push(r); }
+  /* phones skip Cloner 3D (src 4) in defaults — heavy 3D; desktop keeps it */
+  const n=(window.HM_DEVICE&&HM_DEVICE.device==='phone')?4:5;
+  for(let i=0;i<MAX_LAYERS;i++){ const r=[]; for(let k=0;k<8;k++) r.push(k<n?k:null); c.push(r); }
   return c;
 }
 function validClips(c){
