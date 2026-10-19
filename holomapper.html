@@ -5090,8 +5090,26 @@ function buildDeck(){
           /* empty clip: deselect */
           S.sel=null; saveState(); buildDeck(); buildProps();
           if(typeof closeClipInspector==='function') closeClipInspector();
+        }else if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
+          /* phone: tap = select, double-tap = fire */
+          const now=Date.now();
+          if(th._lastTap&&now-th._lastTap<350){ th._lastTap=0; fireClip(i,k); openClipInspector(i,k); }
+          else{ th._lastTap=now; selectClip(i,k); openClipInspector(i,k); toggleClipSel(i,k,false); }
         }else{ fireClip(i,k); openClipInspector(i,k); }
       });
+      /* phone: long-press = assign source (no right-click on touch) */
+      if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
+        let _lpT=null;
+        th.addEventListener('touchstart',(e)=>{
+          _lpT=setTimeout(()=>{
+            const t=e.touches[0];
+            showClipMenu(t.clientX,t.clientY,i,k);
+            th._lastTap=0; /* suppress the tap-select */
+          },500);
+        },{passive:true});
+        th.addEventListener('touchend',()=>{ clearTimeout(_lpT); });
+        th.addEventListener('touchmove',()=>{ clearTimeout(_lpT); });
+      }
       const cnm=el('div','cname',src===null||src===undefined?'empty':srcName(src));
       cnm.title='Select clip '+(k+1)+' without triggering';
       cnm.addEventListener('click',(e)=>{
