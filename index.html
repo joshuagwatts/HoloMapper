@@ -510,33 +510,17 @@ html[data-iphone="1"] body{padding-left:env(safe-area-inset-left);padding-right:
 html[data-iphone="1"] #transport{padding-bottom:env(safe-area-inset-bottom)}
 
 /* ============ MAJOR phone UI optimization (desktop untouched) ============ */
-/* sticky output: visual stays pinned while scrolling the deck */
-html[data-device="phone"] .dockpanel[data-panel="output"]{position:sticky;top:0;z-index:60;
-  background:var(--bg);border-bottom:2px solid var(--line)}
-/* bigger clips: 3-col grid, taller strips */
-html[data-device="phone"] .clipgrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px}
-html[data-device="phone"] .lstrip{grid-template-columns:48px 64px minmax(0,1fr);height:118px}
-/* slim the layer gut: hide precision drag handle, keep name + X/B/S */
-html[data-device="phone"] .lgrip{display:none}
-html[data-device="phone"] .lname{font-size:13px;min-height:36px}
-/* TAP is the money button on phone */
-html[data-device="phone"] #btnTap{min-height:52px;min-width:76px;font-size:16px;font-weight:800}
+
 /* kill double-tap zoom delay across the app */
 html[data-device="phone"] body{touch-action:manipulation}
-/* collapsible panels */
-html[data-device="phone"] .ph-collapse{flex:none;min-width:34px;min-height:34px;font-size:16px;
-  background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:var(--r)}
-html[data-device="phone"] .dockpanel.ph-collapsed .dockbody{display:none}
-html[data-device="phone"] .dockpanel.ph-collapsed{border-color:var(--dim)}
+
 /* monitor canvases: full width, keep aspect */
 html[data-device="phone"] .dockpanel[data-panel="output"] canvas,
 html[data-device="phone"] .dockpanel[data-panel="preview"] canvas{width:100%;height:auto}
 /* browser rows: taller, easier to hit */
 html[data-device="phone"] .fxrow{min-height:48px;font-size:14px}
 html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
-/* ============ GPU-lite: hide GPU-heavy UI on phone (features forced off in JS) ============ */
-html[data-device="phone"] .dockpanel[data-panel="preview"]{display:none}
-html[data-device="phone"] #secPostFx{display:none}
+
 </style>
 <style>
 /* status bar */
@@ -1150,23 +1134,6 @@ function dockApplyOp(pid,op){
   window.addEventListener('orientationchange',onRs);
   window.addEventListener('resize',onRs);
 })();
-/* phone: collapse toggles on panel headers so the long stacked layout
-   stays navigable; desktop untouched */
-function phoneCollapseInit(){
-  if(!window.HM_DEVICE||HM_DEVICE.device!=='phone')return;
-  Object.values(dockWraps).forEach(function(w){
-    var h=w.querySelector(':scope > .dockhead');
-    if(!h||h.querySelector('.ph-collapse'))return;
-    var b=document.createElement('button');
-    b.className='ph-collapse';b.textContent='\u2212';b.title='Collapse / expand panel';
-    b.addEventListener('click',function(e){
-      e.stopPropagation();
-      var c=w.classList.toggle('ph-collapsed');
-      b.textContent=c?'+':'\u2212';
-    });
-    h.insertBefore(b,h.firstChild);
-  });
-}
 function dockPrune(){
   for(const r of dockLayout.rows)r.cols=r.cols.filter(c=>c.panels.length>0);
   dockLayout.rows=dockLayout.rows.filter(r=>r.cols.length>0);
@@ -1303,7 +1270,6 @@ function dockInitWindows(){
 
 function dockInit(){
   dockWrapPanels();
-  phoneCollapseInit();
   dockLayout=dockLoad()||dockDefault();
   if(!Array.isArray(dockLayout.hidden))dockLayout.hidden=[];
   dockRender();
@@ -2665,13 +2631,7 @@ const BASE_W=1280, BASE_H=720;
 const Q_SCALES=[1.0, 0.75, 0.5];
 const Q_LABEL={auto:'Auto', high:'High', medium:'Medium', low:'Low'};
 let qScaleIdx=0; /* effective scale index: 0=1.0x, 1=0.75x, 2=0.5x */
-if(window.HM_DEVICE&&HM_DEVICE.device==='phone')qScaleIdx=2; /* phones start at 0.5x */
-if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
-  /* GPU-lite: bypass the whole post chain on phones (feedback/kaleido/glitch/
-     mirror/automask/colorize/bloom). Layer shaders keep playing. */
-  if(!S.postBypass||typeof S.postBypass!=='object') S.postBypass={};
-  for(const k of ['feedback','kaleido','glitch','mirror','automask','colorize','bloompost']) S.postBypass[k]=true;
-}
+if(window.HM_DEVICE&&HM_DEVICE.device==='phone')qScaleIdx=0; /* phones start full; auto-quality adapts */
 function effScale(){ return Q_SCALES[qScaleIdx]; }
 function buildTargets(){
   /* Render quality: the display canvas always stays at the full base
@@ -6105,7 +6065,7 @@ function updatePreview(t){
    pixels are cached per (layer,slot,src,graphRev) so deck rebuilds repaint
    instantly, and node-graph edits (which bump g.rev via touchGraph)
    automatically invalidate that layer's thumbs. */
-const THW=((window.HM_DEVICE&&HM_DEVICE.device==='phone')?96:160), THH=((window.HM_DEVICE&&HM_DEVICE.device==='phone')?54:90);
+const THW=160, THH=90;
 let thT=null, thRead=null, thImg=null;
 const thumbCache={};   /* "i,k" -> {key:key, img:ImageData} */
 const thumbQueued={};  /* key -> true while queued (dedupe) */
@@ -8140,7 +8100,7 @@ function loop(){
   /* live clip preview: throttled to every 3rd frame (the readPixels stall was
      the dominant frame cost) and skipped while the node editor covers the deck.
      Uses its own counter — `frames` resets every 0.5s for the fps meter. */
-  if(!neOpen && !(window.HM_DEVICE&&HM_DEVICE.device==='phone') && (pvTick=(pvTick+1)%3)===0) updatePreview(t);
+  if(!neOpen && (pvTick=(pvTick+1)%3)===0) updatePreview(t);
   /* deck thumbnails: amortized — 2 renders/frame max until the queue drains,
      zero per-frame cost afterwards */
   if(!neOpen && thumbQueue.length) pumpThumbs(t,2);
