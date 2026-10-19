@@ -8131,16 +8131,22 @@ function loop(){
   pumpWebcam(); /* one texture upload per frame max, shared by all layers */
   for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
   renderCombine();
-  renderFeedback();
-  /* post chain threads one texture through; bypassed stages are skipped
-     (pixel-identical passthrough) inside each stage function */
-  let pc=fbT[fbRead].tex;
-  pc=renderKaleido(pc);
-  pc=renderGlitch(pc,t);
-  pc=renderMirror(pc);
-  pc=renderAutoMask(pc);
-  pc=renderColorize(pc);
-  pc=renderBloomPost(pc);
+  let pc;
+  if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
+    /* phone: minimal path — combine straight to grade (feedback/post may break mobile GPUs) */
+    pc=compT.tex;
+  }else{
+    renderFeedback();
+    /* post chain threads one texture through; bypassed stages are skipped
+       (pixel-identical passthrough) inside each stage function */
+    pc=fbT[fbRead].tex;
+    pc=renderKaleido(pc);
+    pc=renderGlitch(pc,t);
+    pc=renderMirror(pc);
+    pc=renderAutoMask(pc);
+    pc=renderColorize(pc);
+    pc=renderBloomPost(pc);
+  }
   /* v1.4: composition FX chain (Resolume-style) — applied after post chain */
   ensureFxChains();
   if(S.compFx&&S.compFx.length){
