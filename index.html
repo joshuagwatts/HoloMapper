@@ -4832,9 +4832,12 @@ function buildVFader(i){
   const han=el('div','vfad-handle'); root.appendChild(han);
   const cur=()=> (S.params[id]!==undefined)?S.params[id]:1;
   const paint=(v)=>{
-    const p=clamp(v,0,1), f=(p).toFixed(4);
-    fill.style.height='calc(12px + '+f+' * (100% - 24px) - 2px)';
-    han.style.bottom='calc(12px + '+f+' * (100% - 24px) - 11px)';
+    const p=clamp(v,0,1);
+    /* pixel math: CSS calc can't do number*(length), so compute here.
+       Track runs 12px from top to 12px from bottom. */
+    const h=root.clientHeight||96, th=Math.max(8,h-24);
+    fill.style.height=Math.round(p*th)+'px';
+    han.style.bottom=Math.round(12+p*th-11)+'px';
     root.setAttribute('aria-valuenow',String(Math.round(p*100)));
     const fv=root.parentElement&&root.parentElement.querySelector('.fval');
     if(fv) fv.textContent=Math.round(p*100)+'%';
@@ -4842,6 +4845,8 @@ function buildVFader(i){
   root._vfPaint=paint;
   root._vfId=id;
   paint(cur());
+  /* repaint after layout settles (clientHeight is 0 pre-layout) */
+  requestAnimationFrame(()=>paint(cur()));
   const setFromY=(clientY)=>{
     const r=root.getBoundingClientRect();
     if(r.height<=24) return;
@@ -6106,11 +6111,16 @@ function pumpThumbs(t,n){
     const q=thumbQueue.shift();
     delete thumbQueued[q.key];
     try{
-      /* thumbnails ignore layer bypass — show the source, not black */
+      /* thumbnails ignore layer bypass + graph — show the raw source, not black */
       var _byp=S.layers[q.i]&&S.layers[q.i].bypass;
+      var _graph=S.graphs&&S.graphs[q.i];
       if(S.layers[q.i])S.layers[q.i].bypass=false;
+      if(S.graphs)S.graphs[q.i]=null;
       try{ renderClipSource(q.i,t,q.src,thT); }
-      finally{ if(S.layers[q.i])S.layers[q.i].bypass=_byp; }
+      finally{
+        if(S.layers[q.i])S.layers[q.i].bypass=_byp;
+        if(S.graphs)S.graphs[q.i]=_graph;
+      }
       if(!thImg){
         const off=document.createElement('canvas'); off.width=THW; off.height=THH;
         thImg=off.getContext('2d').createImageData(THW,THH);
