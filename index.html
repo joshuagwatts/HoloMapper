@@ -5102,10 +5102,8 @@ function buildDeck(){
           S.sel=null; saveState(); buildDeck(); buildProps();
           if(typeof closeClipInspector==='function') closeClipInspector();
         }else if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
-          /* phone: tap = select, double-tap = fire */
-          const now=Date.now();
-          if(th._lastTap&&now-th._lastTap<350){ th._lastTap=0; fireClip(i,k); openClipInspector(i,k); }
-          else{ th._lastTap=now; selectClip(i,k); openClipInspector(i,k); toggleClipSel(i,k,false); }
+          /* phone: tap = fire + select (VJ primary action) */
+          fireClip(i,k); selectClip(i,k); openClipInspector(i,k); toggleClipSel(i,k,false);
         }else{ fireClip(i,k); openClipInspector(i,k); }
       });
       /* phone: long-press = assign source (no right-click on touch) */
