@@ -8166,7 +8166,18 @@ function loop(){
     applyFxChain(fxScratch,S.compFx,t);
     pc=fxScratch.tex;
   }
-  renderGrade(pc,t);
+  if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
+    /* DIAGNOSTIC: render Tunnel directly to canvas, bypass pipeline */
+    try{
+      const P=PROG.tunnel;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+      gl.viewport(0,0,canvas.width,canvas.height);
+      gl.useProgram(P);
+      gl.uniform1f(U(P,'u_time'),t);
+      gl.uniform2f(U(P,'u_res'),canvas.width,canvas.height);
+      quadDraw();
+    }catch(e){ renderGrade(pc,t); }
+  }else renderGrade(pc,t);
   /* live clip preview: throttled to every 3rd frame (the readPixels stall was
      the dominant frame cost) and skipped while the node editor covers the deck.
      Uses its own counter — `frames` resets every 0.5s for the fps meter. */
