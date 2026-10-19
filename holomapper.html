@@ -8201,6 +8201,17 @@ function init(){
   recompileImports();
   initShaderIO();
   initMidi();
+  /* phone: auto-fire a clip on load so output is never black */
+  if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
+    try{
+      const anyFired=S.fired&&S.fired.some(f=>f!==null&&f!==undefined);
+      if(!anyFired&&S.clips&&S.clips[0]){
+        for(let k=0;k<S.clips[0].length;k++){
+          if(typeof S.clips[0][k]==='number'){ fireClip(0,k); break; }
+        }
+      }
+    }catch(e){}
+  }
   requestAnimationFrame(loop);
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
