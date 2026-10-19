@@ -495,7 +495,7 @@ html[data-device="phone"] .dockdiv{display:none}
 html[data-device="phone"] .dockpanel{min-height:0}
 html[data-device="phone"] .dockbody{overflow:visible}
 html[data-device="phone"] header#topbar{flex-wrap:wrap;height:auto;min-height:44px}
-html[data-device="phone"] .clipgrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:6px}
+html[data-device="phone"] .clipgrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px}
 html[data-device="phone"] .lstrip{grid-template-columns:44px 84px minmax(0,1fr);height:96px}
 html[data-device="phone"] .clip{font-size:10px}
 html[data-device="phone"] button{min-height:40px;min-width:40px;font-size:13px}
@@ -1295,7 +1295,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.3.0';
+const APP_VERSION='1.3.1';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1833,10 +1833,10 @@ try{
   S.clips=S.decks[S.deckIdx].clips;
   /* phones: strip Cloner 3D (src 4) from loaded decks too — not just defaults */
   if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
-    for(const dk of S.decks){ if(dk&&Array.isArray(dk.clips)){
-      for(let li=0;li<dk.clips.length;li++) for(let kj=0;kj<dk.clips[li].length;kj++)
-        if(dk.clips[li][kj]===4) dk.clips[li][kj]=null;
-    }}
+    const strip4=(clips)=>{ for(let li=0;li<clips.length;li++) for(let kj=0;kj<clips[li].length;kj++)
+      if(clips[li][kj]===4) clips[li][kj]=null; };
+    for(const dk of S.decks){ if(dk&&Array.isArray(dk.clips)) strip4(dk.clips); }
+    if(Array.isArray(S.clips)) strip4(S.clips);
   }
   if(typeof S.autopilot!=='boolean') S.autopilot=false;
 }catch(e){ console.warn('HoloMapper: state load failed', e); }
