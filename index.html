@@ -508,6 +508,8 @@ html[data-device="phone"] .clip .cname{font-size:12px;padding:10px 4px}
 html[data-device="phone"] .lstrip .lbsel{display:none}
 html[data-device="phone"] .lstrip .trow{display:none}
 html[data-device="phone"] .lstrip .vfad{max-height:200px}
+/* nodes are desktop-only */
+html[data-device="phone"] #btnNodes{display:none}
 html[data-device="phone"] .clip{font-size:10px}
 html[data-device="phone"] button{min-height:40px;min-width:40px;font-size:13px}
 html[data-device="phone"] .tbtn2{min-height:40px;padding:6px 12px;font-size:13px}
@@ -7478,6 +7480,8 @@ function renderOutputNode(i,nd,t,wiresByT,texOf,outT){
 }
 /* ---------- evaluation ---------- */
 function useGraph(i){
+  /* nodes are desktop-only: phones always use the direct render path */
+  if(window.HM_DEVICE&&HM_DEVICE.device==='phone') return false;
   const g=S.graphs&&S.graphs[i];
   return !!(g&&g.nodes&&g.nodes.length&&g.nodes.some(n=>n.type==='output'));
 }
@@ -7582,6 +7586,8 @@ function neCanvasCenter(){
   return {x:r.width/2, y:r.height/2};
 }
 function openNodes(i,dive){
+  /* nodes are desktop-only */
+  if(window.HM_DEVICE&&HM_DEVICE.device==='phone') return;
   if(typeof closeClipInspector==='function') closeClipInspector(); /* deck inspector has no meaning in node view */
   buildNodeEd();
   neView[neLayer]={x:nePan.x,y:nePan.y,z:neZoom};
