@@ -5245,13 +5245,13 @@ function buildDeck(){
     }
     queueThumbs();
     /* force-pump visible thumbnails immediately (don't block phone on load) */
-    if(typeof pumpThumbs==='function'){ try{ pumpThumbs(performance.now()/1000, 12); }catch(e){} }
+    if(typeof pumpThumbs==='function'){ try{ pumpThumbs(performance.now()/1000, (window.HM_DEVICE&&HM_DEVICE.device==='phone')?6:12); }catch(e){} }
     /* delayed re-pump: catch any that raced init (shaders not yet compiled) */
     if(!window._thumbReumpT){ window._thumbReumpT=1; setTimeout(function(){
       try{
         /* clear cache: earlier pumps may have cached black (bypassed) renders */
         if(typeof thumbCache!=='undefined') for(const k in thumbCache) delete thumbCache[k];
-        queueThumbs(); pumpThumbs(performance.now()/1000, 12);
+        queueThumbs(); pumpThumbs(performance.now()/1000, (window.HM_DEVICE&&HM_DEVICE.device==='phone')?6:12);
       }catch(e){}
     },2500); }
   }
@@ -6119,7 +6119,8 @@ function updatePreview(t){
    pixels are cached per (layer,slot,src,graphRev) so deck rebuilds repaint
    instantly, and node-graph edits (which bump g.rev via touchGraph)
    automatically invalidate that layer's thumbs. */
-const THW=160, THH=90;
+const THW=((window.HM_DEVICE&&HM_DEVICE.device==='phone')?80:160),
+      THH=((window.HM_DEVICE&&HM_DEVICE.device==='phone')?45:90);
 let thT=null, thRead=null, thImg=null;
 const thumbCache={};   /* "i,k" -> {key:key, img:ImageData} */
 const thumbQueued={};  /* key -> true while queued (dedupe) */
@@ -8166,7 +8167,11 @@ function loop(){
   if(!neOpen && (pvTick=(pvTick+1)%3)===0) updatePreview(t);
   /* deck thumbnails: amortized — 2 renders/frame max until the queue drains,
      zero per-frame cost afterwards */
-  if(!neOpen && thumbQueue.length) pumpThumbs(t,2);
+  if(!neOpen && thumbQueue.length){
+    const isPhone=window.HM_DEVICE&&HM_DEVICE.device==='phone';
+    /* on phone, thumbnails yield to the main output when struggling */
+    if(!isPhone||qFpsAvg>20) pumpThumbs(t,isPhone?1:2);
+  }
   frames++;
   if(now-fpsT>0.5){
     /* rolling 1s fps average + effective render scale, always honest */
