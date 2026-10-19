@@ -10,17 +10,29 @@
     var touch=('ontouchstart' in window)||navigator.maxTouchPoints>0;
     var coarse=false;
     try{coarse=window.matchMedia&&matchMedia('(pointer: coarse)').matches;}catch(e){}
-    var small=Math.min(screen.width||9999,screen.height||9999);
+    /* Client Hints (Chrome Android) is the most reliable mobile signal */
+    var uaMobile=false;
+    try{ uaMobile=!!(navigator.userAgentData&&navigator.userAgentData.mobile); }catch(e){}
+    /* viewport is more reliable than screen.* on Android browsers */
+    var vw=Math.min(window.innerWidth||9999,window.innerHeight||9999);
+    var sw=Math.min(screen.width||9999,screen.height||9999);
+    var small=Math.min(vw,sw);
     var iPhone=/iPhone|iPod/i.test(ua);
     var iPad=/iPad/i.test(ua)||(pl==='MacIntel'&&touch&&navigator.maxTouchPoints>1);
     var android=/Android/i.test(ua);
     var ios=iPhone||iPad||/iPhone|iPad|iPod/i.test(ua);
     var mac=/Mac/i.test(pl)&&!iPad;
+    /* manual override: ?device=phone|tablet|desktop */
+    var force=null;
+    try{ var m=/[?&]device=(phone|tablet|desktop)/.exec(location.search); if(m)force=m[1]; }catch(e){}
     var dev;
-    if(iPhone)dev='phone';
+    if(force)dev=force;
+    else if(iPhone)dev='phone';
     else if(iPad)dev='tablet';
-    else if(android&&touch&&small<600)dev='phone';
-    else if(android&&touch&&small<1100)dev='tablet';
+    else if(android&&(uaMobile||touch)&&small<600)dev='phone';
+    else if(android&&(uaMobile||touch)&&small<1100)dev='tablet';
+    else if(uaMobile&&touch&&small<600)dev='phone';
+    else if(uaMobile&&touch&&small<1100)dev='tablet';
     else if(touch&&coarse&&small<600)dev='phone';
     else if(touch&&coarse&&small<1100)dev='tablet';
     else dev='desktop';
@@ -31,6 +43,7 @@
     if(iPhone)h.dataset.iphone='1';
     window.HM_DEVICE={device:dev,os:os,touch:!!touch,iphone:iPhone,
       detect:function(){ /* re-run (orientation/resize); returns true if category changed */
+        if(force) return false; /* manual override sticks */
         var w=Math.min(window.innerWidth||9999,window.innerHeight||9999);
         var nd=dev;
         if(!(iPhone||iPad||android)){
@@ -46,8 +59,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<script>/* force fresh load: if no timestamp, add one */
-if(!location.search.includes('t=')){location.replace(location.pathname+'?t='+Date.now());}</script>
+<script>/* force fresh load: if no timestamp, add one (preserve other params) */
+if(!location.search.includes('t=')){var u=new URL(location.href);u.searchParams.set('t',Date.now());location.replace(u.toString());}</script>
 <title>HoloMapper</title>
 <style>
 /* ============ HoloMapper — Resolume Arena console language ============
@@ -1818,6 +1831,13 @@ try{
     S.decks=[{name:'SOURCES',clips:defaultClips()},{name:'HOLOWATTS',clips:defaultClips()}];
   S.deckIdx=Math.min(S.decks.length-1,Math.max(0,S.deckIdx|0));
   S.clips=S.decks[S.deckIdx].clips;
+  /* phones: strip Cloner 3D (src 4) from loaded decks too — not just defaults */
+  if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
+    for(const dk of S.decks){ if(dk&&Array.isArray(dk.clips)){
+      for(let li=0;li<dk.clips.length;li++) for(let kj=0;kj<dk.clips[li].length;kj++)
+        if(dk.clips[li][kj]===4) dk.clips[li][kj]=null;
+    }}
+  }
   if(typeof S.autopilot!=='boolean') S.autopilot=false;
 }catch(e){ console.warn('HoloMapper: state load failed', e); }
 /* render quality is a device preference: old saved states carry res, new ones
