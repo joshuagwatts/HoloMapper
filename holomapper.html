@@ -1309,7 +1309,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.3.5';
+const APP_VERSION='1.3.6';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -8215,7 +8215,32 @@ function loop(){
       gl.useProgram(CP);
       setTex(CP,'u_tex',0,pc);
       quadDraw();
-    }catch(e){ renderGrade(pc,t); }
+    }catch(e){}
+    /* 2D fallback: readPixels to 2D canvas (thumbnail mechanism, proven) */
+    try{
+      let c2=document.getElementById('gl2d');
+      if(!c2){
+        c2=document.createElement('canvas');
+        c2.id='gl2d';
+        c2.style.cssText='width:100%;height:auto;display:block';
+        canvas.parentNode.insertBefore(c2,canvas.nextSibling);
+        canvas.style.display='none';
+      }
+      if((frames%3)===0){
+        const w=compT.w,h=compT.h;
+        if(c2.width!==w||c2.height!==h){ c2.width=w; c2.height=h; }
+        if(!window._oR||window._oR.length!==w*h*4){
+          window._oR=new Uint8Array(w*h*4);
+          window._oI=new ImageData(w,h);
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
+        gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,window._oR);
+        gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+        const d=window._oI.data,rd=window._oR;
+        for(let y=0;y<h;y++){ const s=(h-1-y)*w*4; d.set(rd.subarray(s,s+w*4),y*w*4); }
+        c2.getContext('2d').putImageData(window._oI,0,0);
+      }
+    }catch(e){}
   }else renderGrade(pc,t);
   /* live clip preview: throttled to every 3rd frame (the readPixels stall was
      the dominant frame cost) and skipped while the node editor covers the deck.
