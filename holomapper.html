@@ -543,6 +543,9 @@ html[data-device="phone"] body{touch-action:manipulation}
 /* monitor canvases: full width, keep aspect */
 html[data-device="phone"] .dockpanel[data-panel="output"] canvas,
 html[data-device="phone"] .dockpanel[data-panel="preview"] canvas{width:100%;height:auto}
+/* phone: use 2D canvas for output (WebGL canvas doesn't composite on some Android) */
+html[data-device="phone"] #gl{display:none}
+html[data-device="phone"] #gl2d{display:block;width:100%;height:auto}
 /* browser rows: taller, easier to hit */
 html[data-device="phone"] .fxrow{min-height:48px;font-size:14px}
 html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
@@ -746,7 +749,7 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
     <!-- lower zone -->
     <section id="lowerzone">
       <div id="outmonwrap">
-        <div class="mon" id="outmon"><span class="mlab">Output Monitor</span><canvas id="gl"></canvas></div>
+        <div class="mon" id="outmon"><span class="mlab">Output Monitor</span><canvas id="gl"></canvas><canvas id="gl2d" style="display:none"></canvas></div>
         <div id="performbar">
           <div class="pmacros" id="pmacros"></div>
           <div class="pexit">PERFORM MODE &mdash; ESC or P to exit &mdash; F fullscreen</div>
@@ -8170,7 +8173,32 @@ function loop(){
     applyFxChain(fxScratch,S.compFx,t);
     pc=fxScratch.tex;
   }
-  renderGrade(pc,t);
+  if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
+    /* phone: 2D canvas output via readPixels (WebGL canvas doesn't composite on some Android) */
+    if((frames%4)===0){
+      try{
+        const c2=$('gl2d');
+        if(c2){
+          const w=compT.w, h=compT.h;
+          if(c2.width!==w||c2.height!==h){ c2.width=w; c2.height=h; }
+          if(!window._outRead||window._outRead.length!==w*h*4){
+            window._outRead=new Uint8Array(w*h*4);
+            window._outImg=new ImageData(w,h);
+          }
+          gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
+          gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,window._outRead);
+          gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+          /* vertical flip */
+          const d=window._outImg.data, rd=window._outRead;
+          for(let y=0;y<h;y++){
+            const s=(h-1-y)*w*4;
+            d.set(rd.subarray(s,s+w*4),y*w*4);
+          }
+          c2.getContext('2d').putImageData(window._outImg,0,0);
+        }
+      }catch(e){}
+    }
+  }else renderGrade(pc,t);
   /* live clip preview: throttled to every 3rd frame (the readPixels stall was
      the dominant frame cost) and skipped while the node editor covers the deck.
      Uses its own counter — `frames` resets every 0.5s for the fps meter. */
