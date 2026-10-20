@@ -340,6 +340,8 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .clip:hover{border-color:var(--sel)}
 .clip:hover .cname{color:var(--txt)}
+.clip.fxclip{border-color:var(--acc);box-shadow:inset 0 0 0 1px rgba(139,92,246,.45)}
+.clip.fxclip .cname{color:#c4b5fd}
 .clip.fired{border-color:var(--play);box-shadow:0 0 8px rgba(45,212,191,.45)}
 .clip.fired .cthumb{color:#fff}
 .clip.selc{outline:2px solid var(--sel);outline-offset:-2px}
@@ -1331,7 +1333,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.4.4';
+const APP_VERSION='1.5.0';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1859,7 +1861,7 @@ try{
   }
   const raw = localStorage.getItem(LS_STATE);
   if(raw){ const s=JSON.parse(raw); if(s && s.v===1) S=Object.assign(defaultState(), s); }
-  ensureFxChains();
+  /* ensureFxChains() runs in init() — it is defined in a later script block */
   const mraw = localStorage.getItem(LS_MIDI);
   if(mraw){ const m=JSON.parse(mraw); if(Array.isArray(m)) S.midi=m; }
   /* rebind S.clips to the active deck (decks may come from saved state) */
@@ -2219,6 +2221,58 @@ vec3 applyBlend(vec3 d, vec3 s, int m){
 }
 void main(){
   vec3 acc = vec3(0.0);
+  vec3 s;
+  s = texture(u_l0,v_uv).rgb;
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[0]+0.5)), u_op[0]*u_en[0]);
+  s = texture(u_l1,v_uv).rgb;
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[1]+0.5)), u_op[1]*u_en[1]);
+  s = texture(u_l2,v_uv).rgb;
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[2]+0.5)), u_op[2]*u_en[2]);
+  s = texture(u_l3,v_uv).rgb;
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[3]+0.5)), u_op[3]*u_en[3]);
+  s = texture(u_l4,v_uv).rgb;
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[4]+0.5)), u_op[4]*u_en[4]);
+  s = texture(u_l5,v_uv).rgb;
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[5]+0.5)), u_op[5]*u_en[5]);
+  s = texture(u_l6,v_uv).rgb;
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[6]+0.5)), u_op[6]*u_en[6]);
+  s = texture(u_l7,v_uv).rgb;
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[7]+0.5)), u_op[7]*u_en[7]);
+  O = vec4(acc,1.0);
+}
+`;
+
+const SRC_COMBINE2 = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_l0;
+uniform sampler2D u_l1;
+uniform sampler2D u_l2;
+uniform sampler2D u_l3;
+uniform sampler2D u_l4;
+uniform sampler2D u_l5;
+uniform sampler2D u_l6;
+uniform sampler2D u_l7;
+uniform sampler2D u_base;
+uniform float u_useBase;
+uniform float u_op[8];
+uniform float u_blend[8];
+uniform float u_en[8];
+vec3 applyBlend(vec3 d, vec3 s, int m){
+  if(m==1) return d+s;
+  if(m==2) return 1.0-(1.0-d)*(1.0-s);
+  if(m==3) return d*s;
+  if(m==4){
+    vec3 a = 2.0*d*s;
+    vec3 b = 1.0-2.0*(1.0-d)*(1.0-s);
+    return mix(a,b,step(vec3(0.5),d));
+  }
+  if(m==5) return abs(d-s);
+  return s;
+}
+void main(){
+  vec3 acc = u_useBase>0.5 ? texture(u_base,v_uv).rgb : vec3(0.0);
   vec3 s;
   s = texture(u_l0,v_uv).rgb;
   acc = mix(acc, applyBlend(acc,s,int(u_blend[0]+0.5)), u_op[0]*u_en[0]);
@@ -2731,6 +2785,7 @@ function compileAll(){
     ['flow',    FRAG_HEAD+SRC_FLOW],
     ['nebula',  FRAG_HEAD+SRC_NEBULA],
     ['combine', SRC_COMBINE],
+    ['combine2',SRC_COMBINE2],
     ['feedback',SRC_FEEDBACK],
     ['kaleido', SRC_KALEIDO],
     ['glitch',  SRC_GLITCH],
@@ -4029,8 +4084,43 @@ function applyFxChain(T,chain,t){
     else if(inst.k==='colorize') applyColorizeChain(T,inst);
     else if(inst.k==='bloompost') applyBloomChain(T,inst);
     else if(inst.k==='grade') applyGradeChain(T,inst,t);
-    /* feedback skipped: temporal, composition-only */
+    else if(inst.k==='feedback') applyFeedbackChain(T,inst,t);
   }
+}
+/* Feedback as a chain effect: stateful per instance (its own prev-frame
+   ping-pong, kept in a WeakMap so saved state stays clean). Calculated like
+   a source with memory, presented like an effect — works in any chain and
+   as an effect clip's base. */
+const FXFB=new WeakMap();
+function applyFeedbackChain(T,inst,t){
+  ensureFxScratch();
+  const P=PROG.feedback; if(!P||!T||!T.ok) return;
+  let B=FXFB.get(inst);
+  if(!B||B.w!==T.w||B.h!==T.h){
+    B={a:makeTarget(T.w,T.h),b:makeTarget(T.w,T.h),read:0,w:T.w,h:T.h};
+    FXFB.set(inst,B);
+  }
+  if(!B.a.ok||!B.b.ok) return;
+  const prev=(B.read===0)?B.a:B.b, next=(B.read===0)?B.b:B.a;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P);
+  setTex(P,'u_cur',0,T.tex);
+  setTex(P,'u_prev',1,prev.tex);
+  gl.uniform1f(U(P,'u_trails'),fxVal(inst,'P.trails'));
+  gl.uniform1f(U(P,'u_zoom'),  fxVal(inst,'P.zoom'));
+  gl.uniform1f(U(P,'u_rot'),   fxVal(inst,'P.rot'));
+  gl.uniform2f(U(P,'u_off'),   fxVal(inst,'P.offx'), fxVal(inst,'P.offy'));
+  gl.uniform1f(U(P,'u_hue'),   fxVal(inst,'P.fbhue'));
+  gl.uniform1f(U(P,'u_sat'),   fxVal(inst,'P.fbsat'));
+  gl.uniform1f(U(P,'u_bypass'),inst.on?0:1);
+  quadDraw();
+  fxCopyBack(T);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER,T.fb);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,next.fb);
+  gl.blitFramebuffer(0,0,T.w,T.h,0,0,next.w,next.h,gl.COLOR_BUFFER_BIT,gl.NEAREST);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  B.read=1-B.read;
 }
 
 function renderLayerInto(i,t,T,srcOv,ignByp){
@@ -4119,6 +4209,16 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
 /* v1.3: graph dispatch. Default graph (Source->Output) is pixel-identical to
    the fixed pipeline; any eval failure falls back to the fixed path. */
 function renderLayer(i,t){
+  if(effectLayerActive(i)){
+    /* content is produced at composite time from the layers below */
+    const T=layerT[i];
+    gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
+    gl.viewport(0,0,T.w,T.h);
+    gl.clearColor(0,0,0,1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    transX[i]=null;
+    return;
+  }
   if(useGraph(i)){
     const T=layerT[i];
     gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
@@ -4203,6 +4303,66 @@ function renderCombine(){
   gl.uniform1fv(U(P,'u_en'),en);
 
   quadDraw();
+}
+/* ---- composite with effect clips ----
+   Without effect clips this is exactly renderCombine(). With them, the
+   stack is built in segments: layers below an effect layer are combined
+   first, that image is run through the effect (+ its stacked clip/layer
+   FX), then the stack keeps accumulating on top of the result — the same
+   math the combine shader does, split at the effect layers. */
+let seqScratch=[];
+function seqTarget(n){
+  let T=seqScratch[n];
+  if(!T||!T.ok||T.w!==compT.w||T.h!==compT.h){ T=makeTarget(compT.w,compT.h); seqScratch[n]=T; }
+  return T;
+}
+function combineRange(a,b,baseTex,outT,ovLayer,ovTex){
+  const P=PROG.combine2; if(!P||!outT||!outT.ok) return baseTex;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,outT.fb);
+  gl.viewport(0,0,outT.w,outT.h);
+  gl.useProgram(P);
+  for(let i=0;i<8;i++) setTex(P,'u_l'+i,i,(i===ovLayer&&ovTex)?ovTex:layerT[i].tex);
+  setTex(P,'u_base',8,baseTex||layerT[0].tex);
+  gl.uniform1f(U(P,'u_useBase'),baseTex?1:0);
+  const op=_cbOp,bl=_cbBl,en=_cbEn;
+  for(let i=0;i<8;i++){ op[i]=0; bl[i]=0; en[i]=0; }
+  for(let i=0;i<numLayers();i++){
+    op[i]=eff('L'+i+'.op')*groupOpacity(i);
+    bl[i]=S.layers[i].blend;
+    en[i]=(i>=a&&i<b&&layerEnabled(i))?1:0;
+  }
+  gl.uniform1fv(U(P,'u_op'),op);
+  gl.uniform1fv(U(P,'u_blend'),bl);
+  gl.uniform1fv(U(P,'u_en'),en);
+  quadDraw();
+  return outT.tex;
+}
+function renderComposite(t){
+  const fxLayers=[];
+  for(let i=0;i<numLayers();i++) if(effectLayerActive(i)) fxLayers.push(i);
+  if(!fxLayers.length||!PROG.combine2){ renderCombine(); return; }
+  ensureFxChains();
+  let baseTex=null, start=0, flip=0;
+  for(const e of fxLayers){
+    /* composite of everything below the effect layer */
+    const belowT=seqTarget(flip); flip=1-flip;
+    const belowTex=combineRange(start,e,baseTex,belowT,-1,null);
+    /* run the effect (+ stacked clip FX, then layer FX) over that image */
+    const workT=seqTarget(2);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER,belowT.fb);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,workT.fb);
+    gl.blitFramebuffer(0,0,belowT.w,belowT.h,0,0,workT.w,workT.h,gl.COLOR_BUFFER_BIT,gl.NEAREST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    const chain=[clipBaseAt(e,S.fired[e])];
+    if(S.clipFx[e]&&S.clipFx[e][S.fired[e]]) chain.push(...S.clipFx[e][S.fired[e]]);
+    if(S.layerFx[e]) chain.push(...S.layerFx[e]);
+    applyFxChain(workT,chain,t);
+    /* blend the effected image into the stack with the layer's own mix */
+    const accT=seqTarget(flip); flip=1-flip;
+    baseTex=combineRange(e,e+1,belowTex,accT,e,workT.tex);
+    start=e+1;
+  }
+  combineRange(start,numLayers(),baseTex,compT,-1,null);
 }
 function renderFeedback(){
   const P=PROG.feedback, W=fbT[1-fbRead];
@@ -4814,6 +4974,7 @@ function syncDeckSel(){
   });
   document.querySelectorAll('#deck .clip').forEach(c=>{
     const i=+c.dataset.i, k=+c.dataset.k;
+    c.classList.toggle('fxclip', !!clipBaseAt(i,k)&&(S.clips[i][k]===null||S.clips[i][k]===undefined));
     c.classList.toggle('fired', S.fired[i]===k);
     c.classList.toggle('selc', !!S.sel && S.sel.kind==='clip' && S.sel.i===i && S.sel.c===k);
     c.classList.toggle('queued', pendingFires.some(p=>p.i===i&&p.k===k));
@@ -4849,7 +5010,15 @@ function ejectLayer(i){
 function fireClip(i,k){ S.firedCol=null; quantizeFire(i,k); }
 function fireClipNow(i,k){
   const src=S.clips[i][k];
-  if(src===null||src===undefined) return;
+  if(src===null||src===undefined){
+    /* effect clip: no source — the layer will process the layers below it */
+    if(!clipBaseAt(i,k)) return;
+    S.layers[i].ejected=false;
+    S.fired[i]=k;
+    transX[i]=null;
+    broadcastState();
+    return;
+  }
   /* layer transition: if the layer was already playing a different clip and
      trans>0, freeze the outgoing frame and ease into the incoming one.
      Starts at the actual fire moment (quantize/autopilot friendly). */
@@ -4976,6 +5145,17 @@ function dropFxOnClip(key,i,k){
   const inst=makeFxInst(key);
   if(!inst){ toast('Unknown FX: '+key); return; }
   if(!S.clipFx[i]) S.clipFx[i]=Array.from({length:8},()=>[]);
+  const cellSrc=S.clips[i]?S.clips[i][k]:null;
+  if((cellSrc===null||cellSrc===undefined)&&!clipBaseAt(i,k)){
+    /* empty cell: the effect BECOMES the clip — it will process the layers below */
+    if(!S.clipBase[i]) S.clipBase[i]=Array.from({length:8},()=>null);
+    S.clipBase[i][k]=inst;
+    saveState();
+    toast(fxInstLabel(inst)+' → '+LAYER_NAMES[i]+' Clip '+(k+1)+' (effect clip)');
+    buildDeck();
+    if(typeof refreshFxRack==='function') refreshFxRack();
+    return;
+  }
   S.clipFx[i][k].push(inst);
   saveState();
   toast(fxInstLabel(inst)+' → '+LAYER_NAMES[i]+' Clip '+(k+1));
@@ -5147,9 +5327,14 @@ function buildDeck(){
         const tlb=el('span','thlab',srcName(src).split(' ')[0]);
         th.appendChild(tlb);
       }
-      th.title=(src===null||src===undefined?'Empty slot \u2014 right-click to assign a source':'TRIGGER '+srcName(src)+' on '+LAYER_NAMES[i]+' (quantized: '+(S.snap||'bar')+')');
+      const base0=clipBaseAt(i,k);
+      th.title=(src===null||src===undefined)
+        ? (base0?('TRIGGER effect clip '+fxInstLabel(base0)+' on '+LAYER_NAMES[i]+' — processes the layers below'):'Empty slot \u2014 right-click to assign a source')
+        : ('TRIGGER '+srcName(src)+' on '+LAYER_NAMES[i]+' (quantized: '+(S.snap||'bar')+')');
       th.addEventListener('click',()=>{
-        if(src===null||src===undefined){
+        if((src===null||src===undefined)&&base0){
+          fireClip(i,k); openClipInspector(i,k);
+        }else if(src===null||src===undefined){
           /* empty clip: deselect */
           S.sel=null; saveState(); buildDeck(); buildProps();
           if(typeof closeClipInspector==='function') closeClipInspector();
@@ -5171,7 +5356,7 @@ function buildDeck(){
         th.addEventListener('touchend',()=>{ clearTimeout(_lpT); });
         th.addEventListener('touchmove',()=>{ clearTimeout(_lpT); });
       }
-      const cnm=el('div','cname',src===null||src===undefined?'empty':srcName(src));
+      const cnm=el('div','cname',(src===null||src===undefined)?(base0?('FX \u00B7 '+fxInstLabel(base0)):'empty'):srcName(src));
       cnm.title='Select clip '+(k+1)+' without triggering';
       cnm.addEventListener('click',(e)=>{
         e.stopPropagation();
@@ -5560,9 +5745,24 @@ function buildClipInspector(){
   swrap.appendChild(se);
   host.appendChild(swrap);
   if(src!==null&&src!==undefined) buildClipParamSection(host,i,src);
-  else host.appendChild(mkHint('This slot is empty. Pick a source above, then Fire.'));
+  else if(!clipBaseAt(i,k)) host.appendChild(mkHint('This slot is empty. Pick a source above \u2014 or drag an effect here to make an effect clip.'));
   /* v1.4: FX rack — drag effects from Browser onto the deck clip */
   const fxsec=el('div','psec');
+  /* effect clip base: this FX processes the layers below; stack more below */
+  const baseI=clipBaseAt(i,k);
+  if(baseI){
+    const bsec=el('div','psec');
+    bsec.appendChild(el('div','plab','Effect Clip \u2014 '+fxInstLabel(baseI)));
+    bsec.appendChild(el('div','dim','Runs over the composite of the layers below this one. Strength = this layer\'s fader + blend mode. Stack more FX in the chain below.'));
+    const bhost=el('div'); bsec.appendChild(bhost);
+    buildFxRack(bhost,[baseI],()=>{ buildClipInspector(); buildDeck(); });
+    const bdel=bhost.querySelector('.fxcard .fxbtn.del'); if(bdel) bdel.remove(); /* removal lives on the button below */
+    const rm=el('button','fxbtn del','Remove effect clip');
+    rm.style.marginTop='6px';
+    rm.addEventListener('click',()=>{ S.clipBase[i][k]=null; saveState(); buildDeck(); buildClipInspector(); });
+    bsec.appendChild(rm);
+    host.appendChild(bsec);
+  }
   fxsec.appendChild(el('div','plab','FX Chain ('+S.clipFx[i][k].length+')'));
   const fxhost=el('div'); fxsec.appendChild(fxhost);
   buildFxRack(fxhost,S.clipFx[i][k],()=>buildClipInspector());
@@ -5952,6 +6152,7 @@ const FXLIST=[['feedback','Feedback'],['kaleido','Kaleidoscope'],['glitch','RGB 
 /* ---- FX chain definitions (v1.4): Resolume-style per-clip/per-layer/per-comp
    chains. Each instance {k:key, on:bool, v:{pid:0-1}} has OWN knobs. ---- */
 const FXDEFS=[
+  {group:'Time', key:'feedback', name:'Feedback', sub:'trails echo — stateful, source-like', params:[['P.trails','Trails'],['P.zoom','Zoom'],['P.rot','Rotate'],['P.fbhue','Hue Shift'],['P.fbsat','Saturate']]},
   {group:'Warp', key:'kaleido', name:'Kaleido', sub:'kaleidoscope', params:[['P.kseg','Segments'],['P.kang','Rotation']]},
   {group:'Warp', key:'mirror', name:'Mirror', sub:'fold mirror', params:[['P.mirmode','Mirror Mode'],['P.mirpos','Fold Position']]},
   {group:'Time', key:'glitch', name:'RGB Split', sub:'glitchy color split', params:[['P.gamt','Split Amount']]},
@@ -5980,6 +6181,24 @@ function ensureFxChains(){
   while(S.layerFx.length<4) S.layerFx.push([]);
   if(!Array.isArray(S.clipFx)) S.clipFx=[[],[],[],[]].map(()=>Array.from({length:8},()=>[]));
   if(!Array.isArray(S.compFx)) S.compFx=[];
+  if(!Array.isArray(S.clipBase)) S.clipBase=[[],[],[],[]].map(()=>Array.from({length:8},()=>null));
+  while(S.clipBase.length<4) S.clipBase.push(Array.from({length:8},()=>null));
+  S.clipBase.forEach((row,i)=>{ if(!Array.isArray(row)) S.clipBase[i]=Array.from({length:8},()=>null); });
+}
+/* An EFFECT CLIP: an empty cell carrying a base FX instance. When fired, the
+   layer stops rendering a source and instead runs this effect (plus its
+   stacked clip/layer FX) over the composite of the layers BELOW it, blended
+   back with the layer's blend mode — strength = the layer fader. */
+function clipBaseAt(i,k){
+  return (S.clipBase && S.clipBase[i] && S.clipBase[i][k]) || null;
+}
+function effectLayerActive(i){
+  const k=S.fired?S.fired[i]:null;
+  if(k===null||k===undefined) return false;
+  const src=S.clips[i]?S.clips[i][k]:null;
+  if(src!==null&&src!==undefined) return false;
+  const b=clipBaseAt(i,k);
+  return !!(b&&b.on);
 }
 function buildFxBrowser(){
   const host=$('btab-fx'); if(!host) return; host.innerHTML='';
@@ -8245,7 +8464,7 @@ function loop(){
     }catch(e){ pc=compT.tex; }
   }else{
     for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
-    renderCombine();
+    renderComposite(t);
     renderFeedback();
     /* post chain threads one texture through; bypassed stages are skipped
        (pixel-identical passthrough) inside each stage function */
@@ -8327,6 +8546,7 @@ function loop(){
 
 /* ================= INIT ================= */
 function init(){
+  ensureFxChains();
   /* phone: show JS errors in UI for debugging */
   if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
     window._errs=[];
@@ -8514,7 +8734,11 @@ function broadcastState(){
     trails:+eff('P.trails').toFixed(3),
     blackout:!!S.blackout, bpm:S.bpm,
     deck:[0,1,2,3].map(i=>({name:LAYER_NAMES[i],
-      clips:(S.clips[i]||[]).map(src=>(src===null||src===undefined)?'':srcName(src)),
+      clips:(S.clips[i]||[]).map((src,ci)=>{
+        if(src!==null&&src!==undefined) return srcName(src);
+        const b=clipBaseAt(i,ci);
+        return b?('FX '+fxInstLabel(b)):'';
+      }),
       active:(S.fired&&S.fired[i]!=null)?S.fired[i]:-1}))};
   p2pSend(st);
   if(!prmOn || !prmWs || prmWs.readyState!==1) return;
