@@ -95,6 +95,8 @@ button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
 button:hover{border-color:var(--sel);color:#fff}
 button.on{background:var(--sel);border-color:var(--sel);color:#fff}
 button.armed{background:#5a1d1d;border-color:var(--bad);color:#ffd7d7}
+#btnPair{background:#123b38;border-color:var(--play);color:var(--play);font-weight:700;padding:4px 12px}
+#btnPair:hover{background:#175049;color:#a7f3ea}
 button:disabled{opacity:.4;cursor:default}
 input[type=range]{accent-color:var(--sel);width:100%;height:16px;cursor:pointer}
 input[type=text]{background:#141518;color:var(--txt);border:1px solid var(--line);
@@ -672,6 +674,9 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
   <header id="topbar">
     <span class="brand">HoloMapper</span><span class="vtag" id="appver" title="HoloMapper build version">…</span>
     <span class="tsep"></span>
+    <button id="btnPair" title="Pair your phone — scan a QR and control HoloMapper wirelessly. No server, no typing.">📱 Pair phone</button>
+    <span id="prmstat" class="dim"></span>
+    <span class="tsep"></span>
     <button id="btnNodes" title="Open node graph for selected layer (N)">Nodes</button>
     <button id="btnLearn" title="MIDI learn (M)">MIDI Learn</button>
     <span id="midistat">MIDI: not scanned</span>
@@ -706,9 +711,6 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
     <button id="btnDockReset" title="Reset panel layout to default">Reset layout</button>
     <button id="btnPerform" title="Perform mode (P)">PERFORM</button>
     <button id="btnFull" title="Fullscreen output (F)">Fullscreen</button>
-    <button id="btnPrm" title="Connect to the phone remote via bridge.py">Phone remote</button>
-    <button id="btnPair" title="Show the pairing QR for your phone">Pair</button>
-    <span id="prmstat" class="dim"></span>
   </header>
 
   <!-- ================= MAIN ================= -->
@@ -820,6 +822,9 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
   No typing needed. No Python needed.</div>
   <div id="pairlans" class="hint"></div>
   <div class="krow"><button id="btnPairClose">Close</button><button id="btnPairCopy">Copy URL</button></div>
+  <div class="hint" style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">
+    Fallback — LAN only: if the scan-and-connect link can't reach your phone, run <b>bridge.py</b> on this laptop instead, then <button id="btnPrm" title="Connect to the phone remote via bridge.py">enable the bridge link</button>
+  </div>
 </div></div>
 <div id="ctxlost">
   <h2>WebGL context lost</h2>
@@ -1316,7 +1321,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.4.1';
+const APP_VERSION='1.4.2';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -8544,8 +8549,9 @@ $('btnPrm').addEventListener('click',()=>setPrmOn(!prmOn));
 $('btnPair').addEventListener('click',()=>togglePair(true));
 $('btnPairClose').addEventListener('click',()=>togglePair(false));
 $('btnPairCopy').addEventListener('click',()=>{
-  if(!prmRemoteUrl) return;
-  if(navigator.clipboard) navigator.clipboard.writeText(prmRemoteUrl).catch(()=>{});
+  const u=p2pRemoteUrl()||prmRemoteUrl;
+  if(!u) return;
+  if(navigator.clipboard) navigator.clipboard.writeText(u).catch(()=>{});
 });
 $('pair').addEventListener('click',(e)=>{ if(e.target===$('pair')) togglePair(false); });
 setInterval(broadcastState,500);
