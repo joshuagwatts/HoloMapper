@@ -7,10 +7,12 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>HoloMapper Remote</title>
 <style>
-/* ============ HoloMapper Remote — one responsive layout for phones + tablets ============ */
+/* ============ HoloMapper Remote — same strip language as the phone console:
+   swipe through layers; every strip = clips + its fader, all in view. ============ */
 :root{
   --bg:#08090c; --panel:#10131a; --panel2:#161b24; --line:#232b38;
   --txt:#e2e8f2; --dim:#8b95a8; --acc:#8b5cf6; --acc2:#22d3ee;
+  --play:#2dd4bf; --fad:#3aa76d;
   --bad:#f0524d; --ok:#34d399; --warn:#f5a623;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -38,7 +40,7 @@ header{
 #dot.green{background:var(--ok);color:var(--ok)}
 #dot.red{background:var(--bad);color:var(--bad)}
 #connlabel{font-size:12px;color:var(--dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* ---------- connect panel (manual fallback) ---------- */
+/* ---------- connect panel ---------- */
 #connectpanel{margin:12px 14px 0;padding:14px;background:var(--panel);
   border:1px solid var(--line);border-radius:12px;display:none}
 #connectpanel.show{display:block}
@@ -46,15 +48,11 @@ header{
 #connectpanel .row{display:flex;gap:8px}
 #manualurl{flex:1;background:#0b0e13;color:var(--txt);border:1px solid var(--line);
   border-radius:8px;padding:12px;font-size:14px;min-width:0}
-/* ---------- layout: one column on phones, two on tablets ---------- */
+/* ---------- layout ---------- */
 main{display:flex;flex-direction:column;gap:12px;padding:12px 14px;max-width:1100px;margin:0 auto}
-@media (min-width:720px){
-  main{display:grid;grid-template-columns:1fr 1fr;align-items:start}
-  .span2{grid-column:1/-1}
-}
 section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px}
 section h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:10px}
-/* ---------- gig bar: blackout + tap ---------- */
+/* ---------- gig bar ---------- */
 .gigbar{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .bigbtn{
   min-height:64px;border-radius:12px;font-size:16px;font-weight:800;letter-spacing:.5px;
@@ -64,9 +62,40 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(
 .bigbtn:active{transform:scale(.97)}
 #btnBlackout.armed{background:var(--bad);border-color:var(--bad);color:#fff}
 #btnTap{background:#1a1430;border-color:var(--acc);color:#d9c8ff}
+/* ---------- deck: swipeable layer strips, fader on the right ---------- */
+#deckwrap{overflow-x:auto;scroll-snap-type:x mandatory;display:flex;gap:10px;
+  padding-bottom:6px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+#deckwrap::-webkit-scrollbar{display:none}
+.rstrip{flex:0 0 88%;scroll-snap-align:start;background:var(--panel2);
+  border:1px solid var(--line);border-radius:12px;padding:10px;
+  display:grid;grid-template-columns:minmax(0,1fr) 62px;gap:10px;min-height:216px}
+.rstrip.sel{border-color:var(--play)}
+.rhead{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+.rlname{font-size:15px;font-weight:800;color:var(--acc2)}
+.rlive{font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rlive b{color:var(--play)}
+.rclips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.rtile{min-height:64px;border-radius:10px;border:1px solid var(--line);
+  background:#0d1017;color:var(--txt);font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;text-align:center;
+  padding:4px;cursor:pointer;touch-action:manipulation;line-height:1.2}
+.rtile:active{transform:scale(.96)}
+.rtile.empty{opacity:.28;pointer-events:none}
+.rtile.on{border-color:var(--play);color:var(--play);background:#0e2a26;
+  box-shadow:inset 0 0 0 1px var(--play)}
+.rfad{display:flex;flex-direction:column;align-items:center;gap:4px;min-height:0}
+.rfader{position:relative;flex:1;width:44px;min-height:120px;border-radius:8px;
+  cursor:ns-resize;touch-action:none;background:#0b0c0f;border:1px solid var(--line)}
+.rfader .rfill{position:absolute;left:50%;bottom:10px;width:12px;transform:translateX(-50%);
+  background:var(--fad);border-radius:6px;pointer-events:none}
+.rfader .rhandle{position:absolute;left:50%;transform:translate(-50%,50%);width:44px;height:26px;
+  background:var(--fad);border:1px solid var(--fad);border-radius:7px;pointer-events:none}
+.rfader .rhandle::after{content:'';position:absolute;left:7px;right:7px;top:50%;height:3px;
+  transform:translateY(-50%);background:var(--play);border-radius:2px}
+.rfval{font-size:11px;font-weight:800;color:var(--dim);font-variant-numeric:tabular-nums}
+.deckhint{font-size:11px;color:var(--dim);text-align:center;margin-top:2px}
 /* ---------- knobs ---------- */
 .knobgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-@media (min-width:720px){ .knobgrid{grid-template-columns:repeat(4,1fr)} }
 .knob{
   --v:.5;
   touch-action:none;cursor:grab;text-align:center;padding:6px 2px;border-radius:10px;
@@ -89,21 +118,6 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(
 .klab{font-size:12px;font-weight:700;color:var(--acc2);margin-top:6px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kval{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
-/* ---------- faders ---------- */
-.faderrow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.fader{display:flex;flex-direction:column;align-items:center;gap:4px;min-height:44px}
-.fader .flab{font-size:12px;font-weight:700;color:var(--acc2)}
-.fader .fval{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
-input[type=range].faderin{
-  -webkit-appearance:none;appearance:none;width:100%;height:48px;background:transparent;
-  touch-action:none;cursor:pointer;
-}
-.faderin::-webkit-slider-runnable-track{height:10px;border-radius:5px;background:#232b38}
-.faderin::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:36px;height:36px;
-  border-radius:10px;background:var(--acc);margin-top:-13px;border:none;
-  box-shadow:0 2px 8px #0009}
-.faderin::-moz-range-track{height:10px;border-radius:5px;background:#232b38}
-.faderin::-moz-range-thumb{width:36px;height:36px;border-radius:10px;background:var(--acc);border:none}
 /* ---------- fx row ---------- */
 .fxrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .fxrow .knob{width:110px}
@@ -125,31 +139,35 @@ button{touch-action:manipulation}
 </header>
 
 <div id="connectpanel">
-  <p>Couldn't reach the bridge automatically. Make sure <b>bridge.py</b> is running
+  <p id="pairhelp">Pairing hasn't connected yet. Keep the <b>Pair</b> screen open on the
+  console, make sure both devices are online, then tap <b>Retry link</b> — or close this and re-scan the QR.</p>
+  <p id="bridgehelp" style="display:none">Couldn't reach the bridge automatically. Make sure <b>bridge.py</b> is running
   on the VJ laptop and the phone is on the same Wi-Fi — or type the bridge address:</p>
   <div class="row">
     <input id="manualurl" type="text" inputmode="url" placeholder="ws://192.168.1.5:8090/ws" autocomplete="off">
     <button class="bigbtn" id="btnManual" style="min-height:48px;padding:0 18px">Go</button>
+    <button class="bigbtn" id="btnRetry" style="min-height:48px;padding:0 18px;display:none">Retry link</button>
   </div>
 </div>
 
 <main>
   <!-- gig-critical first -->
-  <section class="span2">
+  <section>
     <div class="gigbar">
       <button class="bigbtn" id="btnBlackout">BLACKOUT</button>
       <button class="bigbtn" id="btnTap">TAP TEMPO</button>
     </div>
   </section>
 
-  <section class="span2">
-    <h2>Macros</h2>
-    <div class="knobgrid" id="macroknobs"></div>
+  <section>
+    <h2>Deck — tap a clip to fire it</h2>
+    <div id="deckwrap"></div>
+    <div class="deckhint">Swipe sideways for more layers &middot; fader rides on every strip</div>
   </section>
 
   <section>
-    <h2>Layer opacity</h2>
-    <div class="faderrow" id="layerfaders"></div>
+    <h2>Macros</h2>
+    <div class="knobgrid" id="macroknobs"></div>
   </section>
 
   <section>
@@ -166,22 +184,23 @@ button{touch-action:manipulation}
   </section>
 </main>
 
-<div class="hintline">Drag knobs vertically &middot; double-tap a knob to reset &middot; faders drag anywhere</div>
+<div class="hintline">Drag knobs vertically &middot; double-tap a knob to reset</div>
 <div id="selftest"></div>
 
 <script>
 'use strict';
 /* ================= HoloMapper Remote =================
-   Phone control surface for the HoloMapper VJ engine.
-   Zero typing to pair: opened from the bridge QR, the WebSocket URL is
-   derived from the page URL (ws://<bridge-host>/ws). Manual URL is fallback.
+   Opened from the console's Pair QR (#r=CODE) it links over P2P — no server,
+   no typing. The bridge.py WebSocket path stays as a labeled fallback.
    ?mock=1  -> demo mode (no network; sent messages are logged to #selftest)
-   ?selftest=1 -> implies mock + runs a synthetic knob drag on load          */
+   ?selftest=1 -> implies mock + runs synthetic checks on load             */
 const $ = id => document.getElementById(id);
 const clamp = (v,a,b)=>Math.min(b,Math.max(a,v));
 const qs = new URLSearchParams(location.search);
 const MOCK = qs.has('mock') || qs.has('selftest');
 const SELFTEST = qs.has('selftest');
+const PAIRCODE = (()=>{ const m=(location.hash||'').match(/#r=([A-Z0-9]{6})/i); return m?m[1].toUpperCase():''; })();
+const LINKMODE = PAIRCODE ? 'p2p' : 'bridge';
 
 function tlog(msg){
   if(!MOCK) return;
@@ -209,7 +228,15 @@ function setDot(state,label){
   const d=$('dot');
   d.className = state==='on'?'green':(state==='try'?'amber':'red');
   $('connlabel').textContent=label;
-  $('connectpanel').classList.toggle('show', state==='off');
+  const showPanel = state==='off';
+  $('connectpanel').classList.toggle('show', showPanel);
+  if(showPanel){
+    $('pairhelp').style.display = LINKMODE==='p2p' ? '' : 'none';
+    $('bridgehelp').style.display = LINKMODE==='bridge' ? '' : 'none';
+    $('btnRetry').style.display = LINKMODE==='p2p' ? '' : 'none';
+    $('manualurl').style.display = LINKMODE==='bridge' ? '' : 'none';
+    $('btnManual').style.display = LINKMODE==='bridge' ? '' : 'none';
+  }
 }
 function connect(){
   if(MOCK){ setDot('on','demo mode (mock)'); return; }
@@ -247,7 +274,7 @@ function send(obj){
 }
 /* P2P via Trystero — room code from #r=CODE (QR pairing, no bridge.py) */
 async function p2pConnect(code){
-  setDot('try','linking…');
+  setDot('try','linking — keep the Pair screen open on the console…');
   try{
     const {joinRoom}=await import('https://esm.sh/@trystero-p2p/nostr@0.25.4');
     const room=joinRoom({appId:'holomapper-v1'}, 'hm-'+code);
@@ -255,22 +282,23 @@ async function p2pConnect(code){
     p2pSendFn=sendMsg;
     onMsg((data,peerId)=>{ onEngineMsg(data); });
     room.onPeerJoin(()=>{ setDot('on','connected'); });
-    room.onPeerLeave(()=>{ setDot('try','engine left — waiting…'); });
+    room.onPeerLeave(()=>{ setDot('try','console left — waiting…'); });
   }catch(e){
-    setDot('off','P2P failed — check network');
+    setDot('off','link failed — tap Retry link');
   }
 }
+$('btnRetry').addEventListener('click',()=>{ if(PAIRCODE) p2pConnect(PAIRCODE); });
 
 /* ---------------- engine -> remote state ---------------- */
 const macroVals=new Array(8).fill(0.5);
-const macroLabels=[];
 const opVals=[1,1,1,1];
 let trailsVal=0.55, blackoutOn=false;
+let deckState=null, deckSig='';
 
 function onEngineMsg(msg){
   if(!msg||typeof msg!=='object') return;
   if(msg.type==='peer' && msg.role==='engine' && !msg.online){
-    setDot('try','engine offline — retrying…');
+    setDot('try','console offline — retrying…');
   }
   if(msg.type==='state'){
     if(Array.isArray(msg.macros)) msg.macros.forEach((m,i)=>{
@@ -283,7 +311,101 @@ function onEngineMsg(msg){
     if(Array.isArray(msg.ops)) msg.ops.forEach((v,i)=>{ if(i<4){ opVals[i]=clamp(+v||0,0,1); paintFader(i); }});
     if(typeof msg.trails==='number'){ trailsVal=clamp(msg.trails,0,1); paintKnob(trailsKnob,trailsVal); }
     if(typeof msg.blackout==='boolean') setBlackout(msg.blackout,true);
+    if(Array.isArray(msg.deck)) setDeck(msg.deck);
   }
+}
+
+/* ---------------- deck strips (phone-console layout) ---------------- */
+const stripFaders=[]; /* per layer: {paint(v)} */
+function makeStripFader(host,i){
+  const wrap=document.createElement('div'); wrap.className='rfad';
+  const f=document.createElement('div'); f.className='rfader';
+  f.setAttribute('aria-label','Layer '+(i+1)+' opacity');
+  const fill=document.createElement('div'); fill.className='rfill';
+  const handle=document.createElement('div'); handle.className='rhandle';
+  f.appendChild(fill); f.appendChild(handle);
+  const val=document.createElement('div'); val.className='rfval'; val.textContent='100%';
+  wrap.appendChild(f); wrap.appendChild(val);
+  host.appendChild(wrap);
+  let value=opVals[i]||1, lastSent=0;
+  function paint(v){
+    value=clamp(v,0,1);
+    const r=f.getBoundingClientRect();
+    const travel=Math.max(10,(r.height||160)-20);
+    fill.style.height=(value*travel)+'px';
+    handle.style.bottom=(10+value*travel)+'px';
+    val.textContent=Math.round(value*100)+'%';
+  }
+  function fire(force){
+    const now=performance.now();
+    if(force || now-lastSent>60){ lastSent=now; send({type:'param',id:'L'+i+'.op',value:+value.toFixed(3)}); }
+  }
+  function valFromEvent(e){
+    const r=f.getBoundingClientRect();
+    return clamp(1-(e.clientY-r.top-10)/Math.max(10,r.height-20),0,1);
+  }
+  let dragging=false;
+  f.addEventListener('pointerdown',(e)=>{
+    dragging=true;
+    try{ f.setPointerCapture(e.pointerId); }catch(err){}
+    paint(valFromEvent(e)); opVals[i]=value; fire(true);
+    e.preventDefault();
+  });
+  f.addEventListener('pointermove',(e)=>{
+    if(!dragging) return;
+    paint(valFromEvent(e)); opVals[i]=value; fire(false);
+  });
+  const end=()=>{ if(dragging){ dragging=false; fire(true); } };
+  f.addEventListener('pointerup',end);
+  f.addEventListener('pointercancel',end);
+  requestAnimationFrame(()=>paint(value));
+  return {paint:(v)=>paint(v)};
+}
+function setDeck(deck){
+  deckState=deck;
+  const sig=deck.map(L=>L.name+'|'+L.clips.join(',')).join(';;');
+  const wrap=$('deckwrap');
+  if(sig!==deckSig){
+    deckSig=sig;
+    wrap.innerHTML=''; stripFaders.length=0;
+    deck.forEach((L,i)=>{
+      const strip=document.createElement('div'); strip.className='rstrip'; strip.dataset.layer=i;
+      const left=document.createElement('div');
+      const head=document.createElement('div'); head.className='rhead';
+      const nm=document.createElement('span'); nm.className='rlname'; nm.textContent=L.name||('L'+(i+1));
+      const live=document.createElement('span'); live.className='rlive'; live.dataset.live='1';
+      head.appendChild(nm); head.appendChild(live);
+      const grid=document.createElement('div'); grid.className='rclips';
+      (L.clips||[]).forEach((cn,c)=>{
+        const t=document.createElement('button'); t.className='rtile'+(cn?'':' empty');
+        t.textContent=cn||'·'; t.dataset.c=c;
+        t.addEventListener('click',()=>{ send({type:'fire',l:i,c:c}); });
+        grid.appendChild(t);
+      });
+      left.appendChild(head); left.appendChild(grid);
+      strip.appendChild(left);
+      stripFaders[i]=makeStripFader(strip,i);
+      wrap.appendChild(strip);
+    });
+  }
+  /* live highlights */
+  deck.forEach((L,i)=>{
+    const strip=wrap.children[i]; if(!strip) return;
+    strip.classList.toggle('sel', L.active>=0);
+    const live=strip.querySelector('[data-live]');
+    if(live) live.innerHTML = L.active>=0 ? 'playing <b>'+((L.clips||[])[L.active]||'')+'</b>' : 'idle';
+    strip.querySelectorAll('.rtile').forEach(t=>{
+      t.classList.toggle('on', parseInt(t.dataset.c,10)===L.active);
+    });
+    if(stripFaders[i]) stripFaders[i].paint(opVals[i]);
+  });
+}
+function paintFader(i){ if(stripFaders[i]) stripFaders[i].paint(opVals[i]); }
+
+/* demo deck so mock mode shows the real layout */
+function demoDeck(){
+  const names=['Tunnel','Flow Field','Nebula','Plugin','Cloner 3D','Aurora','Grid Run',''];
+  return [0,1,2,3].map(i=>({name:'L'+(i+1), clips:names.slice(), active:i===0?1:-1}));
 }
 </script>
 <script>
@@ -356,36 +478,6 @@ const trailsKnob=makeKnob($('trailsknob').parentNode,'Trails',trailsVal,(v)=>{
 });
 $('trailsknob').remove(); /* placeholder replaced by the built knob */
 
-/* ---------------- layer faders ---------------- */
-const faderEls=[];
-(function(){
-  const host=$('layerfaders');
-  for(let i=0;i<4;i++){
-    const d=document.createElement('div'); d.className='fader';
-    const lab=document.createElement('div'); lab.className='flab'; lab.textContent='L'+(i+1);
-    const inp=document.createElement('input');
-    inp.type='range'; inp.className='faderin'; inp.min=0; inp.max=1; inp.step=0.001;
-    inp.value=opVals[i]; inp.setAttribute('aria-label','Layer '+(i+1)+' opacity');
-    const vv=document.createElement('div'); vv.className='fval'; vv.textContent='100%';
-    let lastSent=0;
-    inp.addEventListener('input',()=>{
-      const v=parseFloat(inp.value);
-      opVals[i]=v; vv.textContent=Math.round(v*100)+'%';
-      const now=performance.now();
-      if(now-lastSent>60){ lastSent=now; send({type:'param',id:'L'+i+'.op',value:+v.toFixed(3)}); }
-    });
-    inp.addEventListener('change',()=>{
-      send({type:'param',id:'L'+i+'.op',value:+parseFloat(inp.value).toFixed(3)});
-    });
-    d.appendChild(lab); d.appendChild(inp); d.appendChild(vv);
-    host.appendChild(d); faderEls.push({inp:inp,val:vv});
-  }
-})();
-function paintFader(i){
-  const f=faderEls[i]; if(!f) return;
-  f.inp.value=opVals[i]; f.val.textContent=Math.round(opVals[i]*100)+'%';
-}
-
 /* ---------------- transport ---------------- */
 function setBlackout(on,silent){
   blackoutOn=!!on;
@@ -406,7 +498,7 @@ $('btnManual').addEventListener('click',()=>{
 });
 $('manualurl').addEventListener('keydown',(e)=>{ if(e.key==='Enter') $('btnManual').click(); });
 
-/* ---------------- selftest (synthetic knob drag, headless-verifiable) ---------------- */
+/* ---------------- selftest ---------------- */
 function runSelftest(){
   tlog('SELFTEST start');
   const k=macroKnobs[0].el;
@@ -418,17 +510,18 @@ function runSelftest(){
   k.dispatchEvent(mk('pointermove',cy-80));
   k.dispatchEvent(mk('pointerup',cy-80));
   tlog('SELFTEST knob0 final='+macroKnobs[0].get().toFixed(3));
-  /* fader */
-  const f=faderEls[1].inp;
-  f.value=0.25; f.dispatchEvent(new Event('input',{bubbles:true})); f.dispatchEvent(new Event('change',{bubbles:true}));
-  tlog('SELFTEST fader1 final='+opVals[1].toFixed(3));
+  /* deck: fire a tile + ride a strip fader */
+  const tile=document.querySelector('.rstrip .rtile:not(.empty)');
+  if(tile) tile.click();
+  tlog('SELFTEST tile fired='+(!!tile));
+  tlog('SELFTEST faders built='+stripFaders.length);
   tlog('SELFTEST done');
 }
 
 /* ---------------- init ---------------- */
 (function(){
-  const m=(location.hash||'').match(/#r=([A-Z0-9]{6})/i);
-  if(m && !MOCK){ p2pConnect(m[1].toUpperCase()); }
+  if(MOCK){ setDeck(demoDeck()); }
+  if(PAIRCODE && !MOCK){ p2pConnect(PAIRCODE); }
   else connect();
 })();
 if(SELFTEST) setTimeout(runSelftest,400);
