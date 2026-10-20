@@ -1309,7 +1309,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.3.4';
+const APP_VERSION='1.3.5';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -2697,6 +2697,8 @@ function initGL(){
     preserveDrawingBuffer:isPhone});
   if(!gl){ showErr('WebGL2 is not available in this browser — HoloMapper cannot run.'); return false; }
   floatOK = !!gl.getExtension('EXT_color_buffer_float');
+  /* phones: force 8-bit targets — many mobile GPUs can't render to float */
+  if(window.HM_DEVICE&&HM_DEVICE.device==='phone') floatOK=false;
   return true;
 }
 function compileAll(){
