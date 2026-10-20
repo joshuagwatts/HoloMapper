@@ -118,7 +118,8 @@ input[type=checkbox]{accent-color:var(--sel);width:13px;height:13px}
   user-select:none;-webkit-user-select:none;touch-action:none;
   font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
 .dockhead:active{cursor:grabbing}
-.dockhead .dgrip{font-size:11px;letter-spacing:3px;line-height:1;color:var(--dim)}
+.dockhead .dgrip{font-size:11px;letter-spacing:3px;line-height:1;color:var(--dim);cursor:grab;touch-action:none;padding:2px 4px;margin:-2px 0}
+.dockhead .dgrip:active{cursor:grabbing}
 .dockhead:hover .dgrip{color:var(--acc2)}
 .dockpanel.dragsrc{opacity:.35}
 .dockhdiv{height:6px;flex:none;cursor:ns-resize;background:transparent;position:relative;z-index:5}
@@ -262,9 +263,13 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .coltab:hover{color:var(--txt)}
 #deck{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;padding:4px 8px 8px;gap:3px}
 .lstrip{flex:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
-  display:grid;grid-template-columns:40px 110px minmax(0,1fr);overflow:hidden;height:76px}
+  display:grid;grid-template-columns:118px 110px minmax(0,1fr);overflow:hidden;height:76px}
 /* Resolume-style V fader + mix mode on the strip's left edge — contained inside */
-.lfad{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 2px;min-height:0;overflow:hidden}
+.lfad{display:flex;flex-direction:row;align-items:stretch;gap:5px;padding:4px;min-height:0;overflow:hidden}
+.fcol{display:flex;flex-direction:column;align-items:center;gap:2px;min-height:0}
+.fcol .vfad{flex:1;min-height:40px}
+.mcol{display:flex;flex-direction:column;justify-content:center;gap:5px;flex:1;min-width:0}
+.mcol .lbsel{max-width:none;width:100%;font-size:10px;padding:1px 2px}
 /* Thick Resolume-style V fader — solid green, inside the layer box */
 .vfad{position:relative;flex:1;min-height:80px;max-height:100%;width:36px;cursor:ns-resize;touch-action:none;
   outline:none;border-radius:6px;flex:none;overflow:hidden}
@@ -281,9 +286,9 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .vfad:hover .vfad-handle{border-color:var(--acc2)}
 .fval{font-size:9px;font-weight:800;color:var(--dim);line-height:1}
 .lfad .lbsel{max-width:48px;font-size:9px;padding:0 1px}
-/* Transition time: compact horizontal slider in the strip's left column */
-.trow{display:flex;flex-direction:column;align-items:center;gap:1px;width:100%}
-.tsl{width:44px;margin:0;cursor:ew-resize}
+/* Transition time: compact horizontal slider in the strip's mix column */
+.trow{display:flex;flex-direction:row;align-items:center;gap:3px;width:100%}
+.tsl{flex:1;width:auto;min-width:30px;margin:0;cursor:ew-resize}
 .tval{font-size:8px;font-weight:800;color:var(--dim);line-height:1}
 .lstrip.sel{border-color:var(--sel)}
 .layerctl{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px}
@@ -511,6 +516,9 @@ html[data-device="phone"] .clip .cname{font-size:12px;padding:10px 4px}
 html[data-device="phone"] .maindeck{display:flex;flex-direction:row;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:12px;padding:8px}
 html[data-device="phone"] .maindeck .lstrip{flex:0 0 88vw;scroll-snap-align:start;min-height:70vh}
 /* phone: hide blend/transition micro-controls (desktop power features) */
+html[data-device="phone"] .lfad{flex-direction:column;align-items:center}
+html[data-device="phone"] .fcol{flex:1}
+html[data-device="phone"] .mcol{display:none}
 html[data-device="phone"] .lstrip .lbsel{display:none}
 html[data-device="phone"] .lstrip .trow{display:none}
 html[data-device="phone"] .lstrip .vfad{max-height:200px}
@@ -878,10 +886,12 @@ function dockWrapPanels(){
     const p=el('div','dockpanel');p.dataset.panel=id;
     if(id!=='transport'){
       const h=el('div','dockhead');
-      h.appendChild(el('span','dgrip','⠿'));
+      const grip=el('span','dgrip','⠿');
+      grip.title='Drag to move the '+DOCK_TITLES[id]+' panel';
+      /* ONLY the ⠿ grip starts a panel drag — the rest of the header is inert */
+      grip.addEventListener('pointerdown',(e)=>dockGripDown(e,id));
+      h.appendChild(grip);
       h.appendChild(el('span',null,DOCK_TITLES[id]));
-      h.title='Drag to move the '+DOCK_TITLES[id]+' panel';
-      h.addEventListener('pointerdown',(e)=>dockGripDown(e,id));
       p.appendChild(h);
     }
     const b=el('div','dockbody');
@@ -1321,7 +1331,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.4.2';
+const APP_VERSION='1.4.3';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -5071,7 +5081,9 @@ function buildDeck(){
     const bs=document.createElement('select'); bs.className='lbsel'; bs.title='Mix mode (blend)';
     BLENDS.forEach((b,bi)=>bs.appendChild(new Option(b,bi))); bs.value=L.blend;
     bs.addEventListener('change',()=>{ L.blend=parseInt(bs.value,10); saveState(); });
-    fad.appendChild(op); fad.appendChild(fv); fad.appendChild(bs);
+    const fcol=el('div','fcol'); fcol.appendChild(op); fcol.appendChild(fv);
+    const mcol=el('div','mcol'); mcol.appendChild(bs);
+    fad.appendChild(fcol); fad.appendChild(mcol);
     /* Transition time: compact horizontal slider under the mix mode.
        data-ctrl makes it MIDI-learnable; data-val keeps the time label synced. */
     const trw=el('div','trow');
@@ -5086,7 +5098,7 @@ function buildDeck(){
     const tv=el('span','tval',PARAMS[tid].fmt(parseFloat(tr.value)));
     tv.setAttribute('data-val',tid);
     trw.appendChild(tr); trw.appendChild(tv);
-    fad.appendChild(trw);
+    mcol.appendChild(trw);
     st.appendChild(fad);
     const gut=el('div','lgut');
     const r1=el('div','lrow1');
