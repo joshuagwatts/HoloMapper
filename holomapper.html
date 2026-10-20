@@ -2673,7 +2673,8 @@ function buildTargets(){
      resolution (the final composite never shrinks); the internal render
      targets are multiplied by the quality scale. At 1.0x this is
      pixel-identical to the old fixed-1280x720 path. */
-  canvas.width=BASE_W; canvas.height=BASE_H;
+  if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){ canvas.width=640; canvas.height=360; }
+  else{ canvas.width=BASE_W; canvas.height=BASE_H; }
   RW=Math.max(2,Math.round(BASE_W*effScale()));
   RH=Math.max(2,Math.round(BASE_H*effScale()));
   layerT=Array.from({length:MAX_LAYERS},()=>makeTarget(RW,RH,true));
@@ -2689,7 +2690,10 @@ function buildTargets(){
   if(typeof clearNodeTargets==='function') clearNodeTargets(); /* v1.3: node scratch rebuilt lazily */
 }
 function initGL(){
-  gl = canvas.getContext('webgl2',{antialias:false, alpha:false, powerPreference:'high-performance'});
+  const isPhone=window.HM_DEVICE&&HM_DEVICE.device==='phone';
+  gl = canvas.getContext('webgl2',{antialias:false, alpha:false,
+    powerPreference:isPhone?'default':'high-performance',
+    preserveDrawingBuffer:isPhone});
   if(!gl){ showErr('WebGL2 is not available in this browser — HoloMapper cannot run.'); return false; }
   floatOK = !!gl.getExtension('EXT_color_buffer_float');
   return true;
@@ -8166,18 +8170,7 @@ function loop(){
     applyFxChain(fxScratch,S.compFx,t);
     pc=fxScratch.tex;
   }
-  if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
-    /* DIAGNOSTIC: render Tunnel directly to canvas, bypass pipeline */
-    try{
-      const P=PROG.tunnel;
-      gl.bindFramebuffer(gl.FRAMEBUFFER,null);
-      gl.viewport(0,0,canvas.width,canvas.height);
-      gl.useProgram(P);
-      gl.uniform1f(U(P,'u_time'),t);
-      gl.uniform2f(U(P,'u_res'),canvas.width,canvas.height);
-      quadDraw();
-    }catch(e){ renderGrade(pc,t); }
-  }else renderGrade(pc,t);
+  renderGrade(pc,t);
   /* live clip preview: throttled to every 3rd frame (the readPixels stall was
      the dominant frame cost) and skipped while the node editor covers the deck.
      Uses its own counter — `frames` resets every 0.5s for the fps meter. */
