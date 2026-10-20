@@ -543,9 +543,7 @@ html[data-device="phone"] body{touch-action:manipulation}
 /* monitor canvases: full width, keep aspect */
 html[data-device="phone"] .dockpanel[data-panel="output"] canvas,
 html[data-device="phone"] .dockpanel[data-panel="preview"] canvas{width:100%;height:auto}
-/* phone: use 2D canvas for output (WebGL canvas doesn't composite on some Android) */
-html[data-device="phone"] #gl{display:none}
-html[data-device="phone"] #gl2d{display:block;width:100%;height:auto}
+
 /* browser rows: taller, easier to hit */
 html[data-device="phone"] .fxrow{min-height:48px;font-size:14px}
 html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
@@ -749,7 +747,7 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
     <!-- lower zone -->
     <section id="lowerzone">
       <div id="outmonwrap">
-        <div class="mon" id="outmon"><span class="mlab">Output Monitor</span><canvas id="gl"></canvas><canvas id="gl2d" style="display:none"></canvas></div>
+        <div class="mon" id="outmon"><span class="mlab">Output Monitor</span><canvas id="gl"></canvas></div>
         <div id="performbar">
           <div class="pmacros" id="pmacros"></div>
           <div class="pexit">PERFORM MODE &mdash; ESC or P to exit &mdash; F fullscreen</div>
@@ -8143,13 +8141,40 @@ function loop(){
   beatPulse=Math.max(pulse,audioBeat);
   evalModulators(t);
   pumpWebcam(); /* one texture upload per frame max, shared by all layers */
-  for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
-  renderCombine();
+  const isPhone=window.HM_DEVICE&&HM_DEVICE.device==='phone';
   let pc;
-  if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
-    /* phone: minimal path — combine straight to grade (feedback/post may break mobile GPUs) */
-    pc=compT.tex;
+  if(isPhone){
+    /* phone: direct source render (thumbnail path, proven to work) -> canvas */
+    try{
+      let src=null, li=0;
+      for(let i=0;i<numLayers();i++){
+        const f=S.fired[i];
+        if(f!==null&&f!==undefined&&typeof S.clips[i][f]==='number'){ src=S.clips[i][f]; li=i; break; }
+      }
+      if(src===null){
+        /* nothing fired: render first available clip */
+        outer: for(let i=0;i<numLayers();i++) for(let k=0;k<8;k++){
+          if(typeof S.clips[i][k]==='number'){ src=S.clips[i][k]; li=i; break outer; }
+        }
+      }
+      if(src!==null){
+        /* render source to compT, then grade to canvas */
+        const savedGraphs=S.graphs;
+        S.graphs=null; /* bypass graphs */
+        try{ renderClipSource(li,t,src,compT); }
+        finally{ S.graphs=savedGraphs; }
+        pc=compT.tex;
+      }else{
+        /* no clips at all: clear to dark */
+        gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
+        gl.viewport(0,0,compT.w,compT.h);
+        gl.clearColor(0.05,0.05,0.08,1); gl.clear(gl.COLOR_BUFFER_BIT);
+        pc=compT.tex;
+      }
+    }catch(e){ pc=compT.tex; }
   }else{
+    for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
+    renderCombine();
     renderFeedback();
     /* post chain threads one texture through; bypassed stages are skipped
        (pixel-identical passthrough) inside each stage function */
@@ -8173,32 +8198,7 @@ function loop(){
     applyFxChain(fxScratch,S.compFx,t);
     pc=fxScratch.tex;
   }
-  if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
-    /* phone: 2D canvas output via readPixels (WebGL canvas doesn't composite on some Android) */
-    if((frames%4)===0){
-      try{
-        const c2=$('gl2d');
-        if(c2){
-          const w=compT.w, h=compT.h;
-          if(c2.width!==w||c2.height!==h){ c2.width=w; c2.height=h; }
-          if(!window._outRead||window._outRead.length!==w*h*4){
-            window._outRead=new Uint8Array(w*h*4);
-            window._outImg=new ImageData(w,h);
-          }
-          gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
-          gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,window._outRead);
-          gl.bindFramebuffer(gl.FRAMEBUFFER,null);
-          /* vertical flip */
-          const d=window._outImg.data, rd=window._outRead;
-          for(let y=0;y<h;y++){
-            const s=(h-1-y)*w*4;
-            d.set(rd.subarray(s,s+w*4),y*w*4);
-          }
-          c2.getContext('2d').putImageData(window._outImg,0,0);
-        }
-      }catch(e){}
-    }
-  }else renderGrade(pc,t);
+  renderGrade(pc,t);
   /* live clip preview: throttled to every 3rd frame (the readPixels stall was
      the dominant frame cost) and skipped while the node editor covers the deck.
      Uses its own counter — `frames` resets every 0.5s for the fps meter. */
