@@ -1349,7 +1349,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.17';
+const APP_VERSION='1.9.18';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -9038,8 +9038,14 @@ function loop(){
        v1.9.13 copy-back, byte-identical to before. */
     /* freeze hold: compT already carries the graded arm frame - re-grading
        it every frame would compound vignette/grain, so held frames skip */
-    const needMaster=!freezeHold&&!!(S.strobeOn||S.blackout||(S.ghue&&Math.abs(S.ghue)>0.0001));
-    if(needMaster&&PROG.grade){
+    /* v1.9.18: the grade ALWAYS runs on phone (into compT), like desktop.
+       Before it only ran when hue/strobe/blackout was on - so the Comp
+       tab's Master fader and Bright/Contrast/Sat/Vignette/Grain sliders
+       did nothing on phone, and switching hue on also switched the whole
+       grade look on (dark + grainy). Freeze holds skip it: the held
+       frame is already graded; re-grading compT in place would compound
+       the vignette. */
+    if(!freezeHold&&PROG.grade&&pc){
       try{
         ensureFxScratch();
         let srcTex=pc;
@@ -9051,14 +9057,6 @@ function loop(){
           srcTex=fxScratch2.tex;
         }
         renderGradeInto(srcTex,compT,t);
-        pc=compT.tex;
-      }catch(e){}
-    }else if(pc&&pc!==compT.tex){
-      try{
-        gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
-        gl.viewport(0,0,compT.w,compT.h);
-        const CP9=PROG.copy; gl.useProgram(CP9);
-        setTex(CP9,'u_tex',0,pc); quadDraw();
         pc=compT.tex;
       }catch(e){}
     }
