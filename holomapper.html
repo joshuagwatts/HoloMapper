@@ -1339,7 +1339,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.3';
+const APP_VERSION='1.9.4';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -5344,6 +5344,7 @@ function buildDeck(){
         ? (base0?('TRIGGER effect clip '+fxInstLabel(base0)+' on '+LAYER_NAMES[i]+' — processes the layers below'):'Empty slot \u2014 right-click to assign a source')
         : ('TRIGGER '+srcName(src)+' on '+LAYER_NAMES[i]+' (quantized: '+(S.snap||'bar')+')');
       th.addEventListener('click',()=>{
+        if(window.placeTap&&window.placeTap(i,k)) return;
         if((src===null||src===undefined)&&base0){
           fireClip(i,k); openClipInspector(i,k);
         }else if(src===null||src===undefined){
@@ -5372,6 +5373,7 @@ function buildDeck(){
       cnm.title='Select clip '+(k+1)+' without triggering';
       cnm.addEventListener('click',(e)=>{
         e.stopPropagation();
+        if(window.placeTap&&window.placeTap(i,k)) return;
         if(e.ctrlKey||e.metaKey||e.shiftKey){ toggleClipSel(i,k,true); }
         else{ selectClip(i,k); openClipInspector(i,k); toggleClipSel(i,k,false); }
       });
@@ -6290,6 +6292,7 @@ function buildSrcBrowser(){
     b.appendChild(el('span','sdot'));
     b.appendChild(el('span',null,s));
     b.title='Drag onto a clip to assign '+s;
+    b.dataset.srcIdx=si;
     b.draggable=true;
     b.addEventListener('dragstart',(e)=>{ e.dataTransfer.setData('text/hm-src',String(si)); e.dataTransfer.effectAllowed='copy'; });
     host.appendChild(b);
@@ -9056,5 +9059,91 @@ $('pair').addEventListener('click',(e)=>{ if(e.target===$('pair')) togglePair(fa
 setInterval(broadcastState,500);
 </script>
 <script src="vendor/paho-mqtt-min.js"></script>
+
+<button id="btnBrowse" title="Browse effects and sources">Browse</button>
+<div id="placebar"><span id="placelab"></span><button id="placecancel">Cancel</button></div>
+<style>
+#btnBrowse{display:none}
+#placebar{display:none}
+@media (max-width:820px){
+  html[data-device="phone"] #btnBrowse{display:block;position:fixed;right:12px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:64;
+    background:var(--panel2);border:1px solid var(--acc,#8b5cf6);color:var(--txt);border-radius:999px;
+    padding:12px 18px;font-size:14px;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,.55);cursor:pointer}
+  html[data-device="phone"] #btnBrowse.on{border-color:var(--sel);color:var(--sel)}
+  html[data-device="phone"] .dockpanel[data-panel="browser"]{position:fixed;top:0;right:0;bottom:0;width:84vw;max-width:340px;z-index:65;
+    transform:translateX(106%);transition:transform .22s ease;background:var(--panel);
+    box-shadow:-10px 0 34px rgba(0,0,0,.6);display:flex;flex-direction:column}
+  html[data-device="phone"] .dockpanel[data-panel="browser"].hm-open{transform:translateX(0)}
+  html[data-device="phone"] .dockpanel[data-panel="browser"] .dockbody{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1}
+  html[data-device="phone"] #placebar.on{display:flex;position:fixed;top:calc(8px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);
+    z-index:80;background:#1a1430;border:1px solid var(--acc,#8b5cf6);color:var(--txt);border-radius:999px;
+    padding:8px 8px 8px 16px;font-size:13px;font-weight:600;align-items:center;gap:10px;box-shadow:0 8px 28px rgba(0,0,0,.6);white-space:nowrap}
+  html[data-device="phone"] #placecancel{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer}
+  html[data-device="phone"] body.placing .clip{outline:2px dashed var(--acc,#8b5cf6);outline-offset:-2px}
+}
+</style>
+<script>
+'use strict';
+/* ============ PHONE: browser drawer + tap-to-place (v1.9.4) ============
+   Touch has no HTML5 drag, so on phone the Browser panel lives in a
+   slide-over drawer (Browse button), and placing works tap-tap: tap an
+   effect or source in the drawer, then tap a clip - the same result as
+   dragging it onto the clip on desktop. Desktop behavior is untouched. */
+let placeMode=null;
+const isPhoneDev=()=>!!(window.HM_DEVICE&&HM_DEVICE.device==='phone');
+function browserPanel(){ return document.querySelector('.dockpanel[data-panel="browser"]'); }
+function closeBrowseDrawer(){
+  const bp=browserPanel(); if(bp) bp.classList.remove('hm-open');
+  const bb=$('btnBrowse'); if(bb) bb.classList.remove('on');
+}
+function armPlace(pm){
+  placeMode=pm;
+  $('placelab').textContent='Placing '+pm.label+' - tap a clip';
+  $('placebar').classList.add('on');
+  document.body.classList.add('placing');
+  closeBrowseDrawer();
+}
+function disarmPlace(){
+  placeMode=null;
+  $('placebar').classList.remove('on');
+  document.body.classList.remove('placing');
+}
+window.placeTap=(i,k)=>{
+  if(!placeMode) return false;
+  const pm=placeMode; disarmPlace();
+  if(pm.kind==='fx'){ dropFxOnClip(pm.key,i,k); }
+  else{
+    S.clips[i][k]=pm.si; saveState(); buildDeck();
+    toast(srcName(pm.si)+' \u2192 '+LAYER_NAMES[i]+' clip '+(k+1));
+  }
+  return true;
+};
+$('placecancel').addEventListener('click',()=>disarmPlace());
+$('btnBrowse').addEventListener('click',()=>{
+  const bp=browserPanel(); if(!bp) return;
+  const open=bp.classList.toggle('hm-open');
+  $('btnBrowse').classList.toggle('on',open);
+});
+/* capture phase: beat the rows' own click handlers on phone only */
+document.addEventListener('click',(e)=>{
+  if(!isPhoneDev()) return;
+  if(e.target.closest('#btnBrowse')||e.target.closest('#placebar')) return;
+  if(e.target.closest('.srcdel')) return;
+  const fxr=e.target.closest('.fxrow.chainable');
+  if(fxr&&fxr.dataset.fxkey){
+    e.stopPropagation();
+    const def=FXDEFS.find(f=>f.key===fxr.dataset.fxkey);
+    armPlace({kind:'fx', key:fxr.dataset.fxkey, label:def?def.name:fxr.dataset.fxkey});
+    return;
+  }
+  const sr=e.target.closest('.srcrow');
+  if(sr&&sr.dataset&&sr.dataset.srcIdx!==undefined){
+    e.stopPropagation();
+    const si=parseInt(sr.dataset.srcIdx,10);
+    armPlace({kind:'src', si:si, label:srcName(si)});
+  }
+}, true);
+</script>
 </body>
 </html>
