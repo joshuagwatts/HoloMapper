@@ -1336,7 +1336,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.7.2';
+const APP_VERSION='1.8.0';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -8769,13 +8769,15 @@ function renderSrvList(){
   const host=$('srvlist'); if(!host) return;
   const linked=Object.keys(p2pLink).filter(k=>p2pLink[k]==='linked');
   const phone = !p2pCode ? 'off'
-    : linked.length ? 'linked via '+linked.join(' + ') : (p2pRooms.length? 'waiting for phone — it must scan THIS code\'s QR' : 'starting…');
+    : linked.length ? 'linked via '+linked.join(' + ')
+    : cloudPeerOn ? 'linked via cloud relay'
+    : (p2pRooms.length||cloudClient) ? 'waiting for phone — it must scan THIS code\'s QR' : 'starting…';
   const midi=($('midistat')&&$('midistat').textContent)||'—';
   const linkFresh = linkLastSeen && (performance.now()-linkLastSeen<6000);
   const hub = prmOn ? 'connected' : 'off';
   const row=(k,v,on)=>'<div class="srvrow"><span>'+k+'</span><span class="sv'+(on?' on':'')+'">'+v+'</span></div>';
   host.innerHTML =
-    row('\uD83D\uDCF1 Phone remote', phone, linked.length>0) +
+    row('\uD83D\uDCF1 Phone remote', phone, linked.length>0||cloudPeerOn) +
     row('\uD83C\uDFB9 MIDI', midi, /connected|device|in/i.test(midi)&&!/not|off/i.test(midi)) +
     row('\uD83D\uDD17 Ableton Link', linkFresh?('sync \u00B7 '+(linkBpm?linkBpm.toFixed(1)+' BPM':'')+(linkPeers?' \u00B7 '+linkPeers+' peers':'')):'not connected', !!linkFresh) +
     row('\uD83D\uDDA5 Hub link', hub, prmOn);
@@ -8785,6 +8787,7 @@ async function p2pStart(){
   p2pCode=p2pLoadCode()||p2pGenCode();
   p2pSaveCode(p2pCode);
   p2pLink={mqtt:'waiting', nostr:'waiting', torrent:'waiting'};
+  cloudStart();
   let any=false;
   for(const [name,localUrl,cdnUrl] of P2P_STRATS){
     try{
@@ -8814,11 +8817,97 @@ async function p2pStart(){
   return any;
 }
 function p2pStop(){
+  cloudStop();
   p2pRooms.forEach(r=>{ try{ r.leave(); }catch(e){} });
   p2pRooms=[]; p2pSendFns=[]; p2pCode='';
   p2pLink={mqtt:'off', nostr:'off', torrent:'off'};
 }
 function p2pSend(o){ p2pSendFns.forEach(f=>{ try{ f(o); }catch(e){} }); }
+
+/* ================= CLOUD RELAY (primary phone link) =================
+   Console + phone both open a websocket to a public MQTT relay and meet
+   on topics named by the pairing code. No WebRTC, nothing to run — if a
+   browser can load the page, this link connects. The WebRTC rooms stay
+   as a parallel path; commands dedupe by mid. */
+/* this Paho build exposes Client/Message at the top level — normalize */
+if(typeof Paho!=='undefined' && !Paho.MQTT) Paho.MQTT={Client:Paho.Client, Message:Paho.Message};
+const CLOUD_BROKERS=[
+  ['broker.emqx.io',8084,'/mqtt'],
+  ['broker.hivemq.com',8884,'/mqtt'],
+  ['test.mosquitto.org',8081,'/'],
+];
+/* ?relay=ws://host:port/path overrides the broker list (own relay, testing) */
+function cloudBrokers(){
+  try{
+    const r=new URLSearchParams(location.search).get('relay');
+    if(r){ const u=new URL(r); return [[u.hostname, +(u.port||(u.protocol==='wss:'?443:80)), (u.pathname||'/'), u.protocol==='wss:']]; }
+  }catch(e){}
+  return CLOUD_BROKERS.map(b=>[b[0],b[1],b[2],true]);
+}
+let cloudClient=null, cloudBroker='', cloudPeerOn=false;
+function cloudTopic(suffix){ return 'holomapper/v1/'+p2pCode+'/'+suffix; }
+function cloudSend(o){
+  if(!cloudClient) return;
+  try{
+    const m=new Paho.MQTT.Message(JSON.stringify(o));
+    m.destinationName=cloudTopic('down');
+    cloudClient.send(m);
+  }catch(e){}
+}
+function cloudStop(){
+  if(cloudClient){
+    try{
+      const off=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'engine',online:false}));
+      off.destinationName=cloudTopic('presence'); off.retained=true;
+      cloudClient.send(off);
+      cloudClient.disconnect();
+    }catch(e){}
+    cloudClient=null;
+  }
+  cloudPeerOn=false; cloudBroker='';
+}
+function cloudStart(){
+  if(typeof Paho==='undefined'||!p2pCode||cloudClient) return;
+  if(typeof Paho!=='undefined' && !Paho.MQTT) Paho.MQTT={Client:Paho.Client, Message:Paho.Message};
+
+  let won=false, fails=0;
+  cloudBrokers().forEach(([host,port,path,ssl])=>{
+    let c;
+    try{ c=new Paho.MQTT.Client(host,port,path,'hm-eng-'+p2pCode+'-'+Math.random().toString(36).slice(2,9)); }
+    catch(e){ return; }
+    c.onConnectionLost=()=>{
+      if(cloudClient===c){ cloudClient=null; cloudPeerOn=false; renderSrvList(); setTimeout(cloudStart,2500); }
+    };
+    c.onMessageArrived=(m)=>{
+      let d; try{ d=JSON.parse(m.payloadString); }catch(e){ return; }
+      if(m.destinationName.endsWith('/presence')){
+        if(d&&d.role==='remote'){ cloudPeerOn=!!d.online; if(cloudPeerOn) broadcastState(); renderSrvList(); }
+        return;
+      }
+      cloudPeerOn=true;
+      if(d&&d.type==='ping'){ renderSrvList(); return; }
+      if(d&&d.type==='hello'){ broadcastState(); return; }
+      if(d&&d.mid&&p2pDupe(d.mid)) return;
+      prmHandle(d);
+    };
+    const will=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'engine',online:false}));
+    will.destinationName=cloudTopic('presence'); will.retained=true;
+    c.connect({useSSL:ssl, timeout:9, willMessage:will,
+      onSuccess:()=>{
+        if(won){ try{ c.disconnect(); }catch(e){} return; }
+        won=true; cloudClient=c; cloudBroker=host;
+        c.subscribe(cloudTopic('up'));
+        c.subscribe(cloudTopic('presence'));
+        const pres=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'engine',online:true}));
+        pres.destinationName=cloudTopic('presence'); pres.retained=true;
+        c.send(pres);
+        prmStatus('cloud relay live');
+        renderSrvList();
+      },
+      onFailure:()=>{ fails++; if(fails>=cloudBrokers().length && !won){ setTimeout(()=>{ if(!cloudClient&&p2pCode) cloudStart(); }, 8000); } }
+    });
+  });
+}
 function p2pRemoteUrl(){
   return p2pCode ? 'https://joshuagwatts.github.io/HoloMapper/remote.html?v='+APP_VERSION+'#r='+p2pCode : '';
 }
@@ -8836,6 +8925,7 @@ function broadcastState(){
       }),
       active:(S.fired&&S.fired[i]!=null)?S.fired[i]:-1}))};
   p2pSend(st);
+  cloudSend(st);
   if(!prmOn || !prmWs || prmWs.readyState!==1) return;
   prmSend(st);
 }
@@ -8903,5 +8993,6 @@ $('btnPairCopy').addEventListener('click',()=>{
 $('pair').addEventListener('click',(e)=>{ if(e.target===$('pair')) togglePair(false); });
 setInterval(broadcastState,500);
 </script>
+<script src="vendor/paho-mqtt-min.js"></script>
 </body>
 </html>

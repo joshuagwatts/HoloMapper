@@ -131,6 +131,7 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(
 #selftest.show{display:block}
 button{touch-action:manipulation}
 </style>
+<script src="vendor/paho-mqtt-min.js"></script>
 </head>
 <body>
 <header>
@@ -281,11 +282,10 @@ let p2pSendFns=[];
 function send(obj){
   const line=JSON.stringify(obj);
   if(MOCK){ tlog('SEND '+line); return; }
-  if(p2pSendFns.length){
-    /* commands carry a mid — the console dedupes copies arriving on both transports */
-    const m=Object.assign({}, obj, {mid:obj.mid||(Date.now().toString(36)+Math.random().toString(36).slice(2,9))});
-    p2pSendFns.forEach(f=>{ try{ f(m); }catch(e){} });
-  }
+  /* commands carry a mid — the console dedupes copies arriving on multiple transports */
+  const m=Object.assign({}, obj, {mid:obj.mid||(Date.now().toString(36)+Math.random().toString(36).slice(2,9))});
+  if(p2pSendFns.length) p2pSendFns.forEach(f=>{ try{ f(m); }catch(e){} });
+  if(cloudClient) cloudPublish(m);
   if(ws && ws.readyState===1) ws.send(line);
 }
 /* P2P via Trystero — DUAL TRANSPORT (nostr + mqtt), same room code.
@@ -323,7 +323,92 @@ async function p2pConnect(code){
   }
   if(!any) setDot('off','link failed — tap Retry link');
 }
-$('btnRetry').addEventListener('click',()=>{ if(PAIRCODE) p2pConnect(PAIRCODE); });
+/* ================= CLOUD RELAY (primary link) =================
+   A websocket to a public MQTT relay — no WebRTC. The console listens
+   on topics named by the same pairing code in the QR. */
+/* this Paho build exposes Client/Message at the top level — normalize */
+if(typeof Paho!=='undefined' && !Paho.MQTT) Paho.MQTT={Client:Paho.Client, Message:Paho.Message};
+const CLOUD_BROKERS=[
+  ['broker.emqx.io',8084,'/mqtt'],
+  ['broker.hivemq.com',8884,'/mqtt'],
+  ['test.mosquitto.org',8081,'/'],
+];
+/* ?relay=ws://host:port/path overrides the broker list (own relay, testing) */
+function cloudBrokers(){
+  try{
+    const r=new URLSearchParams(location.search).get('relay');
+    if(r){ const u=new URL(r); return [[u.hostname, +(u.port||(u.protocol==='wss:'?443:80)), (u.pathname||'/'), u.protocol==='wss:']]; }
+  }catch(e){}
+  return CLOUD_BROKERS.map(b=>[b[0],b[1],b[2],true]);
+}
+let cloudClient=null, cloudBroker='', cloudPingIv=null;
+function cloudPublish(o){
+  if(!cloudClient||!PAIRCODE) return;
+  try{
+    const m=new Paho.MQTT.Message(JSON.stringify(o));
+    m.destinationName='holomapper/v1/'+PAIRCODE+'/up';
+    cloudClient.send(m);
+  }catch(e){}
+}
+function cloudConnect(code){
+  if(typeof Paho==='undefined'||cloudClient) return;
+  if(typeof Paho!=='undefined' && !Paho.MQTT) Paho.MQTT={Client:Paho.Client, Message:Paho.Message};
+
+  let won=false, fails=0;
+  cloudBrokers().forEach(([host,port,path,ssl])=>{
+    let c;
+    try{ c=new Paho.MQTT.Client(host,port,path,'hm-rem-'+code+'-'+Math.random().toString(36).slice(2,9)); }
+    catch(e){ return; }
+    c.onConnectionLost=()=>{
+      if(cloudClient===c){
+        cloudClient=null;
+        if(cloudPingIv){ clearInterval(cloudPingIv); cloudPingIv=null; }
+        setDot('try','relay dropped — reconnecting…');
+        setTimeout(()=>cloudConnect(code),2500);
+      }
+    };
+    c.onMessageArrived=(m)=>{
+      let d; try{ d=JSON.parse(m.payloadString); }catch(e){ return; }
+      if(m.destinationName.endsWith('/presence')){
+        if(d&&d.role==='engine'){
+          if(d.online){ cloudPublish({type:'hello'}); }
+          else setDot('try','console offline — retrying…');
+        }
+        return;
+      }
+      if(d&&d.type==='state') setDot('on','linked via cloud relay');
+      onEngineMsg(d);
+    };
+    const will=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'remote',online:false}));
+    will.destinationName='holomapper/v1/'+code+'/presence'; will.retained=true;
+    c.connect({useSSL:ssl, timeout:9, willMessage:will,
+      onSuccess:()=>{
+        if(won){ try{ c.disconnect(); }catch(e){} return; }
+        won=true; cloudClient=c; cloudBroker=host;
+        c.subscribe('holomapper/v1/'+code+'/down');
+        c.subscribe('holomapper/v1/'+code+'/presence');
+        const pres=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'remote',online:true}));
+        pres.destinationName='holomapper/v1/'+code+'/presence'; pres.retained=true;
+        c.send(pres);
+        cloudPublish({type:'hello'});
+        if(cloudPingIv) clearInterval(cloudPingIv);
+        cloudPingIv=setInterval(()=>cloudPublish({type:'ping'}),5000);
+        setDot('try','relay live — finding console…');
+      },
+      onFailure:()=>{ fails++; if(fails>=cloudBrokers().length && !won){ setDot('try','relay unreachable — retrying…'); setTimeout(()=>cloudConnect(code), 8000); } }
+    });
+  });
+}
+addEventListener('pagehide',()=>{
+  if(cloudClient){
+    try{
+      const off=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'remote',online:false}));
+      off.destinationName='holomapper/v1/'+PAIRCODE+'/presence'; off.retained=true;
+      cloudClient.send(off);
+    }catch(e){}
+  }
+});
+$('btnRetry').addEventListener('click',()=>{ if(PAIRCODE){ p2pConnect(PAIRCODE); cloudConnect(PAIRCODE); } });
 
 /* ---------------- engine -> remote state ---------------- */
 const macroVals=new Array(8).fill(0.5);
@@ -557,13 +642,13 @@ function runSelftest(){
 /* ---------------- init ---------------- */
 (function(){
   if(MOCK){ setDeck(demoDeck()); }
-  if(PAIRCODE && !MOCK){ p2pConnect(PAIRCODE); }
+  if(PAIRCODE && !MOCK){ p2pConnect(PAIRCODE); cloudConnect(PAIRCODE); }
   else connect();
 })();
 if(SELFTEST) setTimeout(runSelftest,400);
 </script>
 <script>
-document.getElementById('remver').textContent='v1.7.2';
+document.getElementById('remver').textContent='v1.8.0';
 document.getElementById('btnFresh').addEventListener('click',()=>{
   location.replace(location.pathname+'?v='+Date.now()+location.hash);
 });
