@@ -1336,7 +1336,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.1';
+const APP_VERSION='1.9.2';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1854,7 +1854,7 @@ function defaultState(){
     clipFx:Array.from({length:MAX_LAYERS},()=>Array.from({length:8},()=>[])),
     compFx:[],
     macros:Array.from({length:8},(_,i)=>({label:'M'+(i+1), val:0.5})),
-    midi:[], pluginCode:PLUGIN_DEFAULT, imports:[], mods:defaultMods()
+    midi:[], pluginCode:PLUGIN_DEFAULT, pluginUniforms:[], imports:[], mods:defaultMods()
   };
 }
 let S = defaultState();
@@ -1897,6 +1897,7 @@ else if(S.videos.length===0&&S.clips){
   }
 }
 if(!S.mods||typeof S.mods!=='object') S.mods={};
+if(!Array.isArray(S.pluginUniforms)) S.pluginUniforms=[];
 S.imports=S.imports.filter(im=>im&&typeof im.name==='string'&&typeof im.code==='string');
 /* variable layers: extend old 4-layer states to MAX_LAYERS */
 if(!S.numLayers||S.numLayers<1||S.numLayers>MAX_LAYERS) S.numLayers=4;
@@ -4184,11 +4185,11 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
     }
     gl.activeTexture(gl.TEXTURE0);
   }
-  if(sidx>=5&&sidx<camIdx()){ /* auto-knob uniforms, per scanShaderUniforms */
-    const im=S.imports[sidx-5];
-    if(im&&im.uniforms){
-      if(!PARAMS['SH'+sidx+'.timeSpeed']) registerImportParams(sidx);
-      for(const u0 of im.uniforms){
+  if(sidx===3||(sidx>=5&&sidx<camIdx())){ /* auto-knob uniforms, per scanShaderUniforms (imports + Plugin src 3) */
+    const uns=(sidx===3)?S.pluginUniforms:((S.imports[sidx-5]||{}).uniforms);
+    if(uns&&uns.length){
+      if(sidx>=5&&!PARAMS['SH'+sidx+'.timeSpeed']) registerImportParams(sidx);
+      for(const u0 of uns){
         const u=normUniform(u0); if(!u) continue;
         const base='SH'+sidx+'.'+u.name;
         if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
@@ -5022,6 +5023,7 @@ function fireClipNow(i,k){
     S.layers[i].ejected=false;
     S.fired[i]=k;
     transX[i]=null;
+    syncDeckSel();
     broadcastState();
     return;
   }
@@ -5039,6 +5041,7 @@ function fireClipNow(i,k){
   S.layers[i].ejected=false;
   S.fired[i]=k;
   setParam('L'+i+'.src', src/Math.max(1,srcCount()-1));
+  syncDeckSel();
   broadcastState();
 }
 function buildColHead(){
@@ -5158,14 +5161,14 @@ function dropFxOnClip(key,i,k){
     S.clipBase[i][k]=inst;
     saveState();
     toast(fxInstLabel(inst)+' → '+LAYER_NAMES[i]+' Clip '+(k+1)+' (effect clip)');
-    buildDeck();
+    buildDeck(); syncDeckSel(); /* fxclip violet marker lives in syncDeckSel */
     if(typeof refreshFxRack==='function') refreshFxRack();
     return;
   }
   S.clipFx[i][k].push(inst);
   saveState();
   toast(fxInstLabel(inst)+' → '+LAYER_NAMES[i]+' Clip '+(k+1));
-  buildDeck(); /* refresh to show FX dot */
+  buildDeck(); syncDeckSel(); /* refresh to show FX dot */
   if(typeof refreshFxRack==='function') refreshFxRack();
 }
 function dropFxOnLayer(key,i){
@@ -5524,6 +5527,23 @@ function hideClipMenu(){ const m=$('clipmenu'); if(m) m.style.display='none'; }
    Reused by the Clip tab AND the node-view details panel (dive-in with no
    node selected). All rows are the standard builders: MIDI-learnable +
    macro-assignable. */
+/* One slider/toggle row per scanned uniform (vec = per-component rows).
+   Shared by imported shaders and the Plugin source. */
+function shUniformRows(sec,sidx,uns){
+  for(const u of uns){
+    const base='SH'+sidx+'.'+u.name;
+    if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
+      const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw';
+      for(let c=0;c<ncomp;c++) paramRow(sec,base+'.'+axes[c],u.name+'.'+axes[c]);
+    }else if(u.type==='bool'){
+      toggleRow(sec,base,u.name);
+    }else if(u.type==='int'){
+      paramRow(sec,base,u.name,0.1);
+    }else{
+      paramRow(sec,base,u.name);
+    }
+  }
+}
 function buildClipParamSection(host,i,src){
   if(typeof src!=='number') return;
   const sec=el('div','psec');
@@ -5541,19 +5561,7 @@ function buildClipParamSection(host,i,src){
     registerImportParams(src);
     sec.appendChild(el('div','plab','Shader uniforms \u2014 '+im.name));
     const uns=(im.uniforms||[]).map(normUniform).filter(Boolean);
-    for(const u of uns){
-      const base='SH'+src+'.'+u.name;
-      if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
-        const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw';
-        for(let c=0;c<ncomp;c++) paramRow(sec,base+'.'+axes[c],u.name+'.'+axes[c]);
-      }else if(u.type==='bool'){
-        toggleRow(sec,base,u.name);
-      }else if(u.type==='int'){
-        paramRow(sec,base,u.name,0.1);
-      }else{
-        paramRow(sec,base,u.name);
-      }
-    }
+    shUniformRows(sec,src,uns);
     /* Time Speed: every import gets one, so there's always a live knob */
     paramRow(sec,'SH'+src+'.timeSpeed','Time Speed');
     if(!uns.length)
@@ -5572,7 +5580,17 @@ function buildClipParamSection(host,i,src){
     paramRow(sec,'L'+i+'.speed','Speed'); paramRow(sec,'L'+i+'.hue','Hue');
     paramRow(sec,'L'+i+'.p1','Param 1'); paramRow(sec,'L'+i+'.p2','Param 2');
     paramRow(sec,'L'+i+'.audio','Audio');
-    if(src===3) sec.appendChild(mkHint('Plugin scratchpad — edit the code in the Sources panel (Load .txt).'));
+    if(src===3){
+      /* v1.9.2: the plugin's own scanned uniforms, same UX as imports */
+      registerPluginParams();
+      const puns=(S.pluginUniforms||[]).map(normUniform).filter(Boolean);
+      if(puns.length){
+        sec.appendChild(el('div','plab','Shader uniforms \u2014 Plugin'));
+        shUniformRows(sec,3,puns);
+        sec.appendChild(mkHint('int uniforms are 0\u201310, bool is a toggle. Drag a label onto a dashboard dial; click a control while MIDI Learn is armed.'));
+      }
+      sec.appendChild(mkHint('Plugin scratchpad — edit the code in the Sources panel (Load .txt). Custom `uniform float myParam;` declarations in the plugin code get sliders above.'));
+    }
   }
   host.appendChild(sec);
 }
@@ -6634,6 +6652,12 @@ function compilePlugin(fromInit){
   if(PROG.plugin) gl.deleteProgram(PROG.plugin);
   PROG.plugin=pr;
   S.pluginCode=code;
+  /* v1.9.2: scan the plugin code with the same scanner imports use —
+     custom uniforms get SH3.* knobs in the clip inspector and are fed
+     at render time (reserved engine uniforms are excluded by the
+     scanner, exactly like imports). */
+  S.pluginUniforms=scanShaderUniforms(code);
+  registerPluginParams();
   $('plugerr').textContent='';
   $('plugok').textContent='Compiled OK — select "Plugin" as a layer source to use it.';
   if(!fromInit) saveState();
@@ -6802,14 +6826,12 @@ function shDefVal(u, comp){
   }
   return clamp(raw,0,1);
 }
-/* Register SH<srcIdx>.<name> params (idempotent). vec components get
-   SH<srcIdx>.<name>.x/.y/.z/.w. Plus the always-on SH<srcIdx>.timeSpeed
-   (0-2x, default 1x) so every import has at least one live knob. */
-function registerImportParams(sidx){
-  const im=S.imports[sidx-5]; if(!im) return;
-  for(const u0 of (im.uniforms||[])){
+/* Register SH<srcIdx>.<name> params from scanned uniform descriptors
+   (idempotent). vec components get SH<srcIdx>.<name>.x/.y/.z/.w. */
+function registerUniformParams(sidx, label, uniforms){
+  for(const u0 of (uniforms||[])){
     const u=normUniform(u0); if(!u) continue;
-    const base='SH'+sidx+'.'+u.name, lab=im.name+' \u00b7 '+u.name;
+    const base='SH'+sidx+'.'+u.name, lab=label+' \u00b7 '+u.name;
     if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
       const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw';
       for(let c=0;c<ncomp;c++){
@@ -6831,9 +6853,33 @@ function registerImportParams(sidx){
       if(S.params[base]===undefined) S.params[base]=d;
     }
   }
+}
+/* Imports: scanned params + the always-on SH<srcIdx>.timeSpeed (0-2x,
+   default 1x) so every import has at least one live knob. */
+function registerImportParams(sidx){
+  const im=S.imports[sidx-5]; if(!im) return;
+  registerUniformParams(sidx, im.name, im.uniforms);
   const tsid='SH'+sidx+'.timeSpeed';
   if(!PARAMS[tsid]) defParam(tsid, im.name+' \u00b7 Time Speed', 0.5, v=>v*2, v=>(v*2).toFixed(2)+'x');
   if(S.params[tsid]===undefined) S.params[tsid]=0.5;
+}
+/* Plugin (src 3): scanned params live at SH3.<name>, fed from
+   S.pluginUniforms (rescanned on every successful compilePlugin()).
+   No timeSpeed — plugin time follows the layer Speed param like the
+   other built-ins. SH3.* knobs from older plugin code are pruned so
+   the inspector and saved state never carry dead sliders. */
+function registerPluginParams(){
+  registerUniformParams(3, 'Plugin', S.pluginUniforms);
+  const valid={};
+  for(const u0 of (S.pluginUniforms||[])){
+    const u=normUniform(u0); if(!u) continue;
+    if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
+      const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw';
+      for(let c=0;c<ncomp;c++) valid['SH3.'+u.name+'.'+axes[c]]=1;
+    }else valid['SH3.'+u.name]=1;
+  }
+  for(const id in PARAMS) if(id.indexOf('SH3.')===0&&!valid[id]) delete PARAMS[id];
+  for(const id in S.params) if(id.indexOf('SH3.')===0&&!valid[id]) delete S.params[id];
 }
 /* Index-preserving GLSL comment stripper (replaces comments with spaces so
    match indices still line up with the original source). */
@@ -7131,7 +7177,7 @@ function snapshot(){
     clips:S.clips, fired:S.fired,
     decks:S.decks, deckIdx:S.deckIdx, autopilot:S.autopilot,
     postBypass:S.postBypass, strobeOn:S.strobeOn, beatSync:S.beatSync,
-    bpm:S.bpm, snap:S.snap||'bar', macros:S.macros, pluginCode:S.pluginCode, imports:S.imports, midi:S.midi,
+    bpm:S.bpm, snap:S.snap||'bar', macros:S.macros, pluginCode:S.pluginCode, pluginUniforms:S.pluginUniforms, imports:S.imports, midi:S.midi,
     mods:S.mods, graphs:S.graphs
   }));
 }
@@ -7171,9 +7217,10 @@ function applySnapshot(snap){
   S.midi=Array.isArray(snap.midi)?snap.midi:[];
   S.mods=sanitizeMods(snap.mods);
   S.graphs=sanitizeGraphs(snap.graphs); ensureAllGraphs(); /* v1.3: node graphs */
+  if(Array.isArray(snap.pluginUniforms)) S.pluginUniforms=snap.pluginUniforms;
   if(typeof snap.pluginCode==='string' && snap.pluginCode!==S.pluginCode){
     S.pluginCode=snap.pluginCode; compilePlugin(true);
-  }
+  }else if(Array.isArray(snap.pluginUniforms)) registerPluginParams();
   /* pre-1.2 presets carried snap.res (a resolution); quality is a device
      preference now, so presets no longer touch it. */
   buildDeck(); buildProps(); buildCompTab();
