@@ -1349,7 +1349,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.16';
+const APP_VERSION='1.9.17';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -2608,6 +2608,19 @@ float h21(vec2 p){
   p3 += dot(p3,p3.yzx+33.33);
   return fract((p3.x+p3.y)*p3.z);
 }
+vec3 rgb2hsv(vec3 c){
+  vec4 K=vec4(0.0,-1.0/3.0,2.0/3.0,-1.0);
+  vec4 p=mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g));
+  vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r));
+  float d=q.x-min(q.w,q.y);
+  float e=1.0e-10;
+  return vec3(abs(q.z+(q.w-q.y)/(6.0*d+e)), d/(q.x+e), q.x);
+}
+vec3 hsv2rgb(vec3 c){
+  vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);
+  vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www);
+  return c.z*mix(K.xxx, clamp(p-K.xxx,0.0,1.0), c.y);
+}
 void main(){
   vec3 c = texture(u_tex,v_uv).rgb;
   c = (c-0.5)*u_con+0.5;
@@ -2615,12 +2628,12 @@ void main(){
   float l = dot(c,vec3(0.299,0.587,0.114));
   c = mix(vec3(l),c,clamp(u_sat2,0.0,3.0));
   if(abs(u_hue)>0.0001){
-    /* master hue rotation (YIQ) - v1.9.15 */
-    float ha=u_hue*6.28318;
-    vec3 yiq=vec3(dot(c,vec3(0.299,0.587,0.114)),dot(c,vec3(0.596,-0.274,-0.322)),dot(c,vec3(0.211,-0.523,0.312)));
-    float ca=cos(ha),sa=sin(ha);
-    float ni=yiq.y*ca-yiq.z*sa, nq=yiq.y*sa+yiq.z*ca;
-    c=vec3(yiq.x+0.956*ni+0.619*nq, yiq.x-0.272*ni-0.647*nq, yiq.x-1.106*ni+1.703*nq);
+    /* master hue in HSV (v1.9.17): preserves value + saturation. The old
+       YIQ rotation preserved luma instead, so saturated colors clamped
+       dark at any nonzero hue - only 0% looked right. */
+    vec3 hsv=rgb2hsv(c);
+    hsv.x=fract(hsv.x+u_hue);
+    c=hsv2rgb(hsv);
   }
 
   vec2 q = v_uv-0.5;
@@ -4014,7 +4027,11 @@ function renderRoute(i,sidx,t,T){
 }
 function renderVideo(i,sidx,t,T){
   const vi=videoIdx(sidx), v=S.videos[vi];
-  if(!v||!v.el||v.el.readyState<2) return;
+  if(!v||!v.el) return;
+  /* master speed applies to video clips too: it IS their playback rate */
+  const _wr=(S.gspeed||1);
+  if(v.el.playbackRate!==_wr){ try{ v.el.playbackRate=_wr; }catch(e){} }
+  if(v.el.readyState<2) return;
   if(!v._tex){ v._tex=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,v._tex);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
@@ -4379,14 +4396,16 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
   if(!S.layerTime) S.layerTime={};
   let tEff=t;
   if(sidx>=0&&sidx<4){
-    S.layerTime['L'+i]=(S.layerTime['L'+i]||0)+sp*shDt;
+    /* v1.9.17: master speed stacks HERE - it is an additional speed on
+       every clip/layer, multiplied into the layer's own speed */
+    S.layerTime['L'+i]=(S.layerTime['L'+i]||0)+sp*(S.gspeed||1)*shDt;
     tEff=S.layerTime['L'+i];
   }else if(sidx>=5&&sidx<camIdx()){
     const tsid='SH'+sidx+'.timeSpeed';
     if(!PARAMS[tsid]) registerImportParams(sidx);
     if(!S.impTime) S.impTime={};
     const spd=PARAMS[tsid].map(eff(tsid));
-    S.impTime[sidx]=(S.impTime[sidx]||0)+spd*shDt;
+    S.impTime[sidx]=(S.impTime[sidx]||0)+spd*(S.gspeed||1)*shDt;
     tEff=S.impTime[sidx];
   }
   gl.uniform1f(U(prog,'u_time'),tEff);
@@ -8921,7 +8940,8 @@ function loop(){
   requestAnimationFrame(loop);
   const now=performance.now()/1000;
   const t=now-tStart;
-  const gt=t*(S.gspeed||1); /* v1.9.15: master shader speed - sources/FX only */
+  const gt=t*(S.gspeed||1); /* master speed: drives cloner + FX/graph time;
+     shader sources stack it in their accumulators (renderLayerInto) */
   /* freeze blackout type: render one fresh frame, then hold it */
   let freezeHold=false;
   if(S.blackout&&(S.bltype||'black')==='freeze'){
