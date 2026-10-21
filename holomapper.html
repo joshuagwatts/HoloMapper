@@ -1349,7 +1349,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.19';
+const APP_VERSION='1.9.22';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -2599,7 +2599,7 @@ uniform float u_grain;
 uniform float u_time;
 uniform float u_master;
 uniform float u_strobeOn;
-uniform float u_strobeRate;
+uniform float u_strobeLvl;
 uniform float u_strobeAmt;
 uniform float u_hue;
 uniform float u_white;
@@ -2641,8 +2641,11 @@ void main(){
   c += (h21(v_uv*vec2(1723.0,983.0)+fract(u_time)*17.0)-0.5)*u_grain;
   if(u_white>0.5) c=vec3(1.0); /* white blackout: flat, after vig/grain */
   if(u_strobeOn>0.5){
-    float s = step(0.5,fract(u_time*u_strobeRate));
-    c *= mix(1.0,s,u_strobeAmt);
+    /* v1.9.21: u_strobeLvl is a FRAME-LOCKED square wave from JS -
+       whole frames on, whole frames off, period derived from the
+       measured frame rate. The old time-based phase aliased against
+       uneven frame times and the flash pattern fell apart. */
+    c *= mix(1.0,u_strobeLvl,u_strobeAmt);
   }
   O = vec4(max(c,vec3(0.0))*u_master,1.0);
 }
@@ -2891,10 +2894,12 @@ function buildTargets(){
      resolution (the final composite never shrinks); the internal render
      targets are multiplied by the quality scale. At 1.0x this is
      pixel-identical to the old fixed-1280x720 path. */
-  if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){ canvas.width=640; canvas.height=360; }
-  else{ canvas.width=BASE_W; canvas.height=BASE_H; }
   RW=Math.max(2,Math.round(BASE_W*effScale()));
   RH=Math.max(2,Math.round(BASE_H*effScale()));
+  /* v1.9.22: on phone the canvas IS the display - back it 1:1 with the
+     render targets so the final blit is a straight GPU copy */
+  if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){ canvas.width=RW; canvas.height=RH; }
+  else{ canvas.width=BASE_W; canvas.height=BASE_H; }
   layerT=Array.from({length:MAX_LAYERS},()=>makeTarget(RW,RH,true));
   compT=makeTarget(RW,RH);
   fbT=[makeTarget(RW,RH),makeTarget(RW,RH)];
@@ -2911,7 +2916,8 @@ function initGL(){
   const isPhone=window.HM_DEVICE&&HM_DEVICE.device==='phone';
   gl = canvas.getContext('webgl2',{antialias:false, alpha:false,
     powerPreference:isPhone?'default':'high-performance',
-    preserveDrawingBuffer:isPhone});
+    preserveDrawingBuffer:false}); /* v1.9.22: was isPhone - preserving forces
+       an extra full-screen copy on mobile GPUs and we redraw every frame */
   if(!gl){ showErr('WebGL2 is not available in this browser — HoloMapper cannot run.'); return false; }
   floatOK = !!gl.getExtension('EXT_color_buffer_float');
   /* phones: force 8-bit targets — many mobile GPUs can't render to float */
@@ -4717,6 +4723,21 @@ function renderBloomPost(inTex){
   quadDraw();
   return postT[5].tex;
 }
+/* v1.9.21: frame-locked strobe driver. The strobe level flips only on
+   frame boundaries: half-period = round(fps / 2hz) whole frames, so a
+   10Hz strobe at 60fps is exactly 3 frames on / 3 frames off, and at
+   any other rate it's the closest EVEN pattern the display can show
+   instead of an aliased shimmer. Max honest rate is fps/2. */
+let _fpsEMA=60, _strobeFr=0, _strobeLvl=1, _strobeLastT=0;
+function hmStrobeTick(now){
+  const dt=now-_strobeLastT; _strobeLastT=now;
+  if(dt>0.001&&dt<0.5){ const f=1/dt; _fpsEMA+=(f-_fpsEMA)*0.06; }
+  _strobeFr++;
+  if(!S.strobeOn){ _strobeLvl=1; return; }
+  const hz=PARAMS['P.srate'].map(eff('P.srate'));
+  const half=Math.max(1,Math.round(_fpsEMA/(2*Math.max(0.5,hz))));
+  _strobeLvl=(Math.floor(_strobeFr/half)%2===0)?1:0;
+}
 function setGradeUniforms(P,t){
   gl.uniform1f(U(P,'u_bri'),PARAMS['P.bri'].map(eff('P.bri')));
   gl.uniform1f(U(P,'u_con'),PARAMS['P.con'].map(eff('P.con')));
@@ -4731,7 +4752,7 @@ function setGradeUniforms(P,t){
   gl.uniform1f(U(P,'u_white'),(S.blackout&&bt==='white')?1:0);
   gl.uniform1f(U(P,'u_hue'),S.ghue||0);
   gl.uniform1f(U(P,'u_strobeOn'),S.strobeOn?1:0);
-  gl.uniform1f(U(P,'u_strobeRate'),PARAMS['P.srate'].map(eff('P.srate')));
+  gl.uniform1f(U(P,'u_strobeLvl'),_strobeLvl);
   gl.uniform1f(U(P,'u_strobeAmt'),PARAMS['P.samt'].map(eff('P.samt')));
 }
 function renderGrade(inTex,t){
@@ -6881,7 +6902,7 @@ function mbMakeKnob(hostId, label, opts){
 }
 function syncMasterBar(){
   const b=$('mbpm'); if(b) b.textContent=S.bpm||120;
-  if(MBK.speed) MBK.speed.set(clamp(((S.gspeed===undefined?1:S.gspeed)-0.25)/1.75,0,1),false);
+  if(MBK.speed) MBK.speed.set(clamp(((S.gspeed===undefined?1:S.gspeed)-0.1)/1.9,0,1),false);
   if(MBK.hue) MBK.hue.set(S.ghue||0,false);
   if(MBK.rate) MBK.rate.set((S.params['P.srate']!==undefined)?S.params['P.srate']:PARAMS['P.srate'].def,false);
   if(MBK.out) MBK.out.set((S.params['P.master']!==undefined)?S.params['P.master']:1,false);
@@ -6894,9 +6915,9 @@ function wireMasterBar(){
   if(dn) dn.addEventListener('click',()=>bpmSet((S.bpm||120)-1));
   if(up) up.addEventListener('click',()=>bpmSet((S.bpm||120)+1));
   if(tp) tp.addEventListener('click',()=>tapTempo());
-  MBK.speed=mbMakeKnob('mbSpeedK','SPEED',{ def:(1-0.25)/1.75,
-    fmt:v=>(0.25+v*1.75).toFixed(2)+'x',
-    set:v=>{ S.gspeed=0.25+v*1.75; saveState(); } });
+  MBK.speed=mbMakeKnob('mbSpeedK','SPEED',{ def:(1-0.1)/1.9,
+    fmt:v=>(0.1+v*1.9).toFixed(2)+'x',
+    set:v=>{ S.gspeed=0.1+v*1.9; saveState(); } });
   MBK.hue=mbMakeKnob('mbHueK','HUE',{ def:0,
     fmt:v=>Math.round(v*360)+'°',
     set:v=>{ S.ghue=v; saveState(); } });
@@ -8931,9 +8952,9 @@ else neInit();
 /* ================= MAIN LOOP ================= */
 let tStart=performance.now()/1000, lastT=0, frames=0, fpsT=0, pvTick=0;
 /* Auto quality: a rolling 1s fps average drives the render-scale steps.
-   Step DOWN (1.0 -> 0.75 -> 0.5) when fps < 45 sustained ~3s; step back UP
+   Step DOWN (1.0 -> 0.75 -> 0.5) when fps < 42 sustained ~3s; step back UP
    when fps > 57 sustained ~10s. A 5s cooldown after every step plus the
-   split 45/57 thresholds = hysteresis, no thrashing. Manual High/Medium/Low
+   split thresholds = hysteresis, no thrashing. Manual High/Medium/Low
    pin the scale and skip this entirely. qFpsAvg also feeds the fps meter. */
 let qSlowT=0, qFastT=0, qCooldown=0, qLastT=0, qFpsAvg=60;
 const qTs=[]; /* frame timestamps (seconds) for the rolling 1s fps average */
@@ -8946,7 +8967,7 @@ function qualityAutoTick(now){
   const dt=Math.min(Math.max(now-qLastT,0),0.5); /* ignore tab-switch gaps */
   qLastT=now;
   if(qCooldown>0){ qCooldown-=dt; qSlowT=0; qFastT=0; return; }
-  if(qFpsAvg<45){ qSlowT+=dt; qFastT=0; }
+  if(qFpsAvg<42){ qSlowT+=dt; qFastT=0; }
   else if(qFpsAvg>57){ qFastT+=dt; qSlowT=0; }
   else { qSlowT=0; qFastT=0; }
   if(qSlowT>=3.0 && qScaleIdx<2) setQualityScale(qScaleIdx+1,true);
@@ -8978,6 +8999,7 @@ function syncQualityUI(){
 function loop(){
   requestAnimationFrame(loop);
   const now=performance.now()/1000;
+  hmStrobeTick(now);
   const t=now-tStart;
   const gt=t*(S.gspeed||1); /* master speed: drives cloner + FX/graph time;
      shader sources stack it in their accumulators (renderLayerInto) */
@@ -9068,9 +9090,8 @@ function loop(){
     pc=fxScratch2.tex;
   }
   if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
-    /* v1.9.13: the phone screen is the #gl2d readback of compT - land the
-       FINAL image (composite + built comp chain) there, or the chain is
-       invisible even though it rendered. */
+    /* the final image must land in compT - the blit below shows compT
+       on the WebGL canvas, which is the phone's display surface */
     /* v1.9.15: master pass - when master hue / strobe / blackout is active,
        the grade program lands the final image in compT (this is also what
        makes strobe + blackout work on phone at all). Otherwise the plain
@@ -9099,7 +9120,7 @@ function loop(){
         pc=compT.tex;
       }catch(e){}
     }
-    /* phone: blit compT to the WebGL canvas (visible surface = #gl2d below) */
+    /* phone: blit the final image to the WebGL canvas - the display itself */
     try{
       const CP=PROG.copy;
       gl.bindFramebuffer(gl.FRAMEBUFFER,null);
@@ -9107,31 +9128,6 @@ function loop(){
       gl.useProgram(CP);
       setTex(CP,'u_tex',0,pc);
       quadDraw();
-    }catch(e){}
-    /* 2D fallback: readPixels to 2D canvas (thumbnail mechanism, proven) */
-    try{
-      let c2=document.getElementById('gl2d');
-      if(!c2){
-        c2=document.createElement('canvas');
-        c2.id='gl2d';
-        c2.style.cssText='width:100%;height:auto;display:block';
-        canvas.parentNode.insertBefore(c2,canvas.nextSibling);
-        canvas.style.display='none';
-      }
-      if((frames%3)===0){
-        const w=compT.w,h=compT.h;
-        if(c2.width!==w||c2.height!==h){ c2.width=w; c2.height=h; }
-        if(!window._oR||window._oR.length!==w*h*4){
-          window._oR=new Uint8Array(w*h*4);
-          window._oI=new ImageData(w,h);
-        }
-        gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
-        gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,window._oR);
-        gl.bindFramebuffer(gl.FRAMEBUFFER,null);
-        const d=window._oI.data,rd=window._oR;
-        for(let y=0;y<h;y++){ const s=(h-1-y)*w*4; d.set(rd.subarray(s,s+w*4),y*w*4); }
-        c2.getContext('2d').putImageData(window._oI,0,0);
-      }
     }catch(e){}
   }else renderGrade(pc,t);
   /* live clip preview: throttled to every 3rd frame (the readPixels stall was
