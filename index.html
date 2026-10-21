@@ -344,6 +344,8 @@ details.cgrp[open]>summary:before{content:'\25BE  '}
 .clip:hover{border-color:var(--sel)}
 .clip:hover .cname{color:var(--txt)}
 .clip.fxclip{border-color:var(--acc);box-shadow:inset 0 0 0 1px rgba(139,92,246,.45)}
+.lstrip.fxstack{box-shadow:inset 3px 0 0 #a855f7}
+.lstrip.fxstack .lname::after{content:' FX\2193';color:#c084fc;font-size:10px;font-weight:700}
 .clip.fxclip .cname{color:#c4b5fd}
 .clip.fired{border-color:var(--play);box-shadow:0 0 8px rgba(45,212,191,.45)}
 .clip.fired .cthumb{color:#fff}
@@ -1339,7 +1341,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.6';
+const APP_VERSION='1.9.7';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -4216,7 +4218,7 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
 /* v1.3: graph dispatch. Default graph (Source->Output) is pixel-identical to
    the fixed pipeline; any eval failure falls back to the fixed path. */
 function renderLayer(i,t){
-  if(effectLayerActive(i)){
+  if(effectLayerActive(i)||layerStackActive(i)){
     /* content is produced at composite time from the layers below */
     const T=layerT[i];
     gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
@@ -4346,7 +4348,7 @@ function combineRange(a,b,baseTex,outT,ovLayer,ovTex){
 }
 function renderComposite(t){
   const fxLayers=[];
-  for(let i=0;i<numLayers();i++) if(effectLayerActive(i)) fxLayers.push(i);
+  for(let i=0;i<numLayers();i++) if(effectLayerActive(i)||layerStackActive(i)) fxLayers.push(i);
   if(!fxLayers.length||!PROG.combine2){ renderCombine(); return; }
   ensureFxChains();
   let baseTex=null, start=0, flip=0;
@@ -4360,8 +4362,8 @@ function renderComposite(t){
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,workT.fb);
     gl.blitFramebuffer(0,0,belowT.w,belowT.h,0,0,workT.w,workT.h,gl.COLOR_BUFFER_BIT,gl.NEAREST);
     gl.bindFramebuffer(gl.FRAMEBUFFER,null);
-    const chain=[clipBaseAt(e,S.fired[e])];
-    if(S.clipFx[e]&&S.clipFx[e][S.fired[e]]) chain.push(...S.clipFx[e][S.fired[e]]);
+    const chain=effectLayerActive(e)?[clipBaseAt(e,S.fired[e])]:[];
+    if(effectLayerActive(e)&&S.clipFx[e]&&S.clipFx[e][S.fired[e]]) chain.push(...S.clipFx[e][S.fired[e]]);
     if(S.layerFx[e]) chain.push(...S.layerFx[e]);
     applyFxChain(workT,chain,t);
     /* blend the effected image into the stack with the layer's own mix */
@@ -4977,6 +4979,7 @@ function syncDeckSel(){
   document.querySelectorAll('#deck .lstrip').forEach(st=>{
     const i=+st.dataset.i, L=S.layers[i];
     st.classList.toggle('sel', !!S.sel && S.sel.kind==='layer' && S.sel.i===i);
+    st.classList.toggle('fxstack', (typeof layerStackActive==='function')&&layerStackActive(i));
     const bB=st.querySelector('.bByp'), bS=st.querySelector('.bSolo'), bX=st.querySelector('.bClr');
     if(bB) bB.classList.toggle('onB',L.bypass);
     if(bS) bS.classList.toggle('onS',L.solo);
@@ -5003,6 +5006,7 @@ function setPTab(name){
   document.querySelectorAll('#proptabs .ptab').forEach(p=>p.classList.toggle('on',p.id==='ptab-'+name));
 }
 function selectLayer(i){
+  if(window.placeTapLayer&&window.placeTapLayer(i)) return;
   S.selLayer=i; S.sel={kind:'layer', i};
   syncDeckSel(); buildProps(); setPTab('layer'); saveState();
 }
@@ -5179,8 +5183,9 @@ function dropFxOnLayer(key,i){
   const inst=makeFxInst(key);
   if(!inst){ toast('Unknown FX: '+key); return; }
   S.layerFx[i].push(inst);
+  if(S.layers[i].ejected) S.layers[i].ejected=false; /* an FX stack wakes the layer as an FX layer */
   saveState();
-  toast(fxInstLabel(inst)+' → '+LAYER_NAMES[i]);
+  toast(fxInstLabel(inst)+' \u2192 '+LAYER_NAMES[i]+(layerStackActive(i)?' \u2014 FX layer: processes the layers below':''));
   buildDeck();
   if(typeof refreshFxRack==='function') refreshFxRack();
 }
@@ -5680,6 +5685,8 @@ function buildProps(){
   const fxhost=el('div'); fxsec.appendChild(fxhost);
   buildFxRack(fxhost,S.layerFx[i],()=>buildProps());
   host.appendChild(fxsec);
+  if((typeof layerStackActive==='function')&&layerStackActive(i))
+    host.appendChild(mkHint('FX LAYER \u2014 this layer has no clip playing, so its FX stack processes the composite of the layers below it. Strength = this layer\u2019s fader + blend mode. Fire a clip here and the stack goes back to processing that clip.'));
 }
 /* ================= CLIP INSPECTOR — 6th dockable panel =================
    The Clip inspector is a first-class dock panel (default: right column under
@@ -6250,6 +6257,20 @@ function effectLayerActive(i){
   if(src!==null&&src!==undefined) return false;
   const b=clipBaseAt(i,k);
   return !!(b&&b.on);
+}
+/* v1.9.7: FX LAYER - a layer with no content of its own but a live layer-FX
+   stack acts on the composite of the layers BELOW it (adjustment-layer
+   style), blended with its own fader + mix mode. Firing a real clip on the
+   layer returns its FX to processing that clip, Resolume-style. */
+function layerStackActive(i){
+  if(effectLayerActive(i)) return false;
+  ensureFxChains();
+  if(!S.layerFx[i]||!S.layerFx[i].some(f=>f&&f.on)) return false;
+  if(!layerEnabled(i)) return false;
+  const k=S.fired?S.fired[i]:null;
+  if(k===null||k===undefined) return true;
+  const src=S.clips[i]?S.clips[i][k]:null;
+  return src===null||src===undefined;
 }
 function buildFxBrowser(){
   const host=$('btab-fx'); if(!host) return; host.innerHTML='';
@@ -8515,34 +8536,43 @@ function loop(){
   const isPhone=window.HM_DEVICE&&HM_DEVICE.device==='phone';
   let pc;
   if(isPhone){
-    /* phone: direct source render (thumbnail path, proven to work) -> canvas */
+    /* phone: FULL layer pipeline (v1.9.7) - layers, blends, faders, clip/layer
+       FX, effect clips and FX layers all render, same as desktop, minus the
+       post chain + grade. Any failure falls back to the old single-source
+       direct render, so this change can never black the phone output. */
     try{
-      let src=null, li=0;
-      for(let i=0;i<numLayers();i++){
-        const f=S.fired[i];
-        if(f!==null&&f!==undefined&&typeof S.clips[i][f]==='number'){ src=S.clips[i][f]; li=i; break; }
-      }
-      if(src===null){
-        /* nothing fired: render first available clip */
-        outer: for(let i=0;i<numLayers();i++) for(let k=0;k<8;k++){
-          if(typeof S.clips[i][k]==='number'){ src=S.clips[i][k]; li=i; break outer; }
+      for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
+      renderComposite(t);
+      pc=compT.tex;
+    }catch(e){
+      try{
+        let src=null, li=0;
+        for(let i=0;i<numLayers();i++){
+          const f=S.fired[i];
+          if(f!==null&&f!==undefined&&typeof S.clips[i][f]==='number'){ src=S.clips[i][f]; li=i; break; }
         }
-      }
-      if(src!==null){
-        /* render source to compT, then grade to canvas */
-        const savedGraphs=S.graphs;
-        S.graphs=null; /* bypass graphs */
-        try{ renderClipSource(li,t,src,compT); }
-        finally{ S.graphs=savedGraphs; }
-        pc=compT.tex;
-      }else{
-        /* no clips at all: clear to dark */
-        gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
-        gl.viewport(0,0,compT.w,compT.h);
-        gl.clearColor(0.05,0.05,0.08,1); gl.clear(gl.COLOR_BUFFER_BIT);
-        pc=compT.tex;
-      }
-    }catch(e){ pc=compT.tex; }
+        if(src===null){
+          /* nothing fired: render first available clip */
+          outer: for(let i=0;i<numLayers();i++) for(let k=0;k<8;k++){
+            if(typeof S.clips[i][k]==='number'){ src=S.clips[i][k]; li=i; break outer; }
+          }
+        }
+        if(src!==null){
+          /* render source to compT, then grade to canvas */
+          const savedGraphs=S.graphs;
+          S.graphs=null; /* bypass graphs */
+          try{ renderClipSource(li,t,src,compT); }
+          finally{ S.graphs=savedGraphs; }
+          pc=compT.tex;
+        }else{
+          /* no clips at all: clear to dark */
+          gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
+          gl.viewport(0,0,compT.w,compT.h);
+          gl.clearColor(0.05,0.05,0.08,1); gl.clear(gl.COLOR_BUFFER_BIT);
+          pc=compT.tex;
+        }
+      }catch(e2){ pc=compT.tex; }
+    }
   }else{
     for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
     renderComposite(t);
@@ -9132,6 +9162,12 @@ function disarmPlace(){
   $('placebar').classList.remove('on');
   document.body.classList.remove('placing');
 }
+window.placeTapLayer=(i)=>{
+  if(!placeMode||placeMode.kind!=='fx') return false;
+  const pm=placeMode; disarmPlace();
+  dropFxOnLayer(pm.key,i);
+  return true;
+};
 window.placeTap=(i,k)=>{
   if(!placeMode) return false;
   const pm=placeMode; disarmPlace();
