@@ -774,13 +774,12 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
       <div id="outmonwrap">
         <div class="mon" id="outmon"><span class="mlab">Output Monitor</span><canvas id="gl"></canvas></div>
         <div id="masterbar">
-          <span class="mblab">MASTER</span>
           <div class="mbgrp"><button id="mbpmDn" title="BPM -1">−</button><span id="mbpm">120</span><button id="mbpmUp" title="BPM +1">+</button><button id="mbTap" title="Tap tempo">TAP</button></div>
-          <div class="mbgrp"><span class="mblab">SPEED</span><input id="mbSpeed" type="range" min="0.25" max="2" step="0.01" title="Master shader speed"></div>
-          <div class="mbgrp"><span class="mblab">HUE</span><input id="mbHue" type="range" min="0" max="1" step="0.005" title="Master hue shift"></div>
-          <div class="mbgrp"><button id="mbStrobe" title="Master strobe">STROBE</button><span class="mblab">RATE</span><input id="mbSRate" type="range" min="0" max="1" step="0.01" title="Strobe rate"></div>
+          <div class="mbknob" id="mbSpeedK"></div>
+          <div class="mbknob" id="mbHueK"></div>
+          <div class="mbgrp"><button id="mbStrobe" title="Master strobe">STROBE</button><div class="mbknob" id="mbSRateK"></div></div>
           <div class="mbgrp"><button id="mbBlack" title="Blackout (Space)">BLACKOUT</button><select id="mbBlType" title="Blackout type"><option value="black">Black</option><option value="white">White</option><option value="freeze">Freeze</option></select></div>
-          <div class="mbgrp"><span class="mblab">OUT</span><input id="mbMaster" type="range" min="0" max="1" step="0.01" title="Master fader"></div>
+          <div class="mbknob" id="mbMasterK"></div>
         </div>
         <div id="performbar">
           <div class="pmacros" id="pmacros"></div>
@@ -1350,7 +1349,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.15';
+const APP_VERSION='1.9.16';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -6800,12 +6799,34 @@ function pumpThumbs(t,n){
 /* ---------- master bar (v1.9.15): lives inside the Output panel ----------
    BPM / shader speed / hue / strobe / blackout types / master fader - the
    show basics, always riding with the output monitor (and its pin). */
+const MBK={};
+function mbMakeKnob(hostId, label, opts){
+  const host=$(hostId); if(!host) return null;
+  host.innerHTML='';
+  const dial=el('div','mbdial'); dial.title=label+' - drag to adjust, double-click resets';
+  const ptr=el('div','mbptr'); dial.appendChild(ptr);
+  host.appendChild(dial);
+  host.appendChild(el('div','mbklab',label));
+  const val=el('div','mbkval',''); host.appendChild(val);
+  const K={ v:opts.def,
+    paint(){ const v=clamp(K.v,0,1); ptr.style.transform='rotate('+Math.round(-135+v*270)+'deg)'; val.textContent=opts.fmt(v); },
+    set(v01,fire){ K.v=clamp(v01,0,1); K.paint(); if(fire!==false) opts.set(K.v); } };
+  let sy=0, sv=0, drag=false;
+  dial.addEventListener('pointerdown',e=>{ drag=true; sy=e.clientY; sv=K.v; try{ dial.setPointerCapture(e.pointerId); }catch(err){} e.preventDefault(); });
+  dial.addEventListener('pointermove',e=>{ if(!drag) return; K.set(sv+(sy-e.clientY)/140,true); });
+  const end=()=>{ drag=false; };
+  dial.addEventListener('pointerup',end);
+  dial.addEventListener('pointercancel',end);
+  dial.addEventListener('dblclick',()=>{ K.set(opts.def,true); });
+  K.paint();
+  return K;
+}
 function syncMasterBar(){
   const b=$('mbpm'); if(b) b.textContent=S.bpm||120;
-  const sp=$('mbSpeed'); if(sp) sp.value=(S.gspeed===undefined?1:S.gspeed);
-  const hu=$('mbHue'); if(hu) hu.value=S.ghue||0;
-  const sr=$('mbSRate'); if(sr) sr.value=(S.params['P.srate']!==undefined)?S.params['P.srate']:PARAMS['P.srate'].def;
-  const mm=$('mbMaster'); if(mm) mm.value=(S.params['P.master']!==undefined)?S.params['P.master']:1;
+  if(MBK.speed) MBK.speed.set(clamp(((S.gspeed===undefined?1:S.gspeed)-0.25)/1.75,0,1),false);
+  if(MBK.hue) MBK.hue.set(S.ghue||0,false);
+  if(MBK.rate) MBK.rate.set((S.params['P.srate']!==undefined)?S.params['P.srate']:PARAMS['P.srate'].def,false);
+  if(MBK.out) MBK.out.set((S.params['P.master']!==undefined)?S.params['P.master']:1,false);
   const st=$('mbStrobe'); if(st) st.classList.toggle('on',!!S.strobeOn);
   const bk=$('mbBlack'); if(bk) bk.classList.toggle('armed',!!S.blackout);
   const bt=$('mbBlType'); if(bt) bt.value=S.bltype||'black';
@@ -6815,14 +6836,18 @@ function wireMasterBar(){
   if(dn) dn.addEventListener('click',()=>bpmSet((S.bpm||120)-1));
   if(up) up.addEventListener('click',()=>bpmSet((S.bpm||120)+1));
   if(tp) tp.addEventListener('click',()=>tapTempo());
-  const sp=$('mbSpeed');
-  if(sp) sp.addEventListener('input',()=>{ S.gspeed=parseFloat(sp.value); saveState(); });
-  const hu=$('mbHue');
-  if(hu) hu.addEventListener('input',()=>{ S.ghue=parseFloat(hu.value); saveState(); });
-  const sr=$('mbSRate');
-  if(sr) sr.addEventListener('input',()=>setParam('P.srate',parseFloat(sr.value),sr));
-  const mm=$('mbMaster');
-  if(mm) mm.addEventListener('input',()=>setParam('P.master',parseFloat(mm.value),mm));
+  MBK.speed=mbMakeKnob('mbSpeedK','SPEED',{ def:(1-0.25)/1.75,
+    fmt:v=>(0.25+v*1.75).toFixed(2)+'x',
+    set:v=>{ S.gspeed=0.25+v*1.75; saveState(); } });
+  MBK.hue=mbMakeKnob('mbHueK','HUE',{ def:0,
+    fmt:v=>Math.round(v*360)+'°',
+    set:v=>{ S.ghue=v; saveState(); } });
+  MBK.rate=mbMakeKnob('mbSRateK','RATE',{ def:PARAMS['P.srate'].def,
+    fmt:v=>PARAMS['P.srate'].fmt(v),
+    set:v=>setParam('P.srate',v) });
+  MBK.out=mbMakeKnob('mbMasterK','OUT',{ def:1,
+    fmt:v=>Math.round(v*100)+'%',
+    set:v=>setParam('P.master',v) });
   const st=$('mbStrobe');
   if(st) st.addEventListener('click',()=>{ S.strobeOn=!S.strobeOn; st.classList.toggle('on',S.strobeOn); saveState(); });
   const bk=$('mbBlack');
@@ -9532,15 +9557,21 @@ setInterval(broadcastState,500);
 <script src="vendor/paho-mqtt-min.js"></script>
 
 <style>
-#masterbar{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:7px 10px;background:#14161c;border-top:1px solid var(--line)}
+#masterbar{display:flex;flex-wrap:nowrap;gap:12px;align-items:center;padding:5px 10px;background:#14161c;border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+#masterbar::-webkit-scrollbar{display:none}
 #masterbar .mblab{font-size:10px;letter-spacing:.14em;color:var(--dim);font-weight:700;white-space:nowrap}
-#masterbar .mbgrp{display:flex;align-items:center;gap:6px;flex:1 1 150px;min-width:140px}
-#masterbar input[type=range]{flex:1;min-width:60px}
-#masterbar button{padding:6px 10px;font-size:12px;white-space:nowrap}
+#masterbar .mbgrp{display:flex;align-items:center;gap:6px;flex:none}
+#masterbar button{padding:6px 9px;font-size:12px;white-space:nowrap}
 #masterbar button.on{background:#0d3f3a;color:#5eead4;border-color:#2dd4bf}
 #masterbar button.armed{background:#7f1d2e;color:#ffb4ab;border-color:#f0524d}
-#masterbar #mbpm{font-size:15px;font-weight:700;min-width:34px;text-align:center}
-#masterbar select{background:#171a21;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 6px;font-size:12px}
+#masterbar #mbpm{font-size:15px;font-weight:700;min-width:32px;text-align:center}
+#masterbar select{background:#171a21;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 4px;font-size:12px}
+/* v1.9.16: rotary knobs - drag vertically, double-click resets */
+#masterbar .mbknob{display:flex;flex-direction:column;align-items:center;gap:0;flex:none;min-width:44px}
+#masterbar .mbdial{width:32px;height:32px;border-radius:50%;background:#1d2027;border:1px solid var(--line);position:relative;cursor:ns-resize;touch-action:none;flex:none}
+#masterbar .mbptr{position:absolute;left:calc(50% - 1px);top:2px;width:2px;height:11px;background:#5eead4;border-radius:2px;transform-origin:50% 14px;pointer-events:none}
+#masterbar .mbklab{font-size:8.5px;letter-spacing:.12em;color:var(--dim);font-weight:700;margin-top:2px;line-height:1}
+#masterbar .mbkval{font-size:8.5px;color:var(--dim);line-height:1.2}
 </style>
 <button id="btnBrowse" title="Browse effects and sources">Browse</button>
 <div id="placebar"><span id="placelab"></span><button id="placecancel">Cancel</button></div>
