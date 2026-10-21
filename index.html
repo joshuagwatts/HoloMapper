@@ -1349,7 +1349,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.22';
+const APP_VERSION='1.9.23';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -5514,10 +5514,16 @@ function copyClips(cut){
   if(!S.clipSel||!S.clipSel.length) return;
   clipClipboard={mode:cut?'cut':'copy', clips:S.clipSel.map(c=>({
     src:S.clips[c.i][c.k],
-    fx:JSON.parse(JSON.stringify((S.clipFx[c.i]&&S.clipFx[c.i][c.k])||[]))
+    fx:JSON.parse(JSON.stringify((S.clipFx[c.i]&&S.clipFx[c.i][c.k])||[])),
+    base:(S.clipBase&&S.clipBase[c.i]&&S.clipBase[c.i][c.k])?JSON.parse(JSON.stringify(S.clipBase[c.i][c.k])):null
   }))};
   if(cut){
-    S.clipSel.forEach(c=>{ S.clips[c.i][c.k]=null; if(S.clipFx[c.i]) S.clipFx[c.i][c.k]=[]; });
+    S.clipSel.forEach(c=>{
+      S.clips[c.i][c.k]=null;
+      if(S.clipFx[c.i]) S.clipFx[c.i][c.k]=[];
+      if(S.clipBase&&S.clipBase[c.i]) S.clipBase[c.i][c.k]=null;
+      if(S.fired[c.i]===c.k) S.fired[c.i]=null;
+    });
     S.clipSel=[];
   }
   saveState(); buildDeck();
@@ -5531,12 +5537,26 @@ function pasteClips(ti,tk){
     if(di<numLayers()&&S.clips[di]){
       S.clips[di][dk]=cc.src;
       if(S.clipFx[di]) S.clipFx[di][dk]=JSON.parse(JSON.stringify(cc.fx));
+      if(S.clipBase&&S.clipBase[di]) S.clipBase[di][dk]=cc.base?JSON.parse(JSON.stringify(cc.base)):null;
     }
   });
   const n=clipClipboard.clips.length;
   if(clipClipboard.mode==='cut') clipClipboard=null;
   saveState(); buildDeck();
   toast('Pasted '+n+' clip(s)');
+}
+/* v1.9.23: Delete key - clear every selected slot (source + FX + effect base) */
+function clearSelectedClips(){
+  if(!S.clipSel||!S.clipSel.length) return;
+  const n=S.clipSel.length;
+  S.clipSel.forEach(c=>{
+    if(S.clips[c.i]) S.clips[c.i][c.k]=null;
+    if(S.clipFx[c.i]) S.clipFx[c.i][c.k]=[];
+    if(S.clipBase&&S.clipBase[c.i]) S.clipBase[c.i][c.k]=null;
+    if(S.fired[c.i]===c.k) S.fired[c.i]=null;
+  });
+  saveState(); buildDeck(); buildProps();
+  toast('Cleared '+n+' clip(s)');
 }
 function buildDeck(){
   /* phones: never show Cloner (src 4) — strip on every build */
@@ -5666,6 +5686,12 @@ function buildDeck(){
         : ('TRIGGER '+srcName(src)+' on '+LAYER_NAMES[i]+' (quantized: '+(S.snap||'bar')+')');
       th.addEventListener('click',(e)=>{
         if(window.placeTap&&window.placeTap(i,k)) return;
+        if((e.ctrlKey||e.metaKey)&&(window.HM_DEVICE&&HM_DEVICE.device!=='phone')){
+          /* v1.9.23 desktop: Ctrl+click a clip = select it, don't fire */
+          e.stopPropagation();
+          selectClip(i,k); toggleClipSel(i,k,true);
+          return;
+        }
         if((src===null||src===undefined)&&base0){
           fireClip(i,k); openClipInspector(i,k);
         }else if(src===null||src===undefined){
@@ -5677,7 +5703,14 @@ function buildDeck(){
         }else if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
           /* phone: tap = fire + select (VJ primary action) */
           fireClip(i,k); selectClip(i,k); openClipInspector(i,k); toggleClipSel(i,k,false);
-        }else{ fireClip(i,k); openClipInspector(i,k); }
+        }else{
+          /* v1.9.23 desktop: firing a clip also makes it THE selection, so
+             Ctrl+C / Ctrl+X / Delete act on the clip you just clicked */
+          fireClip(i,k); selectClip(i,k); openClipInspector(i,k);
+          if(!(S.clipSel&&S.clipSel.length===1&&S.clipSel[0].i===i&&S.clipSel[0].k===k)){
+            S.clipSel=[{i,k}]; buildDeck();
+          }
+        }
       });
       /* phone: long-press = assign source (no right-click on touch) */
       if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
@@ -5860,6 +5893,20 @@ function showClipMenu(x,y,i,k){
     b.addEventListener('click',()=>{ hideClipMenu(); dropFxOnClip(def.key,i,k); });
     m.appendChild(b);
   });
+  m.appendChild(el('div','cmsep','Edit'));
+  const inSel=S.clipSel&&S.clipSel.some(c=>c.i===i&&c.k===k);
+  const selN=inSel?S.clipSel.length:1;
+  const bCut=el('button',null,'Cut'+(selN>1?' ('+selN+' clips)':''));
+  bCut.addEventListener('click',()=>{ if(!inSel) S.clipSel=[{i,k}]; hideClipMenu(); copyClips(true); });
+  m.appendChild(bCut);
+  const bCopy=el('button',null,'Copy'+(selN>1?' ('+selN+' clips)':''));
+  bCopy.addEventListener('click',()=>{ if(!inSel) S.clipSel=[{i,k}]; hideClipMenu(); copyClips(false); });
+  m.appendChild(bCopy);
+  if(clipClipboard&&clipClipboard.clips.length){
+    const bPaste=el('button',null,'Paste '+clipClipboard.clips.length+' clip(s) here');
+    bPaste.addEventListener('click',()=>{ hideClipMenu(); pasteClips(i,k); });
+    m.appendChild(bPaste);
+  }
   const bc=el('button',null,'Clear slot'); bc.style.color='#ff7b7b';
   bc.addEventListener('click',()=>{
     S.clips[i][k]=null; if(S.fired[i]===k) S.fired[i]=null;
@@ -5968,7 +6015,7 @@ function buildProps(){
     const bc=el('button',null,'Clear slot');
     bc.addEventListener('click',()=>{ S.clips[i][k]=null; if(S.fired[i]===k)S.fired[i]=null; saveState(); buildDeck(); buildProps(); });
     row.appendChild(bf); row.appendChild(bc); wrap.appendChild(row);
-    wrap.appendChild(mkHint('Click a deck clip to fire it. Right-click a clip to assign a source.'));
+    wrap.appendChild(mkHint('Click a deck clip to fire + select it. Ctrl+click adds to the selection. Ctrl+C / X / V = copy / cut / paste, Del clears the selection. Right-click: assign source, effects, cut/copy/paste.'));
     host.appendChild(wrap);
     buildClipParamSection(host,i,src);
     if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
@@ -7925,6 +7972,7 @@ function wireStatic(){
       else if(S.selLayer!==undefined) pasteClips(S.selLayer,0);
       return;
     }
+    if((k==='Delete'||k==='Backspace')&&S.clipSel&&S.clipSel.length){ e.preventDefault(); clearSelectedClips(); return; }
     if(k==='f'||k==='F') toggleFullscreen();
     else if(k==='p'||k==='P') togglePerform();
     else if(k==='m'||k==='M') setLearn(!learnArmed);
