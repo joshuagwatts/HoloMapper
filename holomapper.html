@@ -1336,7 +1336,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.7.1';
+const APP_VERSION='1.7.2';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -8796,8 +8796,16 @@ async function p2pStart(){
       act.onMessage=(data,meta)=>{ if(data&&data.mid&&p2pDupe(data.mid)) return; prmHandle(data); };
       p2pRooms.push(room);
       p2pSendFns.push((o)=>{ try{ const r=act.send(o); if(r&&r.catch) r.catch(()=>{}); }catch(e){} });
-      room.onPeerJoin=(peerId)=>{ p2pLink[name]='linked'; if(p2pOnPeer) p2pOnPeer(true); prmStatus('phone linked ('+p2pCode+')'); renderPair(); renderSrvList(); broadcastState(); };
-      room.onPeerLeave=(peerId)=>{ if(p2pOnPeer) p2pOnPeer(false); };
+      let peersHere=0;
+      room.onPeerJoin=(peerId)=>{ peersHere++; p2pLink[name]='linked'; if(p2pOnPeer) p2pOnPeer(true); prmStatus('phone linked ('+p2pCode+')'); renderPair(); renderSrvList(); broadcastState(); };
+      room.onPeerLeave=(peerId)=>{
+        peersHere=Math.max(0,peersHere-1);
+        if(!peersHere){
+          p2pLink[name]='waiting';
+          if(!Object.values(p2pLink).includes('linked')){ if(p2pOnPeer) p2pOnPeer(false); prmStatus('phone left'); }
+          renderPair(); renderSrvList();
+        }
+      };
       any=true;
     }catch(e){ p2pLink[name]='off'; }
   }
@@ -8812,7 +8820,7 @@ function p2pStop(){
 }
 function p2pSend(o){ p2pSendFns.forEach(f=>{ try{ f(o); }catch(e){} }); }
 function p2pRemoteUrl(){
-  return p2pCode ? 'https://joshuagwatts.github.io/HoloMapper/remote.html#r='+p2pCode : '';
+  return p2pCode ? 'https://joshuagwatts.github.io/HoloMapper/remote.html?v='+APP_VERSION+'#r='+p2pCode : '';
 }
 function broadcastState(){
   const st={type:'state',

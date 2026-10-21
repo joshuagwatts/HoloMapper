@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <title>HoloMapper Remote</title>
@@ -136,6 +137,8 @@ button{touch-action:manipulation}
   <span id="dot" class="red"></span>
   <span class="brand">HoloMapper Remote</span>
   <span id="connlabel">looking for HoloMapper&hellip;</span>
+  <button id="btnFresh" title="Reload the newest remote (clears a stale cached copy)">&#8635;</button>
+  <span id="remver" title="Remote build"></span>
 </header>
 
 <div id="connectpanel">
@@ -314,7 +317,7 @@ async function p2pConnect(code){
       act.onMessage=(data,meta)=>{ onEngineMsg(data); };
       p2pSendFns.push((o)=>{ try{ const r=act.send(o); if(r&&r.catch) r.catch(()=>{}); }catch(e){} });
       room.onPeerJoin=(peerId)=>{ p2pLinked=true; clearInterval(linkTimer); setDot('on','connected via '+name); };
-      room.onPeerLeave=(peerId)=>{ setDot('try','console left — waiting…'); };
+      room.onPeerLeave=(peerId)=>{ p2pLinked=false; setDot('try','console left — waiting…'); };
       any=true;
     }catch(e){ /* transport unavailable — the other may still work */ }
   }
@@ -558,6 +561,12 @@ function runSelftest(){
   else connect();
 })();
 if(SELFTEST) setTimeout(runSelftest,400);
+</script>
+<script>
+document.getElementById('remver').textContent='v1.7.2';
+document.getElementById('btnFresh').addEventListener('click',()=>{
+  location.replace(location.pathname+'?v='+Date.now()+location.hash);
+});
 </script>
 </body>
 </html>
