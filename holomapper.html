@@ -1341,7 +1341,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.11';
+const APP_VERSION='1.9.12';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -5001,6 +5001,25 @@ function syncDeckSel(){
   updatePvLabel();
   if(typeof updateClipInspectorState==='function') updateClipInspectorState();
 }
+/* v1.9.12: clicking a Properties tab BUILDS that tab for the current
+   selection - setPTab alone only flipped visibility, so tabs showed stale
+   content (or nothing, e.g. Clip before any clip was ever selected). */
+function showPTab(name){
+  if(name==='layer'){
+    S.sel={kind:'layer', i:S.selLayer||0};
+    buildProps();
+  }else if(name==='clip'){
+    if(!(S.sel&&S.sel.kind==='clip')){
+      const i=S.selLayer||0;
+      const c=(S.fired&&S.fired[i]!==null&&S.fired[i]!==undefined)?S.fired[i]:0;
+      S.sel={kind:'clip', i:i, c:c};
+    }
+    buildProps();
+  }else if(name==='comp'){
+    buildCompTab();
+  }
+  setPTab(name); syncDeckSel(); saveState();
+}
 function setPTab(name){
   document.querySelectorAll('#ptabbar button').forEach(b=>b.classList.toggle('on',b.dataset.ptab===name));
   document.querySelectorAll('#proptabs .ptab').forEach(p=>p.classList.toggle('on',p.id==='ptab-'+name));
@@ -6131,24 +6150,31 @@ function dialTitle(m){
 /* ---------- Composition tab ---------- */
 function buildCompTab(){
   const host=$('ptab-comp'); if(!host) return; host.innerHTML='';
-  /* v1.4: FX drop target */
-  host.addEventListener('dragover',(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
-  host.addEventListener('drop',(e)=>{
-    e.preventDefault();
-    const data=e.dataTransfer.getData('text/plain');
-    if(data&&data.indexOf('fx:')===0){
-      const key=data.slice(3);
-      const inst=makeFxInst(key);
-      if(inst){ ensureFxChains(); S.compFx.push(inst); saveState(); toast(fxInstLabel(inst)+' → Composition'); buildCompTab(); }
-    }
-  });
+  /* v1.4: FX drop target. v1.9.12: register ONCE - buildCompTab rebuilds
+     often, and stacked listeners made one drop add the effect many times. */
+  if(!host._dropWired){
+    host._dropWired=true;
+    host.addEventListener('dragover',(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
+    host.addEventListener('drop',(e)=>{
+      e.preventDefault();
+      const data=e.dataTransfer.getData('text/plain');
+      if(data&&data.indexOf('fx:')===0){
+        const key=data.slice(3);
+        const inst=makeFxInst(key);
+        if(inst){ ensureFxChains(); S.compFx.push(inst); saveState(); toast(fxInstLabel(inst)+' → Composition'); buildCompTab(); }
+      }
+    });
+  }
   const dd=el('div'); dd.id='dashdials'; host.appendChild(dd);
   host.appendChild(mkHint('Dashboard — drag any parameter label onto a dial. Double-click a dial to rename. Right-click a dial clears its assignments.'));
-  /* v1.4: FX rack — drag effects from Browser here, or onto the Composition tab */
-  const fxsec=el('div','psec');
-  fxsec.appendChild(el('div','plab','FX Chain ('+S.compFx.length+')'));
+  /* v1.9.12: the Composition is a chain you build yourself - same deal as
+     clips and layers. Drag effects in (or on phone: Browse, tap an effect,
+     then tap this chain). It renders over the whole composite, last. */
+  const fxsec=el('div','psec compfxsec');
+  fxsec.appendChild(el('div','plab','Composition FX Chain ('+S.compFx.length+')'));
   const fxhost=el('div'); fxsec.appendChild(fxhost);
   buildFxRack(fxhost,S.compFx,()=>buildCompTab());
+  fxsec.appendChild(mkHint('Build the composition like a clip: add effects, reorder, bypass, remove. On phone: Browse \u2192 tap an effect \u2192 tap this chain.'));
   host.appendChild(fxsec);
   /* composition controls */
   const sComp=el('details','sec'); sComp.open=true;
@@ -6167,7 +6193,7 @@ function buildCompTab(){
   krow.appendChild(ckL); bC.appendChild(krow);
   paramRow(bC,'P.master','Master');
   /* post fx chain */
-  const sFx=el('details','sec'); sFx.open=true; sFx.id='secPostFx';
+  const sFx=el('details','sec'); sFx.id='secPostFx'; /* v1.9.12: collapsed by default - the built chain above is the main composition tool; this fixed chain still renders for saved looks */
   const sumF=el('summary'); sumF.innerHTML='Post FX Chain <span class="x">feedback &#8594; kaleido &#8594; glitch &#8594; mirror &#8594; mask &#8594; colorize &#8594; bloom</span>'; sFx.appendChild(sumF);
   const bFx=el('div','secbody'); bFx.id='postfx'; sFx.appendChild(bFx); host.appendChild(sFx);
   /* master grade */
@@ -7444,7 +7470,7 @@ function wireStatic(){
   $('btnPause').addEventListener('click',()=>setPaused(pausedBeats===null));
   $('btnAuto').addEventListener('click',()=>setAutopilot(!S.autopilot));
   /* prop tabs + browser tabs */
-  document.querySelectorAll('#ptabbar button').forEach(b=>b.addEventListener('click',()=>setPTab(b.dataset.ptab)));
+  document.querySelectorAll('#ptabbar button').forEach(b=>b.addEventListener('click',()=>showPTab(b.dataset.ptab)));
   document.querySelectorAll('#btabbar button').forEach(b=>b.addEventListener('click',()=>{
     document.querySelectorAll('#btabbar button').forEach(x=>x.classList.toggle('on',x===b));
     document.querySelectorAll('#browser .btab').forEach(p=>p.classList.toggle('on',p.id==='btab-'+b.dataset.btab));
@@ -9216,7 +9242,7 @@ function closeBrowseDrawer(){
 }
 function armPlace(pm){
   placeMode=pm;
-  $('placelab').textContent='Placing '+pm.label+' - tap a clip';
+  $('placelab').textContent='Placing '+pm.label+' - tap a clip, layer or Comp chain';
   $('placebar').classList.add('on');
   document.body.classList.add('placing');
 }
@@ -9225,6 +9251,16 @@ function disarmPlace(){
   $('placebar').classList.remove('on');
   document.body.classList.remove('placing');
 }
+window.placeTapComp=()=>{
+  if(!placeMode||placeMode.kind!=='fx') return false;
+  const pm=placeMode; disarmPlace();
+  ensureFxChains();
+  const inst=makeFxInst(pm.key);
+  if(!inst) return true;
+  S.compFx.push(inst); saveState(); buildCompTab();
+  toast(fxInstLabel(inst)+' \u2192 Composition chain');
+  return true;
+};
 window.placeTapLayer=(i)=>{
   if(!placeMode||placeMode.kind!=='fx') return false;
   const pm=placeMode; disarmPlace();
@@ -9252,6 +9288,11 @@ document.addEventListener('click',(e)=>{
   if(!isPhoneDev()) return;
   if(e.target.closest('#btnBrowse')||e.target.closest('#placebar')) return;
   if(e.target.closest('.srcdel')) return;
+  if(placeMode&&e.target.closest('.compfxsec')){
+    e.stopPropagation();
+    window.placeTapComp();
+    return;
+  }
   const fxr=e.target.closest('.fxrow.chainable');
   if(fxr&&fxr.dataset.fxkey){
     e.stopPropagation();
