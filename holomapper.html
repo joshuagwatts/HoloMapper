@@ -1349,7 +1349,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.18';
+const APP_VERSION='1.9.19';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -5643,14 +5643,16 @@ function buildDeck(){
       th.title=(src===null||src===undefined)
         ? (base0?('TRIGGER effect clip '+fxInstLabel(base0)+' on '+LAYER_NAMES[i]+' — processes the layers below'):'Empty slot \u2014 right-click to assign a source')
         : ('TRIGGER '+srcName(src)+' on '+LAYER_NAMES[i]+' (quantized: '+(S.snap||'bar')+')');
-      th.addEventListener('click',()=>{
+      th.addEventListener('click',(e)=>{
         if(window.placeTap&&window.placeTap(i,k)) return;
         if((src===null||src===undefined)&&base0){
           fireClip(i,k); openClipInspector(i,k);
         }else if(src===null||src===undefined){
-          /* empty clip: deselect */
-          S.sel=null; saveState(); buildDeck(); buildProps();
-          if(typeof closeClipInspector==='function') closeClipInspector();
+          /* v1.9.19: tapping the + on an empty clip opens the add menu -
+             shader from a .txt file, any source, or an effect */
+          e.stopPropagation();
+          selectClip(i,k);
+          showClipMenu(e.clientX,e.clientY,i,k);
         }else if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
           /* phone: tap = fire + select (VJ primary action) */
           fireClip(i,k); selectClip(i,k); openClipInspector(i,k); toggleClipSel(i,k,false);
@@ -5813,9 +5815,28 @@ function buildDeck(){
 function showClipMenu(x,y,i,k){
   const m=$('clipmenu'); m.innerHTML='';
   const cur=S.clips[i][k];
+  /* v1.9.19: the add-anything menu - shader file, source, or effect */
+  const bImp=el('button','cmimp','+ Shader from .txt file…');
+  bImp.title='Import a .txt/.glsl shader and put it straight on this clip';
+  bImp.addEventListener('click',()=>{
+    hideClipMenu();
+    const inp=document.createElement('input');
+    inp.type='file'; inp.accept='.txt,.glsl,.frag,.fs,video/*'; inp.multiple=true;
+    inp.onchange=()=>{ if(inp.files.length) loadShaderFilesOnto(inp.files,i,k); };
+    inp.click();
+  });
+  m.appendChild(bImp);
+  m.appendChild(el('div','cmsep','Sources'));
   srcOptions().forEach((s,si)=>{
     const b=el('button',null,(si===cur?'\u2713 ':'')+s);
     b.addEventListener('click',()=>{ S.clips[i][k]=si; hideClipMenu(); saveState(); buildDeck(); buildProps(); });
+    m.appendChild(b);
+  });
+  m.appendChild(el('div','cmsep','Effects'));
+  FXDEFS.forEach(def=>{
+    const b=el('button',null,def.name);
+    b.title='Add '+def.name+' - on an empty slot it becomes an effect clip (processes the layers below)';
+    b.addEventListener('click',()=>{ hideClipMenu(); dropFxOnClip(def.key,i,k); });
     m.appendChild(b);
   });
   const bc=el('button',null,'Clear slot'); bc.style.color='#ff7b7b';
@@ -5824,9 +5845,9 @@ function showClipMenu(x,y,i,k){
     hideClipMenu(); saveState(); buildDeck(); buildProps();
   });
   m.appendChild(bc);
-  m.style.display='block';
-  m.style.left=Math.min(x,Math.max(0,window.innerWidth-180))+'px';
-  m.style.top=Math.min(y,Math.max(0,window.innerHeight-230))+'px';
+  m.style.display='flex';
+  m.style.left=Math.min(x,Math.max(0,window.innerWidth-215))+'px';
+  m.style.top=Math.min(y,Math.max(0,window.innerHeight-480))+'px';
 }
 function hideClipMenu(){ const m=$('clipmenu'); if(m) m.style.display='none'; }
 /* ---------- properties panel (selection-driven, tabbed) ---------- */
@@ -6567,6 +6588,24 @@ function layerStackActive(i){
 }
 function buildFxBrowser(){
   const host=$('btab-fx'); if(!host) return; host.innerHTML='';
+  /* v1.9.19: import a shader right from Browse (Effects is the tab the
+     drawer opens on - the Sources-tab row alone was undiscoverable) */
+  const ib=el('button','srcrow');
+  ib.appendChild(el('span','sdot'));
+  ib.appendChild(el('span',null,'+ Import Shader (.txt)'));
+  ib.title='Import a Shadertoy .txt/.glsl shader - uniforms and const floats become knobs. It lands in Sources.';
+  ib.addEventListener('click',()=>{
+    const inp=document.createElement('input');
+    inp.type='file'; inp.accept='.txt,.glsl,.frag,.fs'; inp.multiple=true;
+    inp.onchange=()=>{
+      if(!inp.files.length) return;
+      loadShaderFiles(inp.files);
+      const st=document.querySelector('#btabbar button[data-btab="src"]');
+      if(st) st.click();
+    };
+    inp.click();
+  });
+  host.appendChild(ib);
   /* chainable FX (drag onto clips/layers) */
   FXCHAINABLE.forEach(def=>{
     const r=el('div','fxrow chainable');
@@ -7721,7 +7760,7 @@ function wireStatic(){
   /* clip assign popup: click-away closes */
   document.addEventListener('click',(e)=>{
     const m=$('clipmenu');
-    if(m&&m.style.display==='block'&&!m.contains(e.target)) hideClipMenu();
+    if(m&&m.style.display==='flex'&&!m.contains(e.target)) hideClipMenu();
   });
   document.addEventListener('keydown',(e)=>{ if(e.key==='Escape') hideClipMenu(); });
   /* presets */
@@ -9575,6 +9614,11 @@ setInterval(broadcastState,500);
 <script src="vendor/paho-mqtt-min.js"></script>
 
 <style>
+#clipmenu{position:fixed;z-index:200;background:#171a21;border:1px solid var(--line);border-radius:10px;padding:6px;min-width:200px;max-width:78vw;max-height:72vh;overflow-y:auto;box-shadow:0 12px 32px rgba(0,0,0,.55);flex-direction:column;gap:2px}
+#clipmenu button{display:block;width:100%;text-align:left;padding:8px 10px;font-size:13px;background:transparent;border:none;border-radius:6px;color:var(--ink);cursor:pointer;white-space:nowrap}
+#clipmenu button:hover{background:#232733}
+#clipmenu .cmsep{font-size:9.5px;letter-spacing:.14em;color:var(--dim);font-weight:700;padding:8px 10px 2px;text-transform:uppercase}
+#clipmenu .cmimp{color:#5eead4;font-weight:700}
 #masterbar{display:flex;flex-wrap:nowrap;gap:12px;align-items:center;padding:5px 10px;background:#14161c;border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 #masterbar::-webkit-scrollbar{display:none}
 #masterbar .mblab{font-size:10px;letter-spacing:.14em;color:var(--dim);font-weight:700;white-space:nowrap}
