@@ -1341,7 +1341,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.13';
+const APP_VERSION='1.9.14';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1754,6 +1754,17 @@ defParam('P.warpamt','Warp Amt',     0.5);
 defParam('P.warpmode','Warp Mode',   0.0);
 defParam('P.cpspeed','Phase Speed',  0.5);
 defParam('P.cpamt',  'Phase Blend',  1.0);
+/* v1.9.14 stock wave 2 */
+defParam('P.invamt','Invert Amt',    1);
+defParam('P.pixsz', 'Pixel Size',    0.3, v=>Math.round(480-v*456), v=>String(Math.round(480-v*456))+' cells');
+defParam('P.postlev','Poster Levels',0.45,v=>Math.round(2+v*14),   v=>String(Math.round(2+v*14)));
+defParam('P.solthr','Solarize Thr',  0.5);
+defParam('P.scanamt','Scanline Amt', 0.5);
+defParam('P.scanden','Scanline Den', 0.4, v=>Math.round(60+v*540),  v=>String(Math.round(60+v*540)));
+defParam('P.caamt', 'Chroma Amt',    0.4);
+defParam('P.bluramt','Blur Radius',  0.4, v=>v*8,                   v=>(v*8).toFixed(1)+'px');
+defParam('P.sharpamt','Sharpen Amt', 0.5);
+defParam('P.tilerep','Tile Repeat',  0,   v=>1+v*5,                 v=>(1+v*5).toFixed(1)+'x');
 defParam('P.bri',   'Brightness',   0.5, v=>0.2+v*1.6,      v=>(0.2+v*1.6).toFixed(2));
 defParam('P.con',   'Contrast',     0.5, v=>v*2,            v=>(v*2).toFixed(2));
 defParam('P.sat',   'Saturation',   0.5, v=>v*2,            v=>(v*2).toFixed(2));
@@ -2396,6 +2407,91 @@ void main(){
 }
 `;
 
+const SRC_INVERT = `#version 300 es
+precision highp float;
+out vec4 O; in vec2 v_uv;
+uniform sampler2D u_tex; uniform float u_amt;
+void main(){ vec4 c=texture(u_tex,v_uv); O=vec4(mix(c.rgb,1.0-c.rgb,u_amt),c.a); }
+`;
+const SRC_PIXELATE = `#version 300 es
+precision highp float;
+out vec4 O; in vec2 v_uv;
+uniform sampler2D u_tex; uniform float u_cells;
+void main(){
+  vec2 g=vec2(u_cells,u_cells*0.5625);
+  vec2 uv=(floor(v_uv*g)+0.5)/g;
+  O=texture(u_tex,uv);
+}
+`;
+const SRC_POSTERIZE = `#version 300 es
+precision highp float;
+out vec4 O; in vec2 v_uv;
+uniform sampler2D u_tex; uniform float u_lev;
+void main(){ vec4 c=texture(u_tex,v_uv); O=vec4(floor(c.rgb*u_lev+0.5)/u_lev,c.a); }
+`;
+const SRC_SOLARIZE = `#version 300 es
+precision highp float;
+out vec4 O; in vec2 v_uv;
+uniform sampler2D u_tex; uniform float u_thr;
+void main(){
+  vec4 c=texture(u_tex,v_uv);
+  vec3 m=vec3(greaterThan(c.rgb,vec3(u_thr)));
+  O=vec4(mix(c.rgb,1.0-c.rgb,m),c.a);
+}
+`;
+const SRC_SCANLINES = `#version 300 es
+precision highp float;
+out vec4 O; in vec2 v_uv;
+uniform sampler2D u_tex; uniform float u_amt; uniform float u_den;
+void main(){
+  vec4 c=texture(u_tex,v_uv);
+  float l=0.82+0.18*sin(v_uv.y*u_den*6.28318);
+  O=vec4(c.rgb*mix(1.0,l,u_amt),c.a);
+}
+`;
+const SRC_CHROMA = `#version 300 es
+precision highp float;
+out vec4 O; in vec2 v_uv;
+uniform sampler2D u_tex; uniform float u_amt;
+void main(){
+  vec2 d=v_uv-0.5;
+  vec2 off=d*dot(d,d)*u_amt*0.35;
+  vec4 c=texture(u_tex,v_uv);
+  O=vec4(texture(u_tex,v_uv+off).r, c.g, texture(u_tex,v_uv-off).b, c.a);
+}
+`;
+const SRC_BLUR = `#version 300 es
+precision highp float;
+out vec4 O; in vec2 v_uv;
+uniform sampler2D u_tex; uniform vec2 u_texel; uniform float u_rad;
+void main(){
+  vec2 t=u_texel*u_rad;
+  vec4 s=texture(u_tex,v_uv)*0.25;
+  s+=texture(u_tex,v_uv+vec2(t.x,0.0))*0.125; s+=texture(u_tex,v_uv-vec2(t.x,0.0))*0.125;
+  s+=texture(u_tex,v_uv+vec2(0.0,t.y))*0.125; s+=texture(u_tex,v_uv-vec2(0.0,t.y))*0.125;
+  s+=texture(u_tex,v_uv+t)*0.0625; s+=texture(u_tex,v_uv-t)*0.0625;
+  s+=texture(u_tex,v_uv+vec2(t.x,-t.y))*0.0625; s+=texture(u_tex,v_uv+vec2(-t.x,t.y))*0.0625;
+  O=s;
+}
+`;
+const SRC_SHARPEN = `#version 300 es
+precision highp float;
+out vec4 O; in vec2 v_uv;
+uniform sampler2D u_tex; uniform vec2 u_texel; uniform float u_amt;
+void main(){
+  vec4 c=texture(u_tex,v_uv);
+  vec4 b=texture(u_tex,v_uv+vec2(u_texel.x,0.0))+texture(u_tex,v_uv-vec2(u_texel.x,0.0))
+        +texture(u_tex,v_uv+vec2(0.0,u_texel.y))+texture(u_tex,v_uv-vec2(0.0,u_texel.y));
+  b*=0.25;
+  O=vec4(clamp(c.rgb+(c.rgb-b.rgb)*u_amt*2.0,0.0,1.0),c.a);
+}
+`;
+const SRC_TILE = `#version 300 es
+precision highp float;
+out vec4 O; in vec2 v_uv;
+uniform sampler2D u_tex; uniform float u_rep;
+void main(){ O=texture(u_tex,fract(v_uv*u_rep)); }
+`;
 const SRC_TWITCH = `#version 300 es
 precision highp float;
 out vec4 O;
@@ -2801,6 +2897,15 @@ function compileAll(){
     ['twitch',  SRC_TWITCH],
     ['warp',    SRC_WARP],
     ['colorphase', SRC_COLORPHASE],
+    ['invert',  SRC_INVERT],
+    ['pixelate',SRC_PIXELATE],
+    ['posterize',SRC_POSTERIZE],
+    ['solarize',SRC_SOLARIZE],
+    ['scanlines',SRC_SCANLINES],
+    ['chroma',  SRC_CHROMA],
+    ['blur',    SRC_BLUR],
+    ['sharpen', SRC_SHARPEN],
+    ['tile',    SRC_TILE],
     ['grade',   SRC_GRADE],
     ['mirror',  SRC_MIRROR],
     ['automask',SRC_AUTOMASK],
@@ -4093,6 +4198,15 @@ function applyFxChain(T,chain,t){
     else if(inst.k==='twitch') applyTwitchChain(T,inst,t);
     else if(inst.k==='warp') applyWarpChain(T,inst,t);
     else if(inst.k==='colorphase') applyColorPhaseChain(T,inst,t);
+    else if(inst.k==='invert') applyInvertChain(T,inst);
+    else if(inst.k==='pixelate') applyPixelateChain(T,inst);
+    else if(inst.k==='posterize') applyPosterizeChain(T,inst);
+    else if(inst.k==='solarize') applySolarizeChain(T,inst);
+    else if(inst.k==='scanlines') applyScanlinesChain(T,inst);
+    else if(inst.k==='chroma') applyChromaChain(T,inst);
+    else if(inst.k==='blur') applyBlurChain(T,inst);
+    else if(inst.k==='sharpen') applySharpenChain(T,inst);
+    else if(inst.k==='tile') applyTileChain(T,inst);
     else if(inst.k==='mirror') applyMirrorChain(T,inst);
     else if(inst.k==='automask') applyAutoMaskChain(T,inst);
     else if(inst.k==='colorize') applyColorizeChain(T,inst);
@@ -4106,6 +4220,90 @@ function applyFxChain(T,chain,t){
    a source with memory, presented like an effect — works in any chain and
    as an effect clip's base. */
 const FXFB=new WeakMap();
+function applyInvertChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.invert; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P); setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_amt'),fxVal(inst,'P.invamt'));
+  quadDraw(); fxCopyBack(T);
+}
+function applyPixelateChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.pixelate; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P); setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_cells'),fxVal(inst,'P.pixsz'));
+  quadDraw(); fxCopyBack(T);
+}
+function applyPosterizeChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.posterize; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P); setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_lev'),fxVal(inst,'P.postlev'));
+  quadDraw(); fxCopyBack(T);
+}
+function applySolarizeChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.solarize; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P); setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_thr'),fxVal(inst,'P.solthr'));
+  quadDraw(); fxCopyBack(T);
+}
+function applyScanlinesChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.scanlines; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P); setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_amt'),fxVal(inst,'P.scanamt'));
+  gl.uniform1f(U(P,'u_den'),fxVal(inst,'P.scanden'));
+  quadDraw(); fxCopyBack(T);
+}
+function applyChromaChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.chroma; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P); setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_amt'),fxVal(inst,'P.caamt'));
+  quadDraw(); fxCopyBack(T);
+}
+function applyBlurChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.blur; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P); setTex(P,'u_tex',0,T.tex);
+  gl.uniform2f(U(P,'u_texel'),1/fxScratch.w,1/fxScratch.h);
+  gl.uniform1f(U(P,'u_rad'),fxVal(inst,'P.bluramt'));
+  quadDraw(); fxCopyBack(T);
+}
+function applySharpenChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.sharpen; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P); setTex(P,'u_tex',0,T.tex);
+  gl.uniform2f(U(P,'u_texel'),1/fxScratch.w,1/fxScratch.h);
+  gl.uniform1f(U(P,'u_amt'),fxVal(inst,'P.sharpamt'));
+  quadDraw(); fxCopyBack(T);
+}
+function applyTileChain(T,inst){
+  ensureFxScratch();
+  const P=PROG.tile; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
+  gl.viewport(0,0,fxScratch.w,fxScratch.h);
+  gl.useProgram(P); setTex(P,'u_tex',0,T.tex);
+  gl.uniform1f(U(P,'u_rep'),fxVal(inst,'P.tilerep'));
+  quadDraw(); fxCopyBack(T);
+}
 function applyFeedbackChain(T,inst,t){
   ensureFxScratch();
   const P=PROG.feedback; if(!P||!T||!T.ok) return;
@@ -6227,27 +6425,9 @@ function buildCompTab(){
   mk.appendChild(bL2); mk.appendChild(bMc); bMi.appendChild(mk);
   bMi.appendChild(mkHint('Arm learn, click a slider, then wiggle a knob.'));
   const ml=el('div'); ml.id='midilist'; bMi.appendChild(ml);
-  /* shader plugin */
-  const sP=el('details','sec');
-  const sumP=el('summary'); sumP.innerHTML='Shader Plugin <span class="x">FFGL-style slot</span>'; sP.appendChild(sumP);
-  const bP=el('div','secbody'); sP.appendChild(bP); host.appendChild(sP);
-  bP.appendChild(mkHint('Paste GLSL below and hit Compile — or drag a .txt Shadertoy file anywhere onto the app to import it as a first-class source.'));
-  const ta=document.createElement('textarea'); ta.id='plugcode'; ta.spellcheck=false; ta.value=S.pluginCode||'';
-  bP.appendChild(ta);
-  const pk=el('div','krow');
-  const bCc=el('button',null,'Compile'); bCc.id='btnCompile';
-  bCc.addEventListener('click',()=>compilePlugin(false));
-  const bPd=el('button',null,'Reset to default'); bPd.id='btnPlugDefault';
-  bPd.addEventListener('click',()=>{ $('plugcode').value=PLUGIN_DEFAULT; compilePlugin(false); });
-  const bLd=el('button',null,'Load .txt'); bLd.id='btnPlugLoad';
-  bLd.title='Import a .txt/.glsl Shadertoy shader as a first-class source';
-  const fi=document.createElement('input'); fi.type='file'; fi.id='plugfile';
-  fi.multiple=true; fi.accept='.txt,.glsl,.frag,.fs';
-  fi.addEventListener('change',()=>{ loadShaderFiles(fi.files); fi.value=''; });
-  bLd.addEventListener('click',()=>fi.click());
-  pk.appendChild(bCc); pk.appendChild(bPd); pk.appendChild(bLd); bP.appendChild(pk); bP.appendChild(fi);
-  const po=el('div'); po.id='plugok'; bP.appendChild(po);
-  const pe=el('pre'); pe.id='plugerr'; bP.appendChild(pe);
+  /* v1.9.14: shader plugin EDITOR removed (his call) - the .txt import
+     pipeline (uniform scan -> auto knobs) is the keeper; it lives in the
+     Sources browser now. The Plugin source keeps its saved code. */
   buildMaster(); buildDashboard(); renderMidiList();
 }
 /* ---------- browser: effects / sources ---------- */
@@ -6264,6 +6444,15 @@ const FXDEFS=[
   {group:'Color', key:'colorphase', name:'Color Phase', sub:'hue rotator', params:[['P.cpspeed','Phase Speed'],['P.cpamt','Blend Amount']]},
   {group:'Color', key:'colorize', name:'Colorize', sub:'duotone color', params:[['P.czpal','Palette'],['P.czamt','Blend Amount'],['P.czhueA','Shadow Hue'],['P.czhueB','Highlight Hue']]},
   {group:'Color', key:'grade', name:'Grade', sub:'color grade', params:[['P.bri','Brightness'],['P.con','Contrast'],['P.sat','Saturation'],['P.vig','Vignette'],['P.grain','Film Grain']]},
+  {group:'Color', key:'invert', name:'Invert', sub:'negative', params:[['P.invamt','Amount']]},
+  {group:'Color', key:'posterize', name:'Posterize', sub:'band the colors', params:[['P.postlev','Levels']]},
+  {group:'Color', key:'solarize', name:'Solarize', sub:'invert above a threshold', params:[['P.solthr','Threshold']]},
+  {group:'Warp', key:'pixelate', name:'Pixelate', sub:'mosaic blocks', params:[['P.pixsz','Block Size']]},
+  {group:'Warp', key:'tile', name:'Tile', sub:'repeat the image', params:[['P.tilerep','Repeat']]},
+  {group:'Warp', key:'chroma', name:'Chroma Shift', sub:'radial RGB split', params:[['P.caamt','Amount']]},
+  {group:'Look', key:'scanlines', name:'Scanlines', sub:'CRT lines', params:[['P.scanamt','Amount'],['P.scanden','Density']]},
+  {group:'Look', key:'blur', name:'Blur', sub:'soften', params:[['P.bluramt','Radius']]},
+  {group:'Look', key:'sharpen', name:'Sharpen', sub:'crisp edges', params:[['P.sharpamt','Amount']]},
   {group:'Look', key:'automask', name:'Auto Mask', sub:'luma/chroma key', params:[['P.ammode','Key Mode'],['P.amthr','Threshold'],['P.amsoft','Edge Softness'],['P.amkey','Key Hue'],['P.aminv','Invert Mask']]},
   {group:'Look', key:'bloompost', name:'Bloom', sub:'glow bloom', params:[['P.blthr','Bloom Threshold'],['P.blstr','Bloom Strength']]},
 ];
@@ -6346,7 +6535,18 @@ function buildFxBrowser(){
 }
 function buildSrcBrowser(){
   const host=$('btab-src'); if(!host) return; host.innerHTML='';
-  host.appendChild(mkHint('Drag a source onto any clip to assign it.'));
+  host.appendChild(mkHint('Drag a source onto any clip to assign it. Import a .txt shader and its parameters become knobs automatically.'));
+  const sb=el('button','srcrow');
+  sb.appendChild(el('span','sdot'));
+  sb.appendChild(el('span',null,'+ Import Shader (.txt)'));
+  sb.title='Import a Shadertoy .txt/.glsl shader - uniforms and const floats become knobs';
+  sb.addEventListener('click',()=>{
+    const inp=document.createElement('input');
+    inp.type='file'; inp.accept='.txt,.glsl,.frag,.fs'; inp.multiple=true;
+    inp.onchange=()=>{ if(inp.files.length) loadShaderFiles(inp.files); };
+    inp.click();
+  });
+  host.appendChild(sb);
   const vb=el('button','srcrow');
   vb.appendChild(el('span','sdot'));
   vb.appendChild(el('span',null,'+ Import Video'));
@@ -6718,12 +6918,14 @@ function buildPerform(){
 /* ================= SHADER PLUGIN ================= */
 /* ================= SHADER PLUGIN (editable scratchpad) ================= */
 function compilePlugin(fromInit){
-  const code=$('plugcode').value;
+  /* v1.9.14: no editor textarea anymore - compile the saved plugin code */
+  const _tc=$('plugcode');
+  const code=_tc?_tc.value:(S.pluginCode||PLUGIN_DEFAULT);
   lastGlslErr='';
   const pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
   if(!pr){
-    $('plugerr').textContent='COMPILE ERROR:\n'+lastGlslErr;
-    $('plugok').textContent='';
+    const _pe=$('plugerr'); if(_pe) _pe.textContent='COMPILE ERROR:\n'+lastGlslErr;
+    const _po=$('plugok'); if(_po) _po.textContent='';
     return false;
   }
   if(PROG.plugin) gl.deleteProgram(PROG.plugin);
@@ -6735,8 +6937,8 @@ function compilePlugin(fromInit){
      scanner, exactly like imports). */
   S.pluginUniforms=scanShaderUniforms(code);
   registerPluginParams();
-  $('plugerr').textContent='';
-  $('plugok').textContent='Compiled OK — select "Plugin" as a layer source to use it.';
+  { const _pe=$('plugerr'); if(_pe) _pe.textContent='';
+    const _po=$('plugok'); if(_po) _po.textContent='Compiled OK'; }
   if(!fromInit) saveState();
   return true;
 }
