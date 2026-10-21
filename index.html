@@ -1336,7 +1336,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.7.0';
+const APP_VERSION='1.7.1';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -8725,6 +8725,15 @@ let p2pRooms=[], p2pSendFns=[], p2pCode='', p2pOnPeer=null;
 let p2pLink={mqtt:'off', nostr:'off', torrent:'off'};
 let linkBpm=0;
 const P2P_APP='holomapper-v1';
+/* STUN for direct links + public TURN relays for networks that block direct
+   WebRTC — without a TURN fallback some pairs can never connect at all */
+const P2P_RTC={iceServers:[
+    {urls:'stun:stun.l.google.com:19302'},
+    {urls:'stun:stun1.l.google.com:19302'},
+    {urls:'turn:openrelay.metered.ca:80', username:'openrelayproject', credential:'openrelayproject'},
+    {urls:'turn:openrelay.metered.ca:443', username:'openrelayproject', credential:'openrelayproject'},
+    {urls:'turns:openrelay.metered.ca:443?transport=tcp', username:'openrelayproject', credential:'openrelayproject'}
+  ]};
 /* vendored bundles ship with the app — pairing never depends on a CDN */
 const P2P_STRATS=[
   ['mqtt','./vendor/trystero-mqtt.mjs','https://esm.sh/@trystero-p2p/mqtt@0.25.4'],
@@ -8760,7 +8769,7 @@ function renderSrvList(){
   const host=$('srvlist'); if(!host) return;
   const linked=Object.keys(p2pLink).filter(k=>p2pLink[k]==='linked');
   const phone = !p2pCode ? 'off'
-    : linked.length ? 'linked via '+linked.join(' + ') : 'waiting for phone…';
+    : linked.length ? 'linked via '+linked.join(' + ') : (p2pRooms.length? 'waiting for phone — it must scan THIS code\'s QR' : 'starting…');
   const midi=($('midistat')&&$('midistat').textContent)||'—';
   const linkFresh = linkLastSeen && (performance.now()-linkLastSeen<6000);
   const hub = prmOn ? 'connected' : 'off';
@@ -8780,7 +8789,7 @@ async function p2pStart(){
   for(const [name,localUrl,cdnUrl] of P2P_STRATS){
     try{
       const {joinRoom}=await p2pImport(localUrl,cdnUrl);
-      const room=joinRoom({appId:P2P_APP}, 'hm-'+p2pCode);
+      const room=joinRoom({appId:P2P_APP, rtcConfig:P2P_RTC}, 'hm-'+p2pCode);
       /* trystero 0.25 API: makeAction returns {send, onMessage}; peer
          callbacks are assigned properties, not methods */
       const act=room.makeAction('hm');

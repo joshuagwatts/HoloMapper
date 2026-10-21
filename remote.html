@@ -200,6 +200,14 @@ const qs = new URLSearchParams(location.search);
 const MOCK = qs.has('mock') || qs.has('selftest');
 const SELFTEST = qs.has('selftest');
 const PAIRCODE = (()=>{ const m=(location.hash||'').match(/#r=([A-Z0-9]{6})/i); return m?m[1].toUpperCase():''; })();
+const RTC_CFG={iceServers:[
+    {urls:'stun:stun.l.google.com:19302'},
+    {urls:'stun:stun1.l.google.com:19302'},
+    {urls:'turn:openrelay.metered.ca:80', username:'openrelayproject', credential:'openrelayproject'},
+    {urls:'turn:openrelay.metered.ca:443', username:'openrelayproject', credential:'openrelayproject'},
+    {urls:'turns:openrelay.metered.ca:443?transport=tcp', username:'openrelayproject', credential:'openrelayproject'}
+  ]};
+const liveTransports=[];
 const LINKMODE = PAIRCODE ? 'p2p' : 'bridge';
 
 function tlog(msg){
@@ -283,21 +291,23 @@ async function p2pConnect(code){
   setDot('try','linking…');
   p2pSendFns=[];
   const strats=[
-    ['nostr','./vendor/trystero-nostr.mjs','https://esm.sh/@trystero-p2p/nostr@0.25.4'],
     ['mqtt','./vendor/trystero-mqtt.mjs','https://esm.sh/@trystero-p2p/mqtt@0.25.4'],
+    ['nostr','./vendor/trystero-nostr.mjs','https://esm.sh/@trystero-p2p/nostr@0.25.4'],
+    ['torrent','./vendor/trystero-torrent.mjs','https://esm.sh/@trystero-p2p/torrent@0.25.4'],
   ];
   let any=false;
   const linkT0=Date.now();
   const linkTimer=setInterval(()=>{
     if(p2pLinked){ clearInterval(linkTimer); return; }
-    setDot('', 'linking… '+Math.round((Date.now()-linkT0)/1000)+'s');
+    setDot('', 'linking… '+Math.round((Date.now()-linkT0)/1000)+'s · room '+code+(liveTransports.length?(' · live: '+liveTransports.join('+')):' · starting transports…'));
   },1000);
   for(const [name,localUrl,cdnUrl] of strats){
     try{
       let mod;
       try{ mod=await import(localUrl); }catch(e1){ mod=await import(cdnUrl); }
       const {joinRoom}=mod;
-      const room=joinRoom({appId:'holomapper-v1'}, 'hm-'+code);
+      const room=joinRoom({appId:'holomapper-v1', rtcConfig:RTC_CFG}, 'hm-'+code);
+      if(!liveTransports.includes(name)) liveTransports.push(name);
       /* trystero 0.25 API: makeAction returns {send, onMessage}; peer
          callbacks are assigned properties, not methods */
       const act=room.makeAction('hm');
