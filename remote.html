@@ -224,6 +224,7 @@ function defaultWsUrl(){
 }
 let wsUrl=defaultWsUrl();
 
+let p2pLinked=false;
 function setDot(state,label){
   const d=$('dot');
   d.className = state==='on'?'green':(state==='try'?'amber':'red');
@@ -286,6 +287,11 @@ async function p2pConnect(code){
     ['mqtt','./vendor/trystero-mqtt.mjs','https://esm.sh/@trystero-p2p/mqtt@0.25.4'],
   ];
   let any=false;
+  const linkT0=Date.now();
+  const linkTimer=setInterval(()=>{
+    if(p2pLinked){ clearInterval(linkTimer); return; }
+    setDot('', 'linking… '+Math.round((Date.now()-linkT0)/1000)+'s');
+  },1000);
   for(const [name,localUrl,cdnUrl] of strats){
     try{
       let mod;
@@ -297,7 +303,7 @@ async function p2pConnect(code){
       const act=room.makeAction('hm');
       act.onMessage=(data,meta)=>{ onEngineMsg(data); };
       p2pSendFns.push((o)=>{ try{ const r=act.send(o); if(r&&r.catch) r.catch(()=>{}); }catch(e){} });
-      room.onPeerJoin=(peerId)=>{ setDot('on','connected via '+name); };
+      room.onPeerJoin=(peerId)=>{ p2pLinked=true; clearInterval(linkTimer); setDot('on','connected via '+name); };
       room.onPeerLeave=(peerId)=>{ setDot('try','console left — waiting…'); };
       any=true;
     }catch(e){ /* transport unavailable — the other may still work */ }
