@@ -867,12 +867,12 @@ const dockWraps={}; /* id -> .dockpanel element (inner content preserved) */
 function dockDefault(){
 var _dev=(window.HM_DEVICE&&HM_DEVICE.device)||'desktop';
 if(_dev==='phone'||_dev==='tablet'){
-  /* stacked single-column: transport, deck, output, preview, then inspector tabs */
+  /* stacked single-column: transport, output, preview, deck, then inspector tabs */
   return{v:2,hidden:[],rows:[
     {h:'auto',cols:[{w:'1fr',panels:[{id:'transport',size:'auto'}]}]},
-    {h:'auto',cols:[{w:'1fr',panels:[{id:'deck',size:'auto'}]}]},
     {h:'auto',cols:[{w:'1fr',panels:[{id:'output',size:'auto'}]}]},
     {h:'auto',cols:[{w:'1fr',panels:[{id:'preview',size:'auto'}]}]},
+    {h:'auto',cols:[{w:'1fr',panels:[{id:'deck',size:'auto'}]}]},
     {h:'auto',cols:[{w:'1fr',panels:[{id:'proptabs',size:'auto'},{id:'browser',size:'auto'},{id:'clip',size:'auto'}]}]}
   ]};
 }
@@ -1341,7 +1341,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.7';
+const APP_VERSION='1.9.8';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
