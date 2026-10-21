@@ -831,7 +831,7 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
   2. The remote opens already connected.<br>
   No typing needed. No Python needed.</div>
   <div id="pairlans" class="hint"></div>
-  <div class="krow"><button id="btnPairClose">Close</button><button id="btnPairCopy">Copy URL</button></div>
+  <div class="krow"><button id="btnPairClose">Close</button><button id="btnPairCopy">Copy URL</button><button id="btnPairDisc">Disconnect</button></div>
   <div class="hint" style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">
     Fallback — LAN only: if the scan-and-connect link can't reach your phone, run <b>bridge.py</b> on this laptop instead, then <button id="btnPrm" title="Connect to the phone remote via bridge.py">enable the bridge link</button>
   </div>
@@ -1333,7 +1333,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.5.0';
+const APP_VERSION='1.5.1';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -8691,39 +8691,71 @@ function prmHandle(m){
     case 'blackout': S.blackout=!!m.on; broadcastState(); saveState(); break;
   }
 }
-/* ---------- P2P phone pairing (Trystero, no bridge.py needed) ---------- */
-let p2pRoom=null, p2pSendFn=null, p2pCode='', p2pOnPeer=null;
+/* ---------- P2P phone pairing (Trystero, no bridge.py needed) ----------
+   DUAL TRANSPORT: nostr + mqtt rooms with the same code — whichever finds
+   the phone first carries it; state goes out on both (idempotent), remote
+   commands carry a mid and are deduped here. Closing the pair overlay does
+   NOT stop the link (that was the silent pair-killer); Disconnect is explicit. */
+let p2pRooms=[], p2pSendFns=[], p2pCode='', p2pOnPeer=null;
+let p2pLink={nostr:'off', mqtt:'off'};
 const P2P_APP='holomapper-v1';
+/* vendored bundles ship with the app — pairing never depends on a CDN */
+const P2P_STRATS=[
+  ['nostr','./vendor/trystero-nostr.mjs','https://esm.sh/@trystero-p2p/nostr@0.25.4'],
+  ['mqtt','./vendor/trystero-mqtt.mjs','https://esm.sh/@trystero-p2p/mqtt@0.25.4'],
+];
+async function p2pImport(localUrl,cdnUrl){
+  try{ return await import(localUrl); }
+  catch(e){ return await import(cdnUrl); }
+}
 function p2pGenCode(){
   const abc='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let c=''; for(let i=0;i<6;i++) c+=abc[Math.floor(Math.random()*abc.length)];
   return c;
 }
+const p2pSeen=new Map();
+function p2pDupe(mid){
+  if(!mid) return false;
+  const now=Date.now();
+  for(const [k,ts] of p2pSeen){ if(now-ts>8000) p2pSeen.delete(k); }
+  if(p2pSeen.has(mid)) return true;
+  p2pSeen.set(mid,now);
+  return false;
+}
+function p2pStatusText(){
+  const f=x=>x==='linked'?'LINKED':(x==='waiting'?'waiting…':'off');
+  return 'nostr: '+f(p2pLink.nostr)+' \u00B7 mqtt: '+f(p2pLink.mqtt);
+}
 async function p2pStart(){
   p2pStop();
   p2pCode=p2pGenCode();
-  try{
-    const {joinRoom}=await import('https://esm.sh/@trystero-p2p/nostr@0.25.4');
-    const room=joinRoom({appId:P2P_APP}, 'hm-'+p2pCode);
-    p2pRoom=room;
-    const [sendMsg, onMsg]=room.makeAction('hm');
-    p2pSendFn=sendMsg;
-    onMsg((data,peerId)=>{ prmHandle(data); });
-    room.onPeerJoin(()=>{ if(p2pOnPeer) p2pOnPeer(true); prmStatus('phone linked ('+p2pCode+')'); broadcastState(); });
-    room.onPeerLeave(()=>{ if(p2pOnPeer) p2pOnPeer(false); });
-    prmStatus('pairing code '+p2pCode+' — scan QR');
-    renderPair();
-    return true;
-  }catch(e){
-    prmStatus('P2P failed — check network');
-    return false;
+  p2pLink={nostr:'waiting', mqtt:'waiting'};
+  let any=false;
+  for(const [name,localUrl,cdnUrl] of P2P_STRATS){
+    try{
+      const {joinRoom}=await p2pImport(localUrl,cdnUrl);
+      const room=joinRoom({appId:P2P_APP}, 'hm-'+p2pCode);
+      /* trystero 0.25 API: makeAction returns {send, onMessage}; peer
+         callbacks are assigned properties, not methods */
+      const act=room.makeAction('hm');
+      act.onMessage=(data,meta)=>{ if(data&&data.mid&&p2pDupe(data.mid)) return; prmHandle(data); };
+      p2pRooms.push(room);
+      p2pSendFns.push((o)=>{ try{ const r=act.send(o); if(r&&r.catch) r.catch(()=>{}); }catch(e){} });
+      room.onPeerJoin=(peerId)=>{ p2pLink[name]='linked'; if(p2pOnPeer) p2pOnPeer(true); prmStatus('phone linked ('+p2pCode+')'); renderPair(); broadcastState(); };
+      room.onPeerLeave=(peerId)=>{ if(p2pOnPeer) p2pOnPeer(false); };
+      any=true;
+    }catch(e){ p2pLink[name]='off'; }
   }
+  prmStatus(any?('pairing code '+p2pCode+' — scan the QR'):'P2P failed — check network');
+  renderPair();
+  return any;
 }
 function p2pStop(){
-  if(p2pRoom){ try{ p2pRoom.leave(); }catch(e){} p2pRoom=null; }
-  p2pSendFn=null; p2pCode='';
+  p2pRooms.forEach(r=>{ try{ r.leave(); }catch(e){} });
+  p2pRooms=[]; p2pSendFns=[]; p2pCode='';
+  p2pLink={nostr:'off', mqtt:'off'};
 }
-function p2pSend(o){ if(p2pSendFn){ try{ p2pSendFn(o); }catch(e){} } }
+function p2pSend(o){ p2pSendFns.forEach(f=>{ try{ f(o); }catch(e){} }); }
 function p2pRemoteUrl(){
   return p2pCode ? 'https://joshuagwatts.github.io/HoloMapper/remote.html#r='+p2pCode : '';
 }
@@ -8760,7 +8792,7 @@ function renderPair(){
   const url=p2pRemoteUrl()||prmRemoteUrl;
   const has=!!url;
   $('pairstat').innerHTML=has
-    ? 'Scan with your phone camera — the remote opens already connected:'+(p2pCode?'<br>Code: <b>'+p2pCode+'</b>':'')
+    ? 'Scan with your phone camera — the remote opens already connected:'+(p2pCode?'<br>Code: <b>'+p2pCode+'</b><br><span class="dim">'+p2pStatusText()+'</span><br><span class="dim">You can close this window — the link stays live until you Disconnect.</span>':'')
     : 'Starting P2P pairing…';
   $('pairurl').textContent=url||'';
   const qr=$('pairqr'); qr.innerHTML='';
@@ -8779,9 +8811,8 @@ function togglePair(force){
   if(show){
     if(!p2pCode) p2pStart().then(()=>renderPair());
     else renderPair();
-  } else {
-    p2pStop();
   }
+  /* closing the overlay keeps the link alive — Disconnect is the only stop */
   p.classList.toggle('show',show);
 }
 </script>
@@ -8793,6 +8824,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 $('btnPrm').addEventListener('click',()=>setPrmOn(!prmOn));
 $('btnPair').addEventListener('click',()=>togglePair(true));
 $('btnPairClose').addEventListener('click',()=>togglePair(false));
+$('btnPairDisc').addEventListener('click',()=>{ p2pStop(); prmStatus('phone link off'); togglePair(false); });
 $('btnPairCopy').addEventListener('click',()=>{
   const u=p2pRemoteUrl()||prmRemoteUrl;
   if(!u) return;

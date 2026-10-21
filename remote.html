@@ -265,27 +265,44 @@ function scheduleRetry(){
   clearTimeout(retryTimer);
   retryTimer=setTimeout(connect,d);
 }
-let p2pSendFn=null;
+let p2pSendFns=[];
 function send(obj){
   const line=JSON.stringify(obj);
   if(MOCK){ tlog('SEND '+line); return; }
-  if(p2pSendFn){ try{ p2pSendFn(obj); }catch(e){} }
+  if(p2pSendFns.length){
+    /* commands carry a mid — the console dedupes copies arriving on both transports */
+    const m=Object.assign({}, obj, {mid:obj.mid||(Date.now().toString(36)+Math.random().toString(36).slice(2,9))});
+    p2pSendFns.forEach(f=>{ try{ f(m); }catch(e){} });
+  }
   if(ws && ws.readyState===1) ws.send(line);
 }
-/* P2P via Trystero — room code from #r=CODE (QR pairing, no bridge.py) */
+/* P2P via Trystero — DUAL TRANSPORT (nostr + mqtt), same room code.
+   Whichever finds the console first connects; both stay joined. */
 async function p2pConnect(code){
-  setDot('try','linking — keep the Pair screen open on the console…');
-  try{
-    const {joinRoom}=await import('https://esm.sh/@trystero-p2p/nostr@0.25.4');
-    const room=joinRoom({appId:'holomapper-v1'}, 'hm-'+code);
-    const [sendMsg, onMsg]=room.makeAction('hm');
-    p2pSendFn=sendMsg;
-    onMsg((data,peerId)=>{ onEngineMsg(data); });
-    room.onPeerJoin(()=>{ setDot('on','connected'); });
-    room.onPeerLeave(()=>{ setDot('try','console left — waiting…'); });
-  }catch(e){
-    setDot('off','link failed — tap Retry link');
+  setDot('try','linking…');
+  p2pSendFns=[];
+  const strats=[
+    ['nostr','./vendor/trystero-nostr.mjs','https://esm.sh/@trystero-p2p/nostr@0.25.4'],
+    ['mqtt','./vendor/trystero-mqtt.mjs','https://esm.sh/@trystero-p2p/mqtt@0.25.4'],
+  ];
+  let any=false;
+  for(const [name,localUrl,cdnUrl] of strats){
+    try{
+      let mod;
+      try{ mod=await import(localUrl); }catch(e1){ mod=await import(cdnUrl); }
+      const {joinRoom}=mod;
+      const room=joinRoom({appId:'holomapper-v1'}, 'hm-'+code);
+      /* trystero 0.25 API: makeAction returns {send, onMessage}; peer
+         callbacks are assigned properties, not methods */
+      const act=room.makeAction('hm');
+      act.onMessage=(data,meta)=>{ onEngineMsg(data); };
+      p2pSendFns.push((o)=>{ try{ const r=act.send(o); if(r&&r.catch) r.catch(()=>{}); }catch(e){} });
+      room.onPeerJoin=(peerId)=>{ setDot('on','connected via '+name); };
+      room.onPeerLeave=(peerId)=>{ setDot('try','console left — waiting…'); };
+      any=true;
+    }catch(e){ /* transport unavailable — the other may still work */ }
   }
+  if(!any) setDot('off','link failed — tap Retry link');
 }
 $('btnRetry').addEventListener('click',()=>{ if(PAIRCODE) p2pConnect(PAIRCODE); });
 
