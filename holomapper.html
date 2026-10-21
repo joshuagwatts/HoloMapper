@@ -1341,7 +1341,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.9';
+const APP_VERSION='1.9.10';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -9136,6 +9136,17 @@ setInterval(broadcastState,500);
     border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer}
   html[data-device="phone"] body.placing .clip{outline:2px dashed var(--acc,#8b5cf6);outline-offset:-2px}
   html[data-device="phone"] .dockpanel[data-panel="clip"]{display:none}
+  /* v1.9.10: properties at natural height - the flex/max-height chain crushed
+     it to a 77px sliver inside the phone scroll stack */
+  html[data-device="phone"] #proptabs{max-height:none}
+  html[data-device="phone"] .ptab{flex:none;max-height:none;overflow:visible}
+  /* v1.9.10: pinned monitors float above the scroll while you work below */
+  html[data-device="phone"] .dockpanel.hm-pinned{position:fixed;left:0;right:0;z-index:60;
+    box-shadow:0 12px 32px rgba(0,0,0,.6);border-bottom:1px solid var(--acc,#8b5cf6)}
+  html[data-device="phone"] .hm-pinspacer{flex:none;width:100%}
+  html[data-device="phone"] .hmpin{margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--dim);
+    border-radius:999px;min-height:26px;min-width:30px;padding:2px 8px;font-size:12px;cursor:pointer;line-height:1}
+  html[data-device="phone"] .hmpin.on{color:var(--sel);border-color:var(--sel)}
 </style>
 <script>
 'use strict';
@@ -9203,6 +9214,54 @@ document.addEventListener('click',(e)=>{
     armPlace({kind:'src', si:si, label:srcName(si)});
   }
 }, true);
+
+/* ============ PHONE: pin monitors while scrolling (v1.9.10) ============
+   A pin button in the Output / Preview headers: the monitor floats fixed
+   under the topbar (a spacer holds its place in the stack) while the rest
+   of the UI scrolls under it. Pin both and they stack. Phone only. */
+const hmPins={};
+function hmTopbarBottom(){ const tb=document.querySelector('#topbar'); return tb?Math.ceil(tb.getBoundingClientRect().bottom):0; }
+function hmSyncPins(){
+  let top=hmTopbarBottom();
+  for(const id of ['output','preview']){
+    const panel=document.querySelector('.dockpanel[data-panel="'+id+'"]');
+    if(!panel) continue;
+    const prev=panel.previousElementSibling;
+    const sp=(prev&&prev.classList&&prev.classList.contains('hm-pinspacer'))?prev:null;
+    if(hmPins[id]){
+      if(!panel.classList.contains('hm-pinned')){
+        const h=panel.getBoundingClientRect().height;
+        const spacer=document.createElement('div');
+        spacer.className='hm-pinspacer'; spacer.style.height=h+'px';
+        panel.parentNode.insertBefore(spacer,panel);
+        panel.classList.add('hm-pinned'); panel.style.width='100%';
+      }
+      panel.style.top=top+'px';
+      top+=panel.getBoundingClientRect().height;
+    }else if(panel.classList.contains('hm-pinned')){
+      panel.classList.remove('hm-pinned'); panel.style.top=''; panel.style.width='';
+      if(sp) sp.remove();
+    }
+    const btn=panel.querySelector('.hmpin');
+    if(btn) btn.classList.toggle('on',!!hmPins[id]);
+  }
+}
+function hmInitPins(){
+  if(!isPhoneDev()) return;
+  for(const id of ['output','preview']){
+    const panel=document.querySelector('.dockpanel[data-panel="'+id+'"]');
+    const head=panel&&panel.querySelector('.dockhead');
+    if(!head||head.querySelector('.hmpin')) continue;
+    const b=document.createElement('button');
+    b.className='hmpin'; b.type='button'; b.textContent='\u{1F4CC}';
+    b.title='Pin '+id+' while you scroll';
+    b.addEventListener('click',(e)=>{ e.stopPropagation(); hmPins[id]=!hmPins[id]; hmSyncPins(); });
+    head.appendChild(b);
+  }
+}
+hmInitPins();
+document.addEventListener('DOMContentLoaded',()=>setTimeout(hmInitPins,60));
+window.addEventListener('resize',()=>{ if(hmPins.output||hmPins.preview) hmSyncPins(); });
 </script>
 </body>
 </html>
