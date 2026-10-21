@@ -1333,7 +1333,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.5.1';
+const APP_VERSION='1.6.0';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -8663,8 +8663,21 @@ function schedulePrmRetry(){
   prmRetryT=setTimeout(()=>{ if(prmOn) prmConnect(); },d);
 }
 function prmSend(o){ if(prmWs && prmWs.readyState===1) prmWs.send(JSON.stringify(o)); }
+let linkPeers=0;
 function prmHandle(m){
   if(!m || typeof m!=='object') return;
+  if(m.type==='linkstate'){
+    /* Ableton Link (via a hub link source): adopt tempo + beat phase so
+       quantized fires land on the session's grid, not a local guess */
+    const bpm=parseFloat(m.bpm), bt=parseFloat(m.beat);
+    if(isFinite(bpm)&&bpm>=30&&bpm<=300){
+      S.bpm=bpm;
+      if(isFinite(bt)) beatT0=performance.now()/1000-bt*beatLen();
+      linkPeers=parseInt(m.peers,10)||0;
+      prmStatus('Link sync: '+bpm.toFixed(1)+' BPM'+(linkPeers?' \u00B7 '+linkPeers+' peer'+(linkPeers>1?'s':''):''));
+    }
+    return;
+  }
   if(m.type==='welcome'){
     prmRemoteUrl=m.remoteUrl||'';
     prmLanUrls=Array.isArray(m.lanUrls)?m.lanUrls:[];
@@ -8825,6 +8838,8 @@ $('btnPrm').addEventListener('click',()=>setPrmOn(!prmOn));
 $('btnPair').addEventListener('click',()=>togglePair(true));
 $('btnPairClose').addEventListener('click',()=>togglePair(false));
 $('btnPairDisc').addEventListener('click',()=>{ p2pStop(); prmStatus('phone link off'); togglePair(false); });
+/* hub-served console (http on :8090) auto-links to the hub — no toggle needed */
+if(location.protocol==='http:'&&location.port==='8090'){ setPrmOn(true); }
 $('btnPairCopy').addEventListener('click',()=>{
   const u=p2pRemoteUrl()||prmRemoteUrl;
   if(!u) return;
