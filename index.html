@@ -773,6 +773,15 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
     <section id="lowerzone">
       <div id="outmonwrap">
         <div class="mon" id="outmon"><span class="mlab">Output Monitor</span><canvas id="gl"></canvas></div>
+        <div id="masterbar">
+          <span class="mblab">MASTER</span>
+          <div class="mbgrp"><button id="mbpmDn" title="BPM -1">−</button><span id="mbpm">120</span><button id="mbpmUp" title="BPM +1">+</button><button id="mbTap" title="Tap tempo">TAP</button></div>
+          <div class="mbgrp"><span class="mblab">SPEED</span><input id="mbSpeed" type="range" min="0.25" max="2" step="0.01" title="Master shader speed"></div>
+          <div class="mbgrp"><span class="mblab">HUE</span><input id="mbHue" type="range" min="0" max="1" step="0.005" title="Master hue shift"></div>
+          <div class="mbgrp"><button id="mbStrobe" title="Master strobe">STROBE</button><span class="mblab">RATE</span><input id="mbSRate" type="range" min="0" max="1" step="0.01" title="Strobe rate"></div>
+          <div class="mbgrp"><button id="mbBlack" title="Blackout (Space)">BLACKOUT</button><select id="mbBlType" title="Blackout type"><option value="black">Black</option><option value="white">White</option><option value="freeze">Freeze</option></select></div>
+          <div class="mbgrp"><span class="mblab">OUT</span><input id="mbMaster" type="range" min="0" max="1" step="0.01" title="Master fader"></div>
+        </div>
         <div id="performbar">
           <div class="pmacros" id="pmacros"></div>
           <div class="pexit">PERFORM MODE &mdash; ESC or P to exit &mdash; F fullscreen</div>
@@ -1341,7 +1350,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.14';
+const APP_VERSION='1.9.15';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1866,6 +1875,7 @@ function defaultState(){
     params:params, assigns:{}, mods:{},
     postBypass:{feedback:false, kaleido:true, glitch:true, mirror:true, automask:true, colorize:true, bloompost:true},
     strobeOn:false, beatSync:false, bpm:120, blackout:false, knobSmooth:0,
+    bltype:'black', ghue:0, gspeed:1,
     layerFx:Array.from({length:MAX_LAYERS},()=>[]),
     clipFx:Array.from({length:MAX_LAYERS},()=>Array.from({length:8},()=>[])),
     compFx:[],
@@ -2592,6 +2602,8 @@ uniform float u_master;
 uniform float u_strobeOn;
 uniform float u_strobeRate;
 uniform float u_strobeAmt;
+uniform float u_hue;
+uniform float u_white;
 float h21(vec2 p){
   vec3 p3 = fract(vec3(p.xyx)*0.1031);
   p3 += dot(p3,p3.yzx+33.33);
@@ -2603,9 +2615,19 @@ void main(){
   c *= u_bri;
   float l = dot(c,vec3(0.299,0.587,0.114));
   c = mix(vec3(l),c,clamp(u_sat2,0.0,3.0));
+  if(abs(u_hue)>0.0001){
+    /* master hue rotation (YIQ) - v1.9.15 */
+    float ha=u_hue*6.28318;
+    vec3 yiq=vec3(dot(c,vec3(0.299,0.587,0.114)),dot(c,vec3(0.596,-0.274,-0.322)),dot(c,vec3(0.211,-0.523,0.312)));
+    float ca=cos(ha),sa=sin(ha);
+    float ni=yiq.y*ca-yiq.z*sa, nq=yiq.y*sa+yiq.z*ca;
+    c=vec3(yiq.x+0.956*ni+0.619*nq, yiq.x-0.272*ni-0.647*nq, yiq.x-1.106*ni+1.703*nq);
+  }
+
   vec2 q = v_uv-0.5;
   c *= 1.0-u_vig*smoothstep(0.05,0.95,dot(q,q)*2.4);
   c += (h21(v_uv*vec2(1723.0,983.0)+fract(u_time)*17.0)-0.5)*u_grain;
+  if(u_white>0.5) c=vec3(1.0); /* white blackout: flat, after vig/grain */
   if(u_strobeOn>0.5){
     float s = step(0.5,fract(u_time*u_strobeRate));
     c *= mix(1.0,s,u_strobeAmt);
@@ -4677,22 +4699,40 @@ function renderBloomPost(inTex){
   quadDraw();
   return postT[5].tex;
 }
-function renderGrade(inTex,t){
-  const P=PROG.grade;
-  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
-  gl.viewport(0,0,canvas.width,canvas.height);
-  gl.useProgram(P);
-  setTex(P,'u_tex',0,inTex);
+function setGradeUniforms(P,t){
   gl.uniform1f(U(P,'u_bri'),PARAMS['P.bri'].map(eff('P.bri')));
   gl.uniform1f(U(P,'u_con'),PARAMS['P.con'].map(eff('P.con')));
   gl.uniform1f(U(P,'u_sat2'),PARAMS['P.sat'].map(eff('P.sat')));
   gl.uniform1f(U(P,'u_vig'),PARAMS['P.vig'].map(eff('P.vig')));
   gl.uniform1f(U(P,'u_grain'),PARAMS['P.grain'].map(eff('P.grain')));
   gl.uniform1f(U(P,'u_time'),t);
-  gl.uniform1f(U(P,'u_master'),PARAMS['P.master'].map(eff('P.master'))*(S.blackout?0:1));
+  /* v1.9.15: blackout types - black cuts master, white forces white,
+     freeze is handled in the loop (frame hold), master fader applies */
+  const bt=(S.bltype||'black');
+  gl.uniform1f(U(P,'u_master'),PARAMS['P.master'].map(eff('P.master'))*((S.blackout&&bt==='black')?0:1));
+  gl.uniform1f(U(P,'u_white'),(S.blackout&&bt==='white')?1:0);
+  gl.uniform1f(U(P,'u_hue'),S.ghue||0);
   gl.uniform1f(U(P,'u_strobeOn'),S.strobeOn?1:0);
   gl.uniform1f(U(P,'u_strobeRate'),PARAMS['P.srate'].map(eff('P.srate')));
   gl.uniform1f(U(P,'u_strobeAmt'),PARAMS['P.samt'].map(eff('P.samt')));
+}
+function renderGrade(inTex,t){
+  const P=PROG.grade;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.viewport(0,0,canvas.width,canvas.height);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,inTex);
+  setGradeUniforms(P,t);
+  quadDraw();
+}
+/* phone: the same master grade rendered into a target (v1.9.15) */
+function renderGradeInto(inTex,T,t){
+  const P=PROG.grade; if(!P) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
+  gl.viewport(0,0,T.w,T.h);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,inTex);
+  setGradeUniforms(P,t);
   quadDraw();
 }
 
@@ -4777,6 +4817,7 @@ function tapTempo(){
     if(typeof prmSend==='function'&&typeof linkLastSeen!=='undefined'&&performance.now()-linkLastSeen<5000)
       prmSend({type:'linkset',bpm:S.bpm});
     $('bpm').textContent=S.bpm;
+    const mb1=$('mbpm'); if(mb1) mb1.textContent=S.bpm;
     saveState();
   }
 }
@@ -4810,7 +4851,7 @@ function bpmSet(b){
   b=clamp(Math.round(b),40,240);
   const ph=beatsNow();
   S.bpm=b; beatT0=performance.now()/1000-ph*60/b;
-  $('bpm').textContent=b; saveState();
+  $('bpm').textContent=b; const mb0=$('mbpm'); if(mb0) mb0.textContent=b; saveState();
 }
 function quantizeFire(i,k){
   const q=SNAP_Q[S.snap||'bar']||0;
@@ -6756,11 +6797,46 @@ function pumpThumbs(t,n){
     done++;
   }
 }
+/* ---------- master bar (v1.9.15): lives inside the Output panel ----------
+   BPM / shader speed / hue / strobe / blackout types / master fader - the
+   show basics, always riding with the output monitor (and its pin). */
+function syncMasterBar(){
+  const b=$('mbpm'); if(b) b.textContent=S.bpm||120;
+  const sp=$('mbSpeed'); if(sp) sp.value=(S.gspeed===undefined?1:S.gspeed);
+  const hu=$('mbHue'); if(hu) hu.value=S.ghue||0;
+  const sr=$('mbSRate'); if(sr) sr.value=(S.params['P.srate']!==undefined)?S.params['P.srate']:PARAMS['P.srate'].def;
+  const mm=$('mbMaster'); if(mm) mm.value=(S.params['P.master']!==undefined)?S.params['P.master']:1;
+  const st=$('mbStrobe'); if(st) st.classList.toggle('on',!!S.strobeOn);
+  const bk=$('mbBlack'); if(bk) bk.classList.toggle('armed',!!S.blackout);
+  const bt=$('mbBlType'); if(bt) bt.value=S.bltype||'black';
+}
+function wireMasterBar(){
+  const dn=$('mbpmDn'), up=$('mbpmUp'), tp=$('mbTap');
+  if(dn) dn.addEventListener('click',()=>bpmSet((S.bpm||120)-1));
+  if(up) up.addEventListener('click',()=>bpmSet((S.bpm||120)+1));
+  if(tp) tp.addEventListener('click',()=>tapTempo());
+  const sp=$('mbSpeed');
+  if(sp) sp.addEventListener('input',()=>{ S.gspeed=parseFloat(sp.value); saveState(); });
+  const hu=$('mbHue');
+  if(hu) hu.addEventListener('input',()=>{ S.ghue=parseFloat(hu.value); saveState(); });
+  const sr=$('mbSRate');
+  if(sr) sr.addEventListener('input',()=>setParam('P.srate',parseFloat(sr.value),sr));
+  const mm=$('mbMaster');
+  if(mm) mm.addEventListener('input',()=>setParam('P.master',parseFloat(mm.value),mm));
+  const st=$('mbStrobe');
+  if(st) st.addEventListener('click',()=>{ S.strobeOn=!S.strobeOn; st.classList.toggle('on',S.strobeOn); saveState(); });
+  const bk=$('mbBlack');
+  if(bk) bk.addEventListener('click',()=>toggleBlackout());
+  const bt=$('mbBlType');
+  if(bt) bt.addEventListener('change',()=>{ S.bltype=bt.value; saveState(); });
+}
 /* ---------- blackout ---------- */
 function toggleBlackout(){
   S.blackout=!S.blackout;
+  if(!S.blackout) S._frz=null;
   const b=$('btnBlackout'); if(b) b.classList.toggle('armed',!!S.blackout);
   const cb=$('btnCompB'); if(cb) cb.classList.toggle('onB',!!S.blackout);
+  const mb=$('mbBlack'); if(mb) mb.classList.toggle('armed',!!S.blackout);
   saveState(); if(typeof broadcastState==='function') broadcastState();
 }
 function syncTransport(){
@@ -6770,6 +6846,7 @@ function syncTransport(){
   const bp=$('bpm'); if(bp) bp.textContent=S.bpm;
   const ps=$('btnPause'); if(ps) ps.classList.toggle('on',pausedBeats!==null);
   const au=$('btnAuto'); if(au) au.classList.toggle('on',!!S.autopilot);
+  if(typeof syncMasterBar==='function') syncMasterBar();
 }
 /* ---------- post fx / master / dashboard / perform ---------- */
 function fxHead(parent, title, key){
@@ -7238,6 +7315,70 @@ function convertConstFloats(code){
   return {code:out, defs:defs};
 }
 /* Compile + register an import. Returns source index (>=5), or -1. */
+/* ---------- factory sources (v1.9.15): the swipes ----------
+   Stock Shadertoy-style sources registered through the same import
+   pipeline as user .txt files - SPEED/WIDTH consts become knobs
+   automatically. importShader dedupes by code, so this is idempotent
+   across boots and never duplicates. */
+const FACTORY_SRC=[
+ ['Swipe Left',
+"const float SPEED = 0.30;\n"+
+"const float WIDTH = 0.45;\n"+
+"void mainImage(out vec4 O, in vec2 fc){\n"+
+"  vec2 uv = fc / iResolution.xy;\n"+
+"  float head = fract(iTime * SPEED) * (1.0 + 2.0*WIDTH) - WIDTH;\n"+
+"  float d = abs((1.0-uv.x) - head) / WIDTH;\n"+
+"  float band = pow(clamp(1.0 - d, 0.0, 1.0), 2.0);\n"+
+"  vec3 col = mix(vec3(1.0,0.25,0.9), vec3(0.25,0.9,1.0), uv.y) * band;\n"+
+"  col += vec3(1.0) * pow(clamp(1.0-d,0.0,1.0), 8.0);\n"+
+"  O = vec4(col, 1.0);\n"+
+"}\n"],
+ ['Swipe Right',
+"const float SPEED = 0.30;\n"+
+"const float WIDTH = 0.45;\n"+
+"void mainImage(out vec4 O, in vec2 fc){\n"+
+"  vec2 uv = fc / iResolution.xy;\n"+
+"  float head = fract(iTime * SPEED) * (1.0 + 2.0*WIDTH) - WIDTH;\n"+
+"  float d = abs(uv.x - head) / WIDTH;\n"+
+"  float band = pow(clamp(1.0 - d, 0.0, 1.0), 2.0);\n"+
+"  vec3 col = mix(vec3(1.0,0.25,0.9), vec3(0.25,0.9,1.0), uv.y) * band;\n"+
+"  col += vec3(1.0) * pow(clamp(1.0-d,0.0,1.0), 8.0);\n"+
+"  O = vec4(col, 1.0);\n"+
+"}\n"],
+ ['Swipe Up',
+"const float SPEED = 0.30;\n"+
+"const float WIDTH = 0.45;\n"+
+"void mainImage(out vec4 O, in vec2 fc){\n"+
+"  vec2 uv = fc / iResolution.xy;\n"+
+"  float head = fract(iTime * SPEED) * (1.0 + 2.0*WIDTH) - WIDTH;\n"+
+"  float d = abs(uv.y - head) / WIDTH;\n"+
+"  float band = pow(clamp(1.0 - d, 0.0, 1.0), 2.0);\n"+
+"  vec3 col = mix(vec3(1.0,0.25,0.9), vec3(0.25,0.9,1.0), uv.x) * band;\n"+
+"  col += vec3(1.0) * pow(clamp(1.0-d,0.0,1.0), 8.0);\n"+
+"  O = vec4(col, 1.0);\n"+
+"}\n"],
+ ['Swipe Down',
+"const float SPEED = 0.30;\n"+
+"const float WIDTH = 0.45;\n"+
+"void mainImage(out vec4 O, in vec2 fc){\n"+
+"  vec2 uv = fc / iResolution.xy;\n"+
+"  float head = fract(iTime * SPEED) * (1.0 + 2.0*WIDTH) - WIDTH;\n"+
+"  float d = abs((1.0-uv.y) - head) / WIDTH;\n"+
+"  float band = pow(clamp(1.0 - d, 0.0, 1.0), 2.0);\n"+
+"  vec3 col = mix(vec3(1.0,0.25,0.9), vec3(0.25,0.9,1.0), uv.x) * band;\n"+
+"  col += vec3(1.0) * pow(clamp(1.0-d,0.0,1.0), 8.0);\n"+
+"  O = vec4(col, 1.0);\n"+
+"}\n"]
+];
+function ensureFactorySources(){
+  let added=false;
+  for(const [nm,code] of FACTORY_SRC){
+    const before=S.imports.length;
+    importShader(nm,code);
+    if(S.imports.length>before) added=true;
+  }
+  if(added){ saveState(); buildSrcBrowser(); }
+}
 function importShader(name, code){
   const raw=String(code||'');
   const clean=(String(name||'shader').replace(/\.(txt|glsl|frag|fs)$/i,'').trim().slice(0,40))||'shader';
@@ -7457,6 +7598,7 @@ function snapshot(){
     decks:S.decks, deckIdx:S.deckIdx, autopilot:S.autopilot,
     postBypass:S.postBypass, strobeOn:S.strobeOn, beatSync:S.beatSync,
     bpm:S.bpm, snap:S.snap||'bar', macros:S.macros, pluginCode:S.pluginCode, pluginUniforms:S.pluginUniforms, imports:S.imports, midi:S.midi,
+    bltype:S.bltype||'black', ghue:S.ghue||0, gspeed:(S.gspeed===undefined?1:S.gspeed),
     mods:S.mods, graphs:S.graphs
   }));
 }
@@ -7505,6 +7647,9 @@ function applySnapshot(snap){
   buildDeck(); buildProps(); buildCompTab();
   buildFxBrowser(); buildSrcBrowser(); buildPerform();
   if(typeof neOpen!=='undefined'&&neOpen){ drawNodes(); drawWires(); renderNodeProps(null); }
+  if(snap.bltype) S.bltype=snap.bltype;
+  if(snap.ghue!==undefined) S.ghue=snap.ghue;
+  if(snap.gspeed!==undefined) S.gspeed=snap.gspeed;
   syncTopToggles(); drawPreview(); syncTransport();
   $('bpm').textContent=S.bpm;
   saveState();
@@ -8751,6 +8896,13 @@ function loop(){
   requestAnimationFrame(loop);
   const now=performance.now()/1000;
   const t=now-tStart;
+  const gt=t*(S.gspeed||1); /* v1.9.15: master shader speed - sources/FX only */
+  /* freeze blackout type: render one fresh frame, then hold it */
+  let freezeHold=false;
+  if(S.blackout&&(S.bltype||'black')==='freeze'){
+    if(S._frz==='hold') freezeHold=true;
+    S._frz='hold';
+  }else S._frz=null;
   qualityAutoTick(now);
   lastT=now;
   if(shPrevT<0) shPrevT=t; shDt=t-shPrevT; shPrevT=t; shFrame++;
@@ -8771,9 +8923,12 @@ function loop(){
        post chain + grade. Any failure falls back to the old single-source
        direct render, so this change can never black the phone output. */
     try{
-      for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
-      renderComposite(t);
-      pc=compT.tex;
+      if(freezeHold){ pc=compT.tex; }
+      else{
+        for(let i=0;i<numLayers();i++){ renderLayer(i,gt); renderTransMix(i,now); }
+        renderComposite(gt);
+        pc=compT.tex;
+      }
     }catch(e){
       try{
         let src=null, li=0;
@@ -8791,7 +8946,7 @@ function loop(){
           /* render source to compT, then grade to canvas */
           const savedGraphs=S.graphs;
           S.graphs=null; /* bypass graphs */
-          try{ renderClipSource(li,t,src,compT); }
+          try{ renderClipSource(li,gt,src,compT); }
           finally{ S.graphs=savedGraphs; }
           pc=compT.tex;
         }else{
@@ -8804,15 +8959,18 @@ function loop(){
       }catch(e2){ pc=compT.tex; }
     }
   }else{
-    for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
-    renderComposite(t);
-    /* v1.9.13: no fixed post chain - composition effects are the chain the
-       user builds (below). Feedback/Kaleido/etc. all live in that chain. */
-    pc=compT.tex;
+    if(freezeHold){ pc=compT.tex; }
+    else{
+      for(let i=0;i<numLayers();i++){ renderLayer(i,gt); renderTransMix(i,now); }
+      renderComposite(gt);
+      /* v1.9.13: no fixed post chain - composition effects are the chain the
+         user builds (below). Feedback/Kaleido/etc. all live in that chain. */
+      pc=compT.tex;
+    }
   }
   /* composition FX chain - the one the user builds (clips/layers deal) */
   ensureFxChains();
-  if(S.compFx&&S.compFx.length){
+  if(!freezeHold&&S.compFx&&S.compFx.length){
     ensureFxScratch();
     /* v1.9.13: the chain's working target is fxScratch2, NOT fxScratch -
        chain stages render into fxScratch as temp and copy back, so passing
@@ -8822,14 +8980,35 @@ function loop(){
     gl.viewport(0,0,fxScratch2.w,fxScratch2.h);
     const CP=PROG.copy; gl.useProgram(CP);
     setTex(CP,'u_tex',0,pc); quadDraw();
-    applyFxChain(fxScratch2,S.compFx,t);
+    applyFxChain(fxScratch2,S.compFx,gt);
     pc=fxScratch2.tex;
   }
   if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
     /* v1.9.13: the phone screen is the #gl2d readback of compT - land the
        FINAL image (composite + built comp chain) there, or the chain is
        invisible even though it rendered. */
-    if(pc&&pc!==compT.tex){
+    /* v1.9.15: master pass - when master hue / strobe / blackout is active,
+       the grade program lands the final image in compT (this is also what
+       makes strobe + blackout work on phone at all). Otherwise the plain
+       v1.9.13 copy-back, byte-identical to before. */
+    /* freeze hold: compT already carries the graded arm frame - re-grading
+       it every frame would compound vignette/grain, so held frames skip */
+    const needMaster=!freezeHold&&!!(S.strobeOn||S.blackout||(S.ghue&&Math.abs(S.ghue)>0.0001));
+    if(needMaster&&PROG.grade){
+      try{
+        ensureFxScratch();
+        let srcTex=pc;
+        if(srcTex===compT.tex){
+          gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch2.fb);
+          gl.viewport(0,0,fxScratch2.w,fxScratch2.h);
+          const CP8=PROG.copy; gl.useProgram(CP8);
+          setTex(CP8,'u_tex',0,compT.tex); quadDraw();
+          srcTex=fxScratch2.tex;
+        }
+        renderGradeInto(srcTex,compT,t);
+        pc=compT.tex;
+      }catch(e){}
+    }else if(pc&&pc!==compT.tex){
       try{
         gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
         gl.viewport(0,0,compT.w,compT.h);
@@ -8838,7 +9017,7 @@ function loop(){
         pc=compT.tex;
       }catch(e){}
     }
-    /* phone: direct blit, no grade (grade shader may fail on mobile) */
+    /* phone: blit compT to the WebGL canvas (visible surface = #gl2d below) */
     try{
       const CP=PROG.copy;
       gl.bindFramebuffer(gl.FRAMEBUFFER,null);
@@ -8876,13 +9055,13 @@ function loop(){
   /* live clip preview: throttled to every 3rd frame (the readPixels stall was
      the dominant frame cost) and skipped while the node editor covers the deck.
      Uses its own counter — `frames` resets every 0.5s for the fps meter. */
-  if(!neOpen && (pvTick=(pvTick+1)%3)===0) updatePreview(t);
+  if(!neOpen && (pvTick=(pvTick+1)%3)===0) updatePreview(gt);
   /* deck thumbnails: amortized — 2 renders/frame max until the queue drains,
      zero per-frame cost afterwards */
   if(!neOpen && thumbQueue.length){
     const isPhone=window.HM_DEVICE&&HM_DEVICE.device==='phone';
     /* on phone, thumbnails yield to the main output when struggling */
-    if(!isPhone||qFpsAvg>20) pumpThumbs(t,isPhone?1:2);
+    if(!isPhone||qFpsAvg>20) pumpThumbs(gt,isPhone?1:2);
   }
   frames++;
   if(now-fpsT>0.5){
@@ -8934,12 +9113,14 @@ function init(){
   syncQualityUI();
   $('bpm').textContent=S.bpm;
   wireStatic();
+  wireMasterBar(); syncMasterBar();
   if(!initGL()) return;
   initQuad();
   if(!compileAll()) return;
   buildTargets();
   compilePlugin(true);
   recompileImports();
+  ensureFactorySources();
   initShaderIO();
   initMidi();
   /* phone: auto-fire a clip on load so output is never black */
@@ -9350,6 +9531,17 @@ setInterval(broadcastState,500);
 </script>
 <script src="vendor/paho-mqtt-min.js"></script>
 
+<style>
+#masterbar{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:7px 10px;background:#14161c;border-top:1px solid var(--line)}
+#masterbar .mblab{font-size:10px;letter-spacing:.14em;color:var(--dim);font-weight:700;white-space:nowrap}
+#masterbar .mbgrp{display:flex;align-items:center;gap:6px;flex:1 1 150px;min-width:140px}
+#masterbar input[type=range]{flex:1;min-width:60px}
+#masterbar button{padding:6px 10px;font-size:12px;white-space:nowrap}
+#masterbar button.on{background:#0d3f3a;color:#5eead4;border-color:#2dd4bf}
+#masterbar button.armed{background:#7f1d2e;color:#ffb4ab;border-color:#f0524d}
+#masterbar #mbpm{font-size:15px;font-weight:700;min-width:34px;text-align:center}
+#masterbar select{background:#171a21;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 6px;font-size:12px}
+</style>
 <button id="btnBrowse" title="Browse effects and sources">Browse</button>
 <div id="placebar"><span id="placelab"></span><button id="placecancel">Cancel</button></div>
 <style>
@@ -9503,6 +9695,10 @@ function hmSyncPins(){
 }
 function hmInitPins(){
   if(!isPhoneDev()) return;
+  /* v1.9.15: Output starts pinned by default (his call) - the master bar
+     rides inside the Output panel, so the show controls pin with it.
+     Unpinning lasts for the session. */
+  if(hmPins.output===undefined) hmPins.output=true;
   for(const id of ['output','preview']){
     const panel=document.querySelector('.dockpanel[data-panel="'+id+'"]');
     const head=panel&&panel.querySelector('.dockhead');
@@ -9515,7 +9711,7 @@ function hmInitPins(){
   }
 }
 hmInitPins();
-document.addEventListener('DOMContentLoaded',()=>setTimeout(hmInitPins,60));
+document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{ hmInitPins(); hmSyncPins(); },60));
 window.addEventListener('resize',()=>{ if(hmPins.output||hmPins.preview) hmSyncPins(); });
 </script>
 </body>
