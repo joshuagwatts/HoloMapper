@@ -504,6 +504,7 @@ body.perform #performbar{display:block}
 /* phone: stacked panels, big touch targets, roomier clip grid */
 html[data-device="phone"] #main{overflow-y:auto;-webkit-overflow-scrolling:touch}
 html[data-device="phone"] .dockdiv{display:none}
+html[data-device="phone"] .dockhdiv{display:none}
 html[data-device="phone"] .dockpanel{min-height:0}
 html[data-device="phone"] .dockbody{overflow:visible}
 html[data-device="phone"] header#topbar{flex-wrap:wrap;height:auto;min-height:44px}
@@ -513,8 +514,8 @@ html[data-device="phone"] .lstrip{display:grid;grid-template-columns:minmax(0,1f
 html[data-device="phone"] .lstrip .lgut{grid-row:1;grid-column:1/3;display:flex;flex-direction:row;align-items:center;gap:8px;padding:8px}
 html[data-device="phone"] .lstrip .lgut .lrow1{display:flex;flex-direction:row;align-items:center;gap:8px}
 html[data-device="phone"] .lstrip .clipgrid{grid-row:2;grid-column:1;display:flex;flex-direction:row;overflow-x:auto;gap:8px;padding:8px;align-items:flex-start;-webkit-overflow-scrolling:touch}
-html[data-device="phone"] .lstrip .clip{flex:0 0 96px;height:54px;min-height:54px}
-html[data-device="phone"] .lstrip .vfad{grid-row:2;grid-column:2;width:100%;max-height:96px}
+html[data-device="phone"] .lstrip .clip{flex:0 0 120px;height:68px;min-height:68px}
+html[data-device="phone"] .lstrip .vfad{grid-row:2;grid-column:2;width:100%;max-height:110px}
 html[data-device="phone"] .clip{min-height:90px;font-size:12px}
 html[data-device="phone"] .clip .cname{font-size:10px;padding:4px 2px}
 /* phone: horizontal swipe between layers */
@@ -526,7 +527,7 @@ html[data-device="phone"] .fcol{flex:1}
 html[data-device="phone"] .mcol{display:none}
 html[data-device="phone"] .lstrip .lbsel{display:none}
 html[data-device="phone"] .lstrip .trow{display:none}
-html[data-device="phone"] .lstrip .vfad{max-height:96px}
+html[data-device="phone"] .lstrip .vfad{max-height:110px}
 /* nodes are desktop-only */
 html[data-device="phone"] #btnNodes{display:none}
 html[data-device="phone"] .clip{font-size:10px}
@@ -1018,6 +1019,7 @@ function dockHDivDown(e,colEl,pi1,pi2){
 let dockDrag=null,dockInd=null;
 
 function dockGripDown(e,pid){
+  if((window.HM_DEVICE&&HM_DEVICE.device)==='phone')return; /* no panel dragging on phone - layout is locked */
   if(e.button!==undefined&&e.button>0)return;
   e.preventDefault();
   const sx=e.clientX,sy=e.clientY;let on=false;
@@ -1195,8 +1197,9 @@ function dockPrune(){
 }
 
 /* ---------- persistence ---------- */
-function dockSave(){try{localStorage.setItem(dockKey(),dockSer());}catch(e){}}
+function dockSave(){if((window.HM_DEVICE&&HM_DEVICE.device)==='phone')return;try{localStorage.setItem(dockKey(),dockSer());}catch(e){}}
 function dockLoad(){
+  if((window.HM_DEVICE&&HM_DEVICE.device)==='phone')return null; /* phone layout is locked to the clean stacked default - no saved resize states */
   try{
     const raw=localStorage.getItem(dockKey());if(!raw)return null;
     const L=JSON.parse(raw);
@@ -1336,7 +1339,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.2';
+const APP_VERSION='1.9.3';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
