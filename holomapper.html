@@ -1339,7 +1339,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.4';
+const APP_VERSION='1.9.5';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -9070,8 +9070,9 @@ setInterval(broadcastState,500);
     background:var(--panel2);border:1px solid var(--acc,#8b5cf6);color:var(--txt);border-radius:999px;
     padding:12px 18px;font-size:14px;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,.55);cursor:pointer}
   html[data-device="phone"] #btnBrowse.on{border-color:var(--sel);color:var(--sel)}
-  html[data-device="phone"] .dockpanel[data-panel="browser"]{position:fixed;top:0;right:0;bottom:0;width:84vw;max-width:340px;z-index:65;
+  html[data-device="phone"] .dockpanel[data-panel="browser"]{position:fixed;top:calc(52px + env(safe-area-inset-top));right:0;height:50vh;width:62vw;max-width:280px;z-index:65;
     transform:translateX(106%);transition:transform .22s ease;background:var(--panel);
+    border:1px solid var(--line);border-right:none;border-radius:12px 0 0 12px;
     box-shadow:-10px 0 34px rgba(0,0,0,.6);display:flex;flex-direction:column}
   html[data-device="phone"] .dockpanel[data-panel="browser"].hm-open{transform:translateX(0)}
   html[data-device="phone"] .dockpanel[data-panel="browser"] .dockbody{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1}
@@ -9102,7 +9103,6 @@ function armPlace(pm){
   $('placelab').textContent='Placing '+pm.label+' - tap a clip';
   $('placebar').classList.add('on');
   document.body.classList.add('placing');
-  closeBrowseDrawer();
 }
 function disarmPlace(){
   placeMode=null;
