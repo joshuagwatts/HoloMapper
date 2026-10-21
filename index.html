@@ -1341,7 +1341,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.12';
+const APP_VERSION='1.9.13';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -3925,9 +3925,14 @@ function renderWebcam(i,t,T){
    Each applier takes (T, inst, t): renders the FX onto target T in place.
    Uses fxScratch as a ping-pong target. */
 let fxScratch=null;
+let fxScratch2=null; /* v1.9.13: the comp chain's working target - it must
+   differ from fxScratch, which the chain stages use as their temp */
 function ensureFxScratch(){
   if(!fxScratch||!fxScratch.ok||fxScratch.w!==RW||fxScratch.h!==RH){
     fxScratch=makeTarget(RW,RH);
+  }
+  if(!fxScratch2||!fxScratch2.ok||fxScratch2.w!==RW||fxScratch2.h!==RH){
+    fxScratch2=makeTarget(RW,RH);
   }
 }
 function fxVal(inst,pid){
@@ -6192,10 +6197,8 @@ function buildCompTab(){
   ckL.appendChild(ck); ckL.appendChild(document.createTextNode('BeatSync speeds'));
   krow.appendChild(ckL); bC.appendChild(krow);
   paramRow(bC,'P.master','Master');
-  /* post fx chain */
-  const sFx=el('details','sec'); sFx.id='secPostFx'; /* v1.9.12: collapsed by default - the built chain above is the main composition tool; this fixed chain still renders for saved looks */
-  const sumF=el('summary'); sumF.innerHTML='Post FX Chain <span class="x">feedback &#8594; kaleido &#8594; glitch &#8594; mirror &#8594; mask &#8594; colorize &#8594; bloom</span>'; sFx.appendChild(sumF);
-  const bFx=el('div','secbody'); bFx.id='postfx'; sFx.appendChild(bFx); host.appendChild(sFx);
+  /* v1.9.13: fixed Post FX Chain section removed - the built Composition
+     FX Chain above replaces it */
   /* master grade */
   const sM=el('details','sec'); sM.open=true;
   const sumM=el('summary'); sumM.innerHTML='Master <span class="x">grade + strobe</span>'; sM.appendChild(sumM);
@@ -6245,7 +6248,7 @@ function buildCompTab(){
   pk.appendChild(bCc); pk.appendChild(bPd); pk.appendChild(bLd); bP.appendChild(pk); bP.appendChild(fi);
   const po=el('div'); po.id='plugok'; bP.appendChild(po);
   const pe=el('pre'); pe.id='plugerr'; bP.appendChild(pe);
-  buildPostFx(); buildMaster(); buildDashboard(); renderMidiList();
+  buildMaster(); buildDashboard(); renderMidiList();
 }
 /* ---------- browser: effects / sources ---------- */
 const FXLIST=[['feedback','Feedback'],['kaleido','Kaleidoscope'],['glitch','RGB Split / Glitch'],['twitch','Twitch'],['warp','Motion Warp'],['colorphase','Color Phase'],['mirror','Mirror'],['automask','Auto Mask'],['colorize','Colorize'],['bloompost','Bloom'],['grade','Grade']];
@@ -6339,24 +6342,7 @@ function buildFxBrowser(){
     r.title='Drag onto a clip/layer, or click to add to selected';
     host.appendChild(r);
   });
-  host.appendChild(el('div','fxsep','— Composition FX —'));
-  FXLIST.forEach(([key,name])=>{
-    const r=el('div','fxrow');
-    const nm=el('span','fxn',name);
-    nm.addEventListener('click',()=>setPTab('comp'));
-    r.appendChild(nm);
-    if(S.postBypass.hasOwnProperty(key)){
-      const b=el('button','fxbyp'+(S.postBypass[key]?' off':''),'B');
-      b.title='Bypass '+name;
-      b.addEventListener('click',(e)=>{ e.stopPropagation(); S.postBypass[key]=!S.postBypass[key]; saveState(); buildFxBrowser(); buildPostFx(); });
-      r.appendChild(b);
-    } else {
-      const tag=el('span','dim','master'); r.appendChild(tag);
-    }
-    r.addEventListener('click',()=>setPTab('comp'));
-    host.appendChild(r);
-  });
-  host.appendChild(mkHint('Drag effects onto deck clips/layers. B toggles bypass. Click a row to open the Composition panel.'));
+  host.appendChild(mkHint('Drag effects onto deck clips/layers - or onto the Composition tab to build the composition chain.'));
 }
 function buildSrcBrowser(){
   const host=$('btab-src'); if(!host) return; host.innerHTML='';
@@ -6622,24 +6608,6 @@ function buildPostFx(){
   paramRow(host,'P.czhueA','Hue A'); paramRow(host,'P.czhueB','Hue B');
   fxHead(host,'Bloom','bloompost');
   paramRow(host,'P.blthr','Threshold'); paramRow(host,'P.blstr','Strength');
-}
-/* v1.9.11: moving any post-stage control un-bypasses that stage - a stage
-   that ships bypassed otherwise eats slider moves with no visible change.
-   The bypass checkbox is updated in place (no rebuild: a drag may be live). */
-const POST_STAGE_OF={'P.trails':'feedback','P.zoom':'feedback','P.rot':'feedback','P.offx':'feedback','P.offy':'feedback','P.fbhue':'feedback','P.fbsat':'feedback',
-  'P.kseg':'kaleido','P.kang':'kaleido','P.gamt':'glitch',
-  'P.mirmode':'mirror','P.mirpos':'mirror',
-  'P.ammode':'automask','P.amthr':'automask','P.amsoft':'automask','P.amkey':'automask','P.aminv':'automask',
-  'P.czpal':'colorize','P.czamt':'colorize','P.czhueA':'colorize','P.czhueB':'colorize',
-  'P.blthr':'bloompost','P.blstr':'bloompost'};
-for(const _pid in POST_STAGE_OF){
-  (PARAM_HOOKS[_pid]=PARAM_HOOKS[_pid]||[]).push(()=>{
-    const _st=POST_STAGE_OF[_pid];
-    if(S.postBypass[_st]){
-      S.postBypass[_st]=false; saveState();
-      document.querySelectorAll('input[data-byp="'+_st+'"]').forEach(c=>{ c.checked=false; });
-    }
-  });
 }
 function buildMaster(){
   const host=$('master'); host.innerHTML='';
@@ -8604,22 +8572,6 @@ function loop(){
       for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
       renderComposite(t);
       pc=compT.tex;
-      /* v1.9.11: post chain runs on phone too (same stages as desktop, minus
-         grade). Result is copied back into compT so the visible 2D readback
-         shows it. Any failure leaves the plain composite - never black. */
-      try{
-        renderFeedback();
-        let q=fbT[fbRead].tex;
-        q=renderKaleido(q); q=renderGlitch(q,t); q=renderMirror(q);
-        q=renderAutoMask(q); q=renderColorize(q); q=renderBloomPost(q);
-        if(q&&q!==compT.tex){
-          gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
-          gl.viewport(0,0,compT.w,compT.h);
-          const CP2=PROG.copy; gl.useProgram(CP2);
-          setTex(CP2,'u_tex',0,q); quadDraw();
-        }
-        pc=compT.tex;
-      }catch(e2){ pc=compT.tex; }
     }catch(e){
       try{
         let src=null, li=0;
@@ -8652,30 +8604,38 @@ function loop(){
   }else{
     for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
     renderComposite(t);
-    renderFeedback();
-    /* post chain threads one texture through; bypassed stages are skipped
-       (pixel-identical passthrough) inside each stage function */
-    pc=fbT[fbRead].tex;
-    pc=renderKaleido(pc);
-    pc=renderGlitch(pc,t);
-    pc=renderMirror(pc);
-    pc=renderAutoMask(pc);
-    pc=renderColorize(pc);
-    pc=renderBloomPost(pc);
+    /* v1.9.13: no fixed post chain - composition effects are the chain the
+       user builds (below). Feedback/Kaleido/etc. all live in that chain. */
+    pc=compT.tex;
   }
-  /* v1.4: composition FX chain (Resolume-style) — applied after post chain */
+  /* composition FX chain - the one the user builds (clips/layers deal) */
   ensureFxChains();
   if(S.compFx&&S.compFx.length){
     ensureFxScratch();
-    /* copy pc to scratch, apply chain, use result */
-    gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch.fb);
-    gl.viewport(0,0,fxScratch.w,fxScratch.h);
+    /* v1.9.13: the chain's working target is fxScratch2, NOT fxScratch -
+       chain stages render into fxScratch as temp and copy back, so passing
+       fxScratch as the target made every stage sample the texture it was
+       rendering into (GL feedback loop: draw invalid, chain a no-op). */
+    gl.bindFramebuffer(gl.FRAMEBUFFER,fxScratch2.fb);
+    gl.viewport(0,0,fxScratch2.w,fxScratch2.h);
     const CP=PROG.copy; gl.useProgram(CP);
     setTex(CP,'u_tex',0,pc); quadDraw();
-    applyFxChain(fxScratch,S.compFx,t);
-    pc=fxScratch.tex;
+    applyFxChain(fxScratch2,S.compFx,t);
+    pc=fxScratch2.tex;
   }
   if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
+    /* v1.9.13: the phone screen is the #gl2d readback of compT - land the
+       FINAL image (composite + built comp chain) there, or the chain is
+       invisible even though it rendered. */
+    if(pc&&pc!==compT.tex){
+      try{
+        gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
+        gl.viewport(0,0,compT.w,compT.h);
+        const CP9=PROG.copy; gl.useProgram(CP9);
+        setTex(CP9,'u_tex',0,pc); quadDraw();
+        pc=compT.tex;
+      }catch(e){}
+    }
     /* phone: direct blit, no grade (grade shader may fail on mobile) */
     try{
       const CP=PROG.copy;
