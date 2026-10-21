@@ -1339,7 +1339,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.5';
+const APP_VERSION='1.9.6';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -5627,6 +5627,28 @@ function buildProps(){
     wrap.appendChild(mkHint('Click a deck clip to fire it. Right-click a clip to assign a source.'));
     host.appendChild(wrap);
     buildClipParamSection(host,i,src);
+    if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
+      /* v1.9.6: phone has no separate Clip panel - its FX sections live here */
+      const baseI=clipBaseAt(i,k);
+      if(baseI){
+        const bsec=el('div','psec');
+        bsec.appendChild(el('div','plab','Effect Clip \u2014 '+fxInstLabel(baseI)));
+        bsec.appendChild(el('div','dim',"Runs over the composite of the layers below this one. Strength = this layer's fader + blend mode. Stack more FX in the chain below."));
+        const bhost=el('div'); bsec.appendChild(bhost);
+        buildFxRack(bhost,[baseI],()=>{ buildProps(); buildDeck(); });
+        const bdel=bhost.querySelector('.fxcard .fxbtn.del'); if(bdel) bdel.remove();
+        const rm=el('button','fxbtn del','Remove effect clip');
+        rm.style.marginTop='6px';
+        rm.addEventListener('click',()=>{ S.clipBase[i][k]=null; saveState(); buildDeck(); buildProps(); });
+        bsec.appendChild(rm);
+        host.appendChild(bsec);
+      }
+      const fxsec=el('div','psec');
+      fxsec.appendChild(el('div','plab','FX Chain ('+S.clipFx[i][k].length+')'));
+      const fxhost=el('div'); fxsec.appendChild(fxhost);
+      buildFxRack(fxhost,S.clipFx[i][k],()=>buildProps());
+      host.appendChild(fxsec);
+    }
     return;
   }
   const i=Math.min(3,Math.max(0,sel.i||0)), L=S.layers[i];
@@ -9082,6 +9104,7 @@ setInterval(broadcastState,500);
   html[data-device="phone"] #placecancel{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
     border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer}
   html[data-device="phone"] body.placing .clip{outline:2px dashed var(--acc,#8b5cf6);outline-offset:-2px}
+  html[data-device="phone"] .dockpanel[data-panel="clip"]{display:none}
 }
 </style>
 <script>
