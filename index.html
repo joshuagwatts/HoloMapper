@@ -1341,7 +1341,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.10';
+const APP_VERSION='1.9.11';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -5245,7 +5245,13 @@ function buildDeck(){
   }
   buildDeckTabs();
   buildColHead();
-  const host=$('deck'); host.innerHTML='';
+  const host=$('deck');
+  /* v1.9.11: rebuilding the deck must not move the view - keep the layer
+     carousel and the deck scroll exactly where the user left them */
+  const _prevMD=host.querySelector('.maindeck');
+  const _prevSL=_prevMD?_prevMD.scrollLeft:0;
+  const _prevST=host.scrollTop;
+  host.innerHTML='';
   /* layer +/- controls */
   const lc=el('div','layerctl');
   const lm=el('button','lbtn','−'); lm.title='Remove layer'; lm.addEventListener('click',()=>setNumLayers(numLayers()-1));
@@ -5326,6 +5332,14 @@ function buildDeck(){
     const bS=el('button','tbtn bSolo'+(L.solo?' onS':''),'S'); bS.title='Solo layer';
     bS.addEventListener('click',()=>{ L.solo=!L.solo; saveState(); syncDeckSel(); });
     r1.appendChild(grip); r1.appendChild(nm); r1.appendChild(bX); r1.appendChild(bB); r1.appendChild(bS);
+    if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
+      /* v1.9.11: blend picker on the strip itself (the fader-column one is
+         hidden on phone) - same wiring as the desktop select */
+      const bg=document.createElement('select'); bg.className='lbsel2'; bg.title='Blend mode';
+      BLENDS.forEach((b,bi)=>bg.appendChild(new Option(b,bi))); bg.value=L.blend;
+      bg.addEventListener('change',()=>{ L.blend=parseInt(bg.value,10); bs.value=bg.value; saveState(); });
+      r1.appendChild(bg);
+    }
     gut.appendChild(r1);
     st.appendChild(gut);
     const grid=el('div','clipgrid');
@@ -5430,6 +5444,8 @@ function buildDeck(){
     if(!grouped.has(di)&&strips[di]) mainDeck.appendChild(strips[di]);
   }
   host.appendChild(mainDeck);
+  if(_prevSL) mainDeck.scrollLeft=_prevSL;
+  if(_prevST) host.scrollTop=_prevST;
   /* group containers with nested layers */
   (S.groups||[]).forEach((g,gi)=>{
     const gd=el('div','group');
@@ -6152,7 +6168,7 @@ function buildCompTab(){
   paramRow(bC,'P.master','Master');
   /* post fx chain */
   const sFx=el('details','sec'); sFx.open=true; sFx.id='secPostFx';
-  const sumF=el('summary'); sumF.innerHTML='Post FX Chain <span class="x">feedback &#8594; kaleido &#8594; glitch</span>'; sFx.appendChild(sumF);
+  const sumF=el('summary'); sumF.innerHTML='Post FX Chain <span class="x">feedback &#8594; kaleido &#8594; glitch &#8594; mirror &#8594; mask &#8594; colorize &#8594; bloom</span>'; sFx.appendChild(sumF);
   const bFx=el('div','secbody'); bFx.id='postfx'; sFx.appendChild(bFx); host.appendChild(sFx);
   /* master grade */
   const sM=el('details','sec'); sM.open=true;
@@ -6549,7 +6565,7 @@ function fxHead(parent, title, key){
   h.appendChild(mkSpan(null,title));
   const lab=el('label','ck byp');
   const ck=document.createElement('input'); ck.type='checkbox';
-  ck.checked=!!S.postBypass[key]; ck.title='Bypass '+title;
+  ck.checked=!!S.postBypass[key]; ck.title='Bypass '+title; ck.dataset.byp=key;
   ck.addEventListener('change',()=>{ S.postBypass[key]=ck.checked; saveState(); });
   lab.appendChild(ck); lab.appendChild(document.createTextNode('bypass'));
   h.appendChild(lab); parent.appendChild(h);
@@ -6580,6 +6596,24 @@ function buildPostFx(){
   paramRow(host,'P.czhueA','Hue A'); paramRow(host,'P.czhueB','Hue B');
   fxHead(host,'Bloom','bloompost');
   paramRow(host,'P.blthr','Threshold'); paramRow(host,'P.blstr','Strength');
+}
+/* v1.9.11: moving any post-stage control un-bypasses that stage - a stage
+   that ships bypassed otherwise eats slider moves with no visible change.
+   The bypass checkbox is updated in place (no rebuild: a drag may be live). */
+const POST_STAGE_OF={'P.trails':'feedback','P.zoom':'feedback','P.rot':'feedback','P.offx':'feedback','P.offy':'feedback','P.fbhue':'feedback','P.fbsat':'feedback',
+  'P.kseg':'kaleido','P.kang':'kaleido','P.gamt':'glitch',
+  'P.mirmode':'mirror','P.mirpos':'mirror',
+  'P.ammode':'automask','P.amthr':'automask','P.amsoft':'automask','P.amkey':'automask','P.aminv':'automask',
+  'P.czpal':'colorize','P.czamt':'colorize','P.czhueA':'colorize','P.czhueB':'colorize',
+  'P.blthr':'bloompost','P.blstr':'bloompost'};
+for(const _pid in POST_STAGE_OF){
+  (PARAM_HOOKS[_pid]=PARAM_HOOKS[_pid]||[]).push(()=>{
+    const _st=POST_STAGE_OF[_pid];
+    if(S.postBypass[_st]){
+      S.postBypass[_st]=false; saveState();
+      document.querySelectorAll('input[data-byp="'+_st+'"]').forEach(c=>{ c.checked=false; });
+    }
+  });
 }
 function buildMaster(){
   const host=$('master'); host.innerHTML='';
@@ -8544,6 +8578,22 @@ function loop(){
       for(let i=0;i<numLayers();i++){ renderLayer(i,t); renderTransMix(i,now); }
       renderComposite(t);
       pc=compT.tex;
+      /* v1.9.11: post chain runs on phone too (same stages as desktop, minus
+         grade). Result is copied back into compT so the visible 2D readback
+         shows it. Any failure leaves the plain composite - never black. */
+      try{
+        renderFeedback();
+        let q=fbT[fbRead].tex;
+        q=renderKaleido(q); q=renderGlitch(q,t); q=renderMirror(q);
+        q=renderAutoMask(q); q=renderColorize(q); q=renderBloomPost(q);
+        if(q&&q!==compT.tex){
+          gl.bindFramebuffer(gl.FRAMEBUFFER,compT.fb);
+          gl.viewport(0,0,compT.w,compT.h);
+          const CP2=PROG.copy; gl.useProgram(CP2);
+          setTex(CP2,'u_tex',0,q); quadDraw();
+        }
+        pc=compT.tex;
+      }catch(e2){ pc=compT.tex; }
     }catch(e){
       try{
         let src=null, li=0;
@@ -9147,6 +9197,8 @@ setInterval(broadcastState,500);
   html[data-device="phone"] .hmpin{margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--dim);
     border-radius:999px;min-height:26px;min-width:30px;padding:2px 8px;font-size:12px;cursor:pointer;line-height:1}
   html[data-device="phone"] .hmpin.on{color:var(--sel);border-color:var(--sel)}
+  /* v1.9.11: blend picker in the layer strip gut row */
+  html[data-device="phone"] .lbsel2{max-width:98px;font-size:12px;padding:2px 4px}
 </style>
 <script>
 'use strict';
