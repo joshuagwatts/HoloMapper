@@ -1336,7 +1336,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.8.0';
+const APP_VERSION='1.9.0';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -8844,7 +8844,7 @@ function cloudBrokers(){
   }catch(e){}
   return CLOUD_BROKERS.map(b=>[b[0],b[1],b[2],true]);
 }
-let cloudClient=null, cloudBroker='', cloudPeerOn=false;
+let cloudClient=null, cloudBroker='', cloudPeerOn=false, cloudConnecting=false;
 function cloudTopic(suffix){ return 'holomapper/v1/'+p2pCode+'/'+suffix; }
 function cloudSend(o){
   if(!cloudClient) return;
@@ -8858,29 +8858,41 @@ function cloudStop(){
   if(cloudClient){
     try{
       const off=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'engine',online:false}));
-      off.destinationName=cloudTopic('presence'); off.retained=true;
+      off.destinationName=cloudTopic('presence/engine'); off.retained=true;
       cloudClient.send(off);
       cloudClient.disconnect();
     }catch(e){}
     cloudClient=null;
   }
-  cloudPeerOn=false; cloudBroker='';
+  cloudPeerOn=false; cloudBroker=''; cloudConnecting=false;
 }
+/* Sequential rendezvous -- must match remote.html: walk the broker list in
+   order, stick to the first that answers. Racing brokers per-device put
+   console and phone on different brokers, where they can never meet. */
 function cloudStart(){
-  if(typeof Paho==='undefined'||!p2pCode||cloudClient) return;
+  if(typeof Paho==='undefined'||!p2pCode||cloudClient||cloudConnecting) return;
   if(typeof Paho!=='undefined' && !Paho.MQTT) Paho.MQTT={Client:Paho.Client, Message:Paho.Message};
-
-  let won=false, fails=0;
-  cloudBrokers().forEach(([host,port,path,ssl])=>{
+  cloudConnecting=true;
+  const brokers=cloudBrokers();
+  let idx=0;
+  const tryNext=()=>{
+    if(cloudClient){ cloudConnecting=false; return; }
+    if(idx>=brokers.length){
+      cloudConnecting=false;
+      setTimeout(()=>{ if(!cloudClient&&p2pCode) cloudStart(); }, 8000);
+      return;
+    }
+    const [host,port,path,ssl]=brokers[idx++];
     let c;
     try{ c=new Paho.MQTT.Client(host,port,path,'hm-eng-'+p2pCode+'-'+Math.random().toString(36).slice(2,9)); }
-    catch(e){ return; }
+    catch(e){ tryNext(); return; }
+    let settled=false;
     c.onConnectionLost=()=>{
-      if(cloudClient===c){ cloudClient=null; cloudPeerOn=false; renderSrvList(); setTimeout(cloudStart,2500); }
+      if(cloudClient===c){ cloudClient=null; cloudPeerOn=false; cloudConnecting=false; renderSrvList(); setTimeout(()=>{ if(p2pCode) cloudStart(); },2500); }
     };
     c.onMessageArrived=(m)=>{
       let d; try{ d=JSON.parse(m.payloadString); }catch(e){ return; }
-      if(m.destinationName.endsWith('/presence')){
+      if(m.destinationName.endsWith('/presence/remote')){
         if(d&&d.role==='remote'){ cloudPeerOn=!!d.online; if(cloudPeerOn) broadcastState(); renderSrvList(); }
         return;
       }
@@ -8891,22 +8903,22 @@ function cloudStart(){
       prmHandle(d);
     };
     const will=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'engine',online:false}));
-    will.destinationName=cloudTopic('presence'); will.retained=true;
-    c.connect({useSSL:ssl, timeout:9, willMessage:will,
+    will.destinationName=cloudTopic('presence/engine'); will.retained=true;
+    c.connect({useSSL:ssl, timeout:6, keepAliveInterval:30, willMessage:will,
       onSuccess:()=>{
-        if(won){ try{ c.disconnect(); }catch(e){} return; }
-        won=true; cloudClient=c; cloudBroker=host;
+        settled=true; cloudConnecting=false; cloudClient=c; cloudBroker=host;
         c.subscribe(cloudTopic('up'));
-        c.subscribe(cloudTopic('presence'));
+        c.subscribe(cloudTopic('presence/remote'));
         const pres=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'engine',online:true}));
-        pres.destinationName=cloudTopic('presence'); pres.retained=true;
+        pres.destinationName=cloudTopic('presence/engine'); pres.retained=true;
         c.send(pres);
-        prmStatus('cloud relay live');
+        prmStatus('cloud relay live ('+host+')');
         renderSrvList();
       },
-      onFailure:()=>{ fails++; if(fails>=cloudBrokers().length && !won){ setTimeout(()=>{ if(!cloudClient&&p2pCode) cloudStart(); }, 8000); } }
+      onFailure:()=>{ if(!settled) tryNext(); }
     });
-  });
+  };
+  tryNext();
 }
 function p2pRemoteUrl(){
   return p2pCode ? 'https://joshuagwatts.github.io/HoloMapper/remote.html?v='+APP_VERSION+'#r='+p2pCode : '';

@@ -301,7 +301,8 @@ async function p2pConnect(code){
   let any=false;
   const linkT0=Date.now();
   const linkTimer=setInterval(()=>{
-    if(p2pLinked){ clearInterval(linkTimer); return; }
+    if(p2pLinked||cloudLinked){ clearInterval(linkTimer); return; }
+    if(cloudClient){ return; } /* the cloud relay owns the status line now */
     setDot('', 'linking… '+Math.round((Date.now()-linkT0)/1000)+'s · room '+code+(liveTransports.length?(' · live: '+liveTransports.join('+')):' · starting transports…'));
   },1000);
   for(const [name,localUrl,cdnUrl] of strats){
@@ -317,7 +318,7 @@ async function p2pConnect(code){
       act.onMessage=(data,meta)=>{ onEngineMsg(data); };
       p2pSendFns.push((o)=>{ try{ const r=act.send(o); if(r&&r.catch) r.catch(()=>{}); }catch(e){} });
       room.onPeerJoin=(peerId)=>{ p2pLinked=true; clearInterval(linkTimer); setDot('on','connected via '+name); };
-      room.onPeerLeave=(peerId)=>{ p2pLinked=false; setDot('try','console left — waiting…'); };
+      room.onPeerLeave=(peerId)=>{ p2pLinked=false; if(!cloudLinked) setDot('try','console left - waiting...'); };
       any=true;
     }catch(e){ /* transport unavailable — the other may still work */ }
   }
@@ -341,7 +342,7 @@ function cloudBrokers(){
   }catch(e){}
   return CLOUD_BROKERS.map(b=>[b[0],b[1],b[2],true]);
 }
-let cloudClient=null, cloudBroker='', cloudPingIv=null;
+let cloudClient=null, cloudBroker='', cloudPingIv=null, cloudLinked=false, cloudConnecting=false;
 function cloudPublish(o){
   if(!cloudClient||!PAIRCODE) return;
   try{
@@ -350,60 +351,82 @@ function cloudPublish(o){
     cloudClient.send(m);
   }catch(e){}
 }
+/* Sequential rendezvous: BOTH sides walk the SAME broker list in the SAME
+   order and stick to the first broker that answers. The old code raced all
+   brokers in parallel on each device and kept whichever answered first --
+   console and phone routinely landed on DIFFERENT brokers (topics are not
+   shared between brokers) and never met: the link sat in 'linking' forever,
+   or worked by luck when both happened to pick the same one. Presence now
+   lives on per-role topics (presence/engine, presence/remote) -- sharing
+   one retained topic made the two sides overwrite each other's online flag,
+   which is what made a working link flap. */
 function cloudConnect(code){
-  if(typeof Paho==='undefined'||cloudClient) return;
+  if(typeof Paho==='undefined'||cloudClient||cloudConnecting) return;
   if(typeof Paho!=='undefined' && !Paho.MQTT) Paho.MQTT={Client:Paho.Client, Message:Paho.Message};
-
-  let won=false, fails=0;
-  cloudBrokers().forEach(([host,port,path,ssl])=>{
+  cloudConnecting=true;
+  const brokers=cloudBrokers();
+  let idx=0;
+  const tryNext=()=>{
+    if(cloudClient){ cloudConnecting=false; return; }
+    if(idx>=brokers.length){
+      cloudConnecting=false;
+      if(!cloudLinked) setDot('try','relay unreachable - retrying...');
+      setTimeout(()=>cloudConnect(code),6000);
+      return;
+    }
+    const [host,port,path,ssl]=brokers[idx++];
     let c;
     try{ c=new Paho.MQTT.Client(host,port,path,'hm-rem-'+code+'-'+Math.random().toString(36).slice(2,9)); }
-    catch(e){ return; }
+    catch(e){ tryNext(); return; }
+    let settled=false;
     c.onConnectionLost=()=>{
       if(cloudClient===c){
-        cloudClient=null;
+        cloudClient=null; cloudLinked=false;
         if(cloudPingIv){ clearInterval(cloudPingIv); cloudPingIv=null; }
-        setDot('try','relay dropped — reconnecting…');
+        setDot('try','relay dropped - reconnecting...');
         setTimeout(()=>cloudConnect(code),2500);
       }
     };
     c.onMessageArrived=(m)=>{
       let d; try{ d=JSON.parse(m.payloadString); }catch(e){ return; }
-      if(m.destinationName.endsWith('/presence')){
-        if(d&&d.role==='engine'){
+      if(m.destinationName.endsWith('/presence/engine')){
+        if(d&&d.type==='peer'){
           if(d.online){ cloudPublish({type:'hello'}); }
-          else setDot('try','console offline — retrying…');
+          else if(!cloudLinked) setDot('try','console offline - waiting...');
         }
         return;
       }
-      if(d&&d.type==='state') setDot('on','linked via cloud relay');
+      if(d&&d.type==='state'){ cloudLinked=true; setDot('on','linked via cloud relay'); }
       onEngineMsg(d);
     };
     const will=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'remote',online:false}));
-    will.destinationName='holomapper/v1/'+code+'/presence'; will.retained=true;
-    c.connect({useSSL:ssl, timeout:9, willMessage:will,
+    will.destinationName='holomapper/v1/'+code+'/presence/remote'; will.retained=true;
+    c.connect({useSSL:ssl, timeout:6, keepAliveInterval:30, willMessage:will,
       onSuccess:()=>{
-        if(won){ try{ c.disconnect(); }catch(e){} return; }
-        won=true; cloudClient=c; cloudBroker=host;
+        settled=true; cloudConnecting=false; cloudClient=c; cloudBroker=host;
         c.subscribe('holomapper/v1/'+code+'/down');
-        c.subscribe('holomapper/v1/'+code+'/presence');
+        c.subscribe('holomapper/v1/'+code+'/presence/engine');
         const pres=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'remote',online:true}));
-        pres.destinationName='holomapper/v1/'+code+'/presence'; pres.retained=true;
+        pres.destinationName='holomapper/v1/'+code+'/presence/remote'; pres.retained=true;
         c.send(pres);
         cloudPublish({type:'hello'});
         if(cloudPingIv) clearInterval(cloudPingIv);
         cloudPingIv=setInterval(()=>cloudPublish({type:'ping'}),5000);
-        setDot('try','relay live — finding console…');
+        if(!cloudLinked) setDot('try','relay live - finding console...');
       },
-      onFailure:()=>{ fails++; if(fails>=cloudBrokers().length && !won){ setDot('try','relay unreachable — retrying…'); setTimeout(()=>cloudConnect(code), 8000); } }
+      onFailure:()=>{ if(!settled) tryNext(); }
     });
-  });
+  };
+  tryNext();
 }
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden && PAIRCODE && !cloudClient && !cloudConnecting) cloudConnect(PAIRCODE);
+});
 addEventListener('pagehide',()=>{
   if(cloudClient){
     try{
       const off=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'remote',online:false}));
-      off.destinationName='holomapper/v1/'+PAIRCODE+'/presence'; off.retained=true;
+      off.destinationName='holomapper/v1/'+PAIRCODE+'/presence/remote'; off.retained=true;
       cloudClient.send(off);
     }catch(e){}
   }
@@ -648,7 +671,7 @@ function runSelftest(){
 if(SELFTEST) setTimeout(runSelftest,400);
 </script>
 <script>
-document.getElementById('remver').textContent='v1.8.0';
+document.getElementById('remver').textContent='v1.9.0';
 document.getElementById('btnFresh').addEventListener('click',()=>{
   location.replace(location.pathname+'?v='+Date.now()+location.hash);
 });
