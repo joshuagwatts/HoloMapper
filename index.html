@@ -682,6 +682,36 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
   border-top:1px solid var(--line);}
 .modcv.nodecv{width:100%;height:110px;}
 
+/* slices editor (v1.9.27) */
+#sliceov{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;z-index:60;
+  align-items:center;justify-content:center}
+#sliceov.show{display:flex}
+#sliceov .box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  padding:16px 20px;width:min(1120px,96vw);max-height:92vh;overflow:auto}
+#sliceov h2{color:var(--play);font-size:14px;margin:0}
+.slhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.slbody{display:flex;gap:16px;align-items:flex-start}
+.slside{width:300px;flex:none;display:flex;flex-direction:column;gap:10px}
+.slstage{flex:1;min-width:280px}
+.sltabs{display:flex;gap:6px;margin-bottom:8px}
+.sltabs button.on{background:#123b38;border-color:var(--play);color:var(--play);font-weight:700}
+#slcv{width:100%;height:auto;background:#000;border:1px solid var(--line);border-radius:6px;display:block}
+#sllist{display:flex;flex-direction:column;gap:4px}
+.slitem{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);
+  border-radius:6px;cursor:pointer;background:rgba(255,255,255,.02)}
+.slitem.on{border-color:var(--play);background:#123b3833}
+.slchip{width:12px;height:12px;border-radius:3px;flex:none}
+.sliname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+button.slon{flex:none;padding:2px 8px;font-size:11px}
+#slprops{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:10px}
+.slrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sllab{font-size:11px;color:var(--dim);min-width:34px}
+.slportnum{width:64px}
+.slname{flex:1;min-width:90px}
+.slchk{font-size:11px;color:var(--dim);display:inline-flex;align-items:center;gap:2px;cursor:pointer}
+.slval{font-size:11px;color:var(--dim);min-width:32px}
+.slrng{flex:1;min-width:90px}
+@media (max-width:760px){ .slbody{flex-direction:column} .slside{width:100%} }
 </style>
 </head>
 <body>
@@ -728,6 +758,7 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
     </span>
     <button id="btnDockReset" title="Reset panel layout to default">Reset layout</button>
     <button id="btnOutWin" title="Pop out a clean output window - drag it to the projector and fullscreen it there">Output &#8599;</button>
+    <button id="btnSlices" title="Slices - input/output mapping for projectors (L)">Slices</button>
     <button id="btnPerform" title="Perform mode (P)">PERFORM</button>
     <button id="btnFull" title="Fullscreen output (F)">Fullscreen</button>
   </header>
@@ -787,6 +818,7 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
         <div id="performbar">
           <div class="pmacros" id="pmacros"></div>
           <button id="btnOutWin2" title="Pop out a clean output window for the projector">Output &#8599;</button>
+          <button id="btnSlices2" title="Slices - input/output mapping for projectors">Slices</button>
           <div class="pexit">PERFORM MODE &mdash; ESC or P to exit &mdash; F fullscreen</div>
         </div>
       </div>
@@ -855,6 +887,24 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
   <div class="krow"><button id="btnPairClose">Close</button><button id="btnPairCopy">Copy URL</button><button id="btnPairDisc">Disconnect</button></div>
   <div class="hint" style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">
     Optional hub link: if a HoloMapper hub is running on this laptop, <button id="btnPrm" title="Connect to the hub server on this laptop">connect to it</button> — phones can also join through the hub on your Wi-Fi.
+  </div>
+</div></div>
+<!-- slices editor overlay (v1.9.27) -->
+<div id="sliceov"><div class="box">
+  <div class="slhead"><h2>Slices — input / output mapping</h2><button id="btnSliceClose">Close</button></div>
+  <div class="slbody">
+    <div class="slside">
+      <div id="sllist"></div>
+      <div class="krow"><button id="btnSliceAdd">+ Add slice</button><button id="btnSliceDup">Duplicate</button><button id="btnSliceDel">Delete</button></div>
+      <div id="slprops"></div>
+      <div class="krow"><button id="btnSliceReset">Reset slice</button><button id="btnSliceResetAll">Reset all</button></div>
+      <div class="hint">The output window / projector shows the mapping live. Turn on a slice's Test pattern to align its corners.</div>
+    </div>
+    <div class="slstage">
+      <div class="sltabs"><button id="btnSlTabIn">Input</button><button id="btnSlTabOut" class="on">Output</button></div>
+      <canvas id="slcv" width="960" height="540"></canvas>
+      <div class="hint" id="slhint"></div>
+    </div>
   </div>
 </div></div>
 <div id="ctxlost">
@@ -1356,7 +1406,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.26';
+const APP_VERSION='1.9.27';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1921,7 +1971,11 @@ function defaultState(){
     clipFx:Array.from({length:MAX_LAYERS},()=>Array.from({length:START_COLS},()=>[])),
     compFx:[],
     macros:Array.from({length:8},(_,i)=>({label:'M'+(i+1), val:0.5})),
-    midi:[], pluginCode:PLUGIN_DEFAULT, pluginUniforms:[], imports:[], mods:defaultMods()
+    midi:[], pluginCode:PLUGIN_DEFAULT, pluginUniforms:[], imports:[], mods:defaultMods(),
+    /* v1.9.27 slices: input rect (top-left origin, normalized) -> output
+       quad (4 corners TL,TR,BR,BL, top-left origin, normalized) */
+    slices:[{id:'sl1', name:'Slice 1', on:true, in:{x:0,y:0,w:1,h:1},
+      out:[[0,0],[1,0],[1,1],[0,1]], feather:0, flipH:false, flipV:false, test:false, op:1}]
   };
 }
 let S = defaultState();
@@ -2792,6 +2846,57 @@ in vec2 v_uv;
 uniform sampler2D u_tex;
 void main(){ O = vec4(texture(u_tex,v_uv).rgb,1.0); }
 `;
+/* Slice warp (v1.9.27): one draw per slice. u_invH maps output pixels
+   (y-up) into the slice's unit square (q.x left->right, q.y bottom->top,
+   i.e. v=1 is the TOP edge); the input rect (GL uv space) picks which part
+   of the composition lands inside the quad. Per-edge feather fades to
+   black - on a projector, black is no light, so feathered overlaps blend.
+   Adapted from the legacy mobile.html mapping stage, plus the input rect. */
+const SRC_SLICE = `#version 300 es
+precision highp float;
+uniform sampler2D u_tex;
+uniform mat3 u_invH;     /* output px (y-up) -> slice unit square */
+uniform vec4 u_inRect;   /* x, y (GL uv space), w, h */
+uniform vec4 u_feather;  /* L, R, B, T soft widths, unit-slice space */
+uniform vec2 u_flip;     /* 0/1 per axis */
+uniform float u_test;
+uniform float u_op;
+uniform vec3 u_tint;
+out vec4 O;
+float fe(float f, float d){ return f<=0.0001 ? 1.0 : clamp(d/f, 0.0, 1.0); }
+void main(){
+  vec3 qh = u_invH * vec3(gl_FragCoord.xy, 1.0);
+  vec2 q = qh.xy / max(qh.z, 1e-6);
+  if(q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) discard;
+  vec2 qf = mix(q, vec2(1.0) - q, u_flip);
+  vec4 col;
+  if(u_test > 0.5){
+    /* alignment test pattern: grid + rings + crosshair */
+    vec3 bg = vec3(0.02, 0.03, 0.05);
+    vec2 gp = q * 12.0;
+    vec2 gf = abs(fract(gp) - 0.5);
+    float fw = fwidth(gp.x) + 1e-4;
+    float db = 0.5 - min(gf.x, gf.y);
+    float grid = 1.0 - smoothstep(0.0, fw * 2.0, db);
+    float r = length(q - 0.5);
+    float dr = abs(fract(r * 5.0) - 0.5);
+    float rings = smoothstep(0.44, 0.5, dr);
+    float cross = (1.0 - smoothstep(0.0, 0.004, abs(q.x - 0.5))) +
+                  (1.0 - smoothstep(0.0, 0.004, abs(q.y - 0.5)));
+    vec3 tc = bg + u_tint * 0.9 * clamp(grid + rings, 0.0, 1.0)
+                 + vec3(0.9, 0.3, 0.3) * clamp(cross, 0.0, 1.0);
+    float cd = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y));
+    tc += vec3(0.9, 0.9, 0.2) * (1.0 - smoothstep(0.0, 0.03, cd));
+    col = vec4(tc, 1.0);
+  } else {
+    col = texture(u_tex, u_inRect.xy + qf * u_inRect.zw);
+  }
+  float e = fe(u_feather.x, q.x) * fe(u_feather.y, 1.0 - q.x) *
+            fe(u_feather.z, q.y) * fe(u_feather.w, 1.0 - q.y);
+  e = e * e * (3.0 - 2.0 * e);
+  O = vec4(col.rgb, col.a * u_op * e);
+}
+`;
 /* Layer clip transition: eased crossfade of the frozen outgoing frame (u_hold)
    into the freshly rendered incoming frame (u_new). u_p is the smoothstepped
    0..1 progress. */
@@ -3087,6 +3192,7 @@ function compileAll(){
     ['bloompost',SRC_BLOOMPOST],
     ['cam',     SRC_CAM],
     ['copy',    SRC_COPY],
+    ['slice',   SRC_SLICE],
     ['transmix',SRC_TRANSMIX],
     ['bloombp', SRC_BLOOMBP],
     ['bloomblur',SRC_BLOOMBLUR],
@@ -4933,6 +5039,372 @@ function renderGradeInto(inTex,T,t){
   setTex(P,'u_tex',0,inTex);
   setGradeUniforms(P,t);
   quadDraw();
+}
+
+/* ================= SLICES (v1.9.27) =================
+   Resolume-style slices: each slice takes an INPUT rectangle of the
+   composition and maps it onto an OUTPUT quad (4 corner pins) on the
+   output surface, with soft-edge feather, flip, opacity and an alignment
+   test pattern. The stage sits after the master grade. When every
+   enabled slice is the untouched full-frame default (or all slices are
+   off) the stage is bypassed and the previous display path runs
+   untouched. S.slices rides stateJSON, so localStorage, undo/redo,
+   presets and app-to-app sync all carry the mapping for free.
+   Coordinates: input rect and output corners are normalized, top-left
+   origin; out corners are ordered TL, TR, BR, BL. */
+const SLED={open:false, sel:0, tab:'out', drag:null, grabT:0, built:false};
+const SL_TINTS=['#2dd4bf','#f472b6','#facc15','#60a5fa','#a78bfa','#34d399','#fb923c','#f87171'];
+let slFrameCv=null; /* last grabbed composite frame (input-tab backdrop) */
+function defaultSlice(n){
+  return {id:'sl'+Math.random().toString(36).slice(2,8), name:'Slice '+(n||1), on:true,
+    in:{x:0,y:0,w:1,h:1}, out:[[0,0],[1,0],[1,1],[0,1]],
+    feather:0, flipH:false, flipV:false, test:false, op:1};
+}
+function ensureSlices(){
+  if(!Array.isArray(S.slices)||!S.slices.length) S.slices=[defaultSlice(1)];
+  S.slices.forEach((s,i)=>{
+    if(!s||typeof s!=='object'){ S.slices[i]=defaultSlice(i+1); return; }
+    if(typeof s.name!=='string'||!s.name) s.name='Slice '+(i+1);
+    if(typeof s.on!=='boolean') s.on=true;
+    if(!s.in||typeof s.in!=='object') s.in={x:0,y:0,w:1,h:1};
+    for(const k of ['x','y','w','h']) if(typeof s.in[k]!=='number'||isNaN(s.in[k])) s.in[k]=(k==='w'||k==='h')?1:0;
+    s.in.x=clamp(s.in.x,0,1); s.in.y=clamp(s.in.y,0,1);
+    s.in.w=clamp(s.in.w,0.02,1); s.in.h=clamp(s.in.h,0.02,1);
+    if(s.in.x+s.in.w>1) s.in.w=1-s.in.x;
+    if(s.in.y+s.in.h>1) s.in.h=1-s.in.y;
+    if(!Array.isArray(s.out)||s.out.length!==4) s.out=[[0,0],[1,0],[1,1],[0,1]];
+    s.out=s.out.map(p=>{ p=Array.isArray(p)?p:[0,0]; return [clamp(+p[0]||0,-0.5,1.5), clamp(+p[1]||0,-0.5,1.5)]; });
+    s.feather=clamp(+s.feather||0,0,0.5);
+    s.op=(s.op===undefined)?1:clamp(+s.op,0,1);
+    s.flipH=!!s.flipH; s.flipV=!!s.flipV; s.test=!!s.test;
+    if(!s.id) s.id='sl'+Math.random().toString(36).slice(2,8);
+  });
+  if(SLED.sel>=S.slices.length) SLED.sel=Math.max(0,S.slices.length-1);
+  if(SLED.sel<0) SLED.sel=0;
+}
+function sliceIsDefault(s){
+  if(!s) return true;
+  const OX=[0,1,1,0], OY=[0,0,1,1];
+  return Math.abs(s.in.x)<1e-6&&Math.abs(s.in.y)<1e-6&&Math.abs(s.in.w-1)<1e-6&&Math.abs(s.in.h-1)<1e-6
+    && s.out.every((p,i)=>Math.abs(p[0]-OX[i])<1e-6&&Math.abs(p[1]-OY[i])<1e-6)
+    && !s.feather&&!s.flipH&&!s.flipV&&!s.test&&(s.op===undefined||s.op>=0.999);
+}
+function slicesActive(){
+  if(typeof PROG==='undefined'||!PROG.slice) return false;
+  if(!Array.isArray(S.slices)) return false;
+  const en=S.slices.filter(s=>s&&s.on);
+  if(!en.length) return false;
+  if(en.length>1) return true;
+  return !sliceIsDefault(en[0]);
+}
+/* homography: 4 point pairs -> 3x3 (row-major, h33=1), DLT + Gauss-Jordan.
+   Same solver as the legacy mobile mapping stage, with explicit sources. */
+function solveH2(src, dst){
+  const M=[], v=[];
+  for(let k=0;k<4;k++){
+    const u=src[k][0], w=src[k][1], x=dst[k][0], y=dst[k][1];
+    M.push([u,w,1,0,0,0,-u*x,-w*x]); v.push(x);
+    M.push([0,0,0,u,w,1,-u*y,-w*y]); v.push(y);
+  }
+  const n=8;
+  for(let col=0;col<n;col++){
+    let piv=col;
+    for(let r=col+1;r<n;r++) if(Math.abs(M[r][col])>Math.abs(M[piv][col])) piv=r;
+    if(Math.abs(M[piv][col])<1e-12) continue;
+    const tM=M[col]; M[col]=M[piv]; M[piv]=tM;
+    const tv=v[col]; v[col]=v[piv]; v[piv]=tv;
+    const d=M[col][col];
+    for(let j=col;j<n;j++) M[col][j]/=d; v[col]/=d;
+    for(let r=0;r<n;r++){
+      if(r===col) continue;
+      const f=M[r][col]; if(f===0) continue;
+      for(let j=col;j<n;j++) M[r][j]-=f*M[col][j];
+      v[r]-=f*v[col];
+    }
+  }
+  return [v[0],v[1],v[2], v[3],v[4],v[5], v[6],v[7],1];
+}
+function inv3(m){
+  const a=m[0],b=m[1],c=m[2],d=m[3],e=m[4],f=m[5],g=m[6],h=m[7],i=m[8];
+  const A=e*i-f*h, B=f*g-d*i, C=d*h-e*g;
+  const det=a*A+b*B+c*C, id=1/((det===0)?1e-12:det);
+  return [A*id,(c*h-b*i)*id,(b*f-c*e)*id,
+          B*id,(a*i-c*g)*id,(c*d-a*f)*id,
+          C*id,(b*g-a*h)*id,(a*e-b*d)*id];
+}
+function slTintRGB(i){
+  const hx=SL_TINTS[i%SL_TINTS.length];
+  return [parseInt(hx.slice(1,3),16)/255, parseInt(hx.slice(3,5),16)/255, parseInt(hx.slice(5,7),16)/255];
+}
+/* Draw every enabled slice from srcTex into destT (null = the canvas).
+   Returns false when the stage cannot run (caller falls back). */
+function renderSlices(srcTex, destT){
+  const P=PROG.slice; if(!P||!srcTex) return false;
+  if(!Array.isArray(S.slices)) return false;
+  const W=destT?destT.w:canvas.width, H=destT?destT.h:canvas.height;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, destT?destT.fb:null);
+  gl.viewport(0,0,W,H);
+  gl.disable(gl.DEPTH_TEST);
+  gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(P);
+  setTex(P,'u_tex',0,srcTex);
+  const SRCQ=[[0,1],[1,1],[1,0],[0,0]]; /* TL,TR,BR,BL in unit space (v=1 = top) */
+  S.slices.forEach((s,i)=>{
+    if(!s||!s.on) return;
+    const dst=s.out.map(p=>[p[0]*W,(1-p[1])*H]);
+    const iH=inv3(solveH2(SRCQ,dst));
+    /* column-major upload of the row-major inverse */
+    gl.uniformMatrix3fv(U(P,'u_invH'),false,new Float32Array(
+      [iH[0],iH[3],iH[6], iH[1],iH[4],iH[7], iH[2],iH[5],iH[8]]));
+    gl.uniform4f(U(P,'u_inRect'), s.in.x, 1-s.in.y-s.in.h, s.in.w, s.in.h);
+    const f=s.feather||0;
+    gl.uniform4f(U(P,'u_feather'), f, f, f, f);
+    gl.uniform2f(U(P,'u_flip'), s.flipH?1:0, s.flipV?1:0);
+    gl.uniform1f(U(P,'u_test'), s.test?1:0);
+    gl.uniform1f(U(P,'u_op'), (s.op===undefined)?1:s.op);
+    const tc=slTintRGB(i);
+    gl.uniform3f(U(P,'u_tint'), tc[0], tc[1], tc[2]);
+    quadDraw();
+  });
+  gl.disable(gl.BLEND);
+  return true;
+}
+/* ---------- slice editor overlay ---------- */
+function toggleSlices(force){
+  const ov=$('sliceov'); if(!ov) return;
+  const show=(force!==undefined)?force:!ov.classList.contains('show');
+  ov.classList.toggle('show',show);
+  SLED.open=show;
+  if(show){ ensureSlices(); buildSliceUI(); drawSliceEditor(); }
+}
+function slCheck(val, fn){
+  const inp=document.createElement('input'); inp.type='checkbox'; inp.checked=!!val;
+  inp.addEventListener('change',()=>fn(inp.checked)); return inp;
+}
+function slNum(val, fn){
+  const inp=document.createElement('input'); inp.type='number'; inp.className='slportnum';
+  inp.step='0.5'; inp.value=Math.round(val*1000)/10;
+  inp.addEventListener('change',()=>{ const v=parseFloat(inp.value); if(!isNaN(v)) fn(v/100); });
+  return inp;
+}
+function slRange(val, min, max, fn){
+  const inp=document.createElement('input'); inp.type='range';
+  inp.min=min; inp.max=max; inp.step='0.005'; inp.value=val; inp.className='slrng';
+  inp.addEventListener('input',()=>fn(parseFloat(inp.value))); return inp;
+}
+function buildSliceList(){
+  const host=$('sllist'); if(!host) return;
+  host.innerHTML='';
+  ensureSlices();
+  S.slices.forEach((s,i)=>{
+    const row=el('div','slitem'+(i===SLED.sel?' on':''));
+    const chip=el('span','slchip'); chip.style.background=SL_TINTS[i%SL_TINTS.length];
+    row.appendChild(chip);
+    row.appendChild(el('span','sliname', s.name||('Slice '+(i+1))));
+    const tg=el('button','slon', s.on?'on':'off');
+    tg.addEventListener('click',(e)=>{ e.stopPropagation(); s.on=!s.on; tg.textContent=s.on?'on':'off'; saveState(); buildSliceProps(); drawSliceEditor(); });
+    row.appendChild(tg);
+    row.addEventListener('click',()=>{ SLED.sel=i; buildSliceList(); buildSliceProps(); drawSliceEditor(); });
+    host.appendChild(row);
+  });
+}
+function buildSliceProps(){
+  const host=$('slprops'); if(!host) return;
+  host.innerHTML='';
+  ensureSlices();
+  const s=S.slices[SLED.sel]; if(!s) return;
+  const nr=el('div','slrow');
+  nr.appendChild(el('span','sllab','Name'));
+  const ni=document.createElement('input'); ni.type='text'; ni.className='slname'; ni.value=s.name||'';
+  ni.addEventListener('change',()=>{ s.name=ni.value.slice(0,40)||s.name; saveState(); buildSliceList(); drawSliceEditor(); });
+  nr.appendChild(ni);
+  const ol=el('label','slchk'); ol.appendChild(slCheck(s.on, v=>{ s.on=v; saveState(); buildSliceList(); drawSliceEditor(); }));
+  ol.appendChild(document.createTextNode(' On')); nr.appendChild(ol);
+  host.appendChild(nr);
+  host.appendChild(el('div','plab','Input — which part of the composition'));
+  const rowX=el('div','slrow');
+  rowX.appendChild(el('span','sllab','X %')); rowX.appendChild(slNum(s.in.x, v=>{ s.in.x=clamp(v,0,0.98); if(s.in.x+s.in.w>1) s.in.w=1-s.in.x; saveState(); drawSliceEditor(); }));
+  rowX.appendChild(el('span','sllab','Y %')); rowX.appendChild(slNum(s.in.y, v=>{ s.in.y=clamp(v,0,0.98); if(s.in.y+s.in.h>1) s.in.h=1-s.in.y; saveState(); drawSliceEditor(); }));
+  host.appendChild(rowX);
+  const rowW=el('div','slrow');
+  rowW.appendChild(el('span','sllab','W %')); rowW.appendChild(slNum(s.in.w, v=>{ s.in.w=clamp(v,0.02,1-s.in.x); saveState(); drawSliceEditor(); }));
+  rowW.appendChild(el('span','sllab','H %')); rowW.appendChild(slNum(s.in.h, v=>{ s.in.h=clamp(v,0.02,1-s.in.y); saveState(); drawSliceEditor(); }));
+  host.appendChild(rowW);
+  host.appendChild(el('div','plab','Output corners — where it lands on the surface'));
+  const CN=['TL','TR','BR','BL'];
+  s.out.forEach((p,ci)=>{
+    const r=el('div','slrow');
+    r.appendChild(el('span','sllab',CN[ci]+' X %')); r.appendChild(slNum(p[0], v=>{ s.out[ci][0]=clamp(v,-0.5,1.5); saveState(); drawSliceEditor(); }));
+    r.appendChild(el('span','sllab','Y %')); r.appendChild(slNum(p[1], v=>{ s.out[ci][1]=clamp(v,-0.5,1.5); saveState(); drawSliceEditor(); }));
+    host.appendChild(r);
+  });
+  const fr=el('div','slrow'); fr.appendChild(el('span','sllab','Feather'));
+  const fl=el('span','slval', Math.round((s.feather||0)*100)+'%');
+  fr.appendChild(slRange(s.feather||0, 0, 0.5, v=>{ s.feather=v; fl.textContent=Math.round(v*100)+'%'; saveState(); drawSliceEditor(); }));
+  fr.appendChild(fl); host.appendChild(fr);
+  const or_=el('div','slrow'); or_.appendChild(el('span','sllab','Opacity'));
+  const ol2=el('span','slval', Math.round(((s.op===undefined)?1:s.op)*100)+'%');
+  or_.appendChild(slRange((s.op===undefined)?1:s.op, 0, 1, v=>{ s.op=v; ol2.textContent=Math.round(v*100)+'%'; saveState(); drawSliceEditor(); }));
+  or_.appendChild(ol2); host.appendChild(or_);
+  const tr=el('div','slrow');
+  const mkChk=(lab,val,fn)=>{ const l=el('label','slchk'); l.appendChild(slCheck(val,fn)); l.appendChild(document.createTextNode(' '+lab)); return l; };
+  tr.appendChild(mkChk('Flip H', s.flipH, v=>{ s.flipH=v; saveState(); }));
+  tr.appendChild(mkChk('Flip V', s.flipV, v=>{ s.flipV=v; saveState(); }));
+  tr.appendChild(mkChk('Test pattern', s.test, v=>{ s.test=v; saveState(); }));
+  host.appendChild(tr);
+}
+function buildSliceUI(){
+  buildSliceList(); buildSliceProps();
+  if(SLED.built) return; SLED.built=true;
+  $('btnSliceClose').addEventListener('click',()=>toggleSlices(false));
+  $('btnSlTabIn').addEventListener('click',()=>{ SLED.tab='in'; $('btnSlTabIn').classList.add('on'); $('btnSlTabOut').classList.remove('on'); drawSliceEditor(); });
+  $('btnSlTabOut').addEventListener('click',()=>{ SLED.tab='out'; $('btnSlTabOut').classList.add('on'); $('btnSlTabIn').classList.remove('on'); drawSliceEditor(); });
+  $('btnSliceAdd').addEventListener('click',()=>{ ensureSlices(); S.slices.push(defaultSlice(S.slices.length+1)); SLED.sel=S.slices.length-1; saveState(); buildSliceList(); buildSliceProps(); drawSliceEditor(); });
+  $('btnSliceDup').addEventListener('click',()=>{ const s=S.slices[SLED.sel]; if(!s) return; const c=JSON.parse(JSON.stringify(s)); c.id='sl'+Math.random().toString(36).slice(2,8); c.name=(s.name||'Slice')+' copy'; S.slices.splice(SLED.sel+1,0,c); SLED.sel++; saveState(); buildSliceList(); buildSliceProps(); drawSliceEditor(); });
+  $('btnSliceDel').addEventListener('click',()=>{ if(S.slices.length<=1){ toast('Keep at least one slice — switch it off instead'); return; } S.slices.splice(SLED.sel,1); SLED.sel=Math.max(0,SLED.sel-1); saveState(); buildSliceList(); buildSliceProps(); drawSliceEditor(); });
+  $('btnSliceReset').addEventListener('click',()=>{ const s=S.slices[SLED.sel]; if(!s) return; const keep={name:s.name, id:s.id}; Object.assign(s, defaultSlice(1), keep); saveState(); buildSliceList(); buildSliceProps(); drawSliceEditor(); });
+  $('btnSliceResetAll').addEventListener('click',()=>{ S.slices=[defaultSlice(1)]; SLED.sel=0; saveState(); buildSliceList(); buildSliceProps(); drawSliceEditor(); toast('Slices reset — output is full-frame again'); });
+  const cv=$('slcv');
+  cv.addEventListener('pointerdown',slPointerDown);
+  cv.addEventListener('pointermove',slPointerMove);
+  cv.addEventListener('pointerup',()=>{ if(SLED.drag){ SLED.drag=null; buildSliceProps(); saveState(); } });
+  cv.style.touchAction='none';
+}
+const SL_HIDS=['nw','n','ne','e','se','s','sw','w'];
+function slHandles(r,W,H){
+  const x=r.x*W, y=r.y*H, w=r.w*W, h=r.h*H;
+  return [[x,y],[x+w/2,y],[x+w,y],[x+w,y+h/2],[x+w,y+h],[x+w/2,y+h],[x,y+h],[x,y+h/2]];
+}
+function slPtInQuad(nx,ny,quad){
+  let inside=false;
+  for(let a=0,b=3;a<4;b=a++){
+    const xi=quad[a][0], yi=quad[a][1], xj=quad[b][0], yj=quad[b][1];
+    if(((yi>ny)!==(yj>ny))&&(nx<(xj-xi)*(ny-yi)/(yj-yi)+xi)) inside=!inside;
+  }
+  return inside;
+}
+function drawSliceEditor(){
+  const cv=$('slcv'); if(!cv) return;
+  const g=cv.getContext('2d'), W=cv.width, H=cv.height;
+  ensureSlices();
+  const sel=S.slices[SLED.sel]||S.slices[0];
+  g.clearRect(0,0,W,H);
+  if(SLED.tab==='in'){
+    if(slFrameCv) g.drawImage(slFrameCv,0,0,W,H);
+    else{ g.fillStyle='#0b0e14'; g.fillRect(0,0,W,H); }
+    S.slices.forEach((s,i)=>{
+      const r=s.in, x=r.x*W, y=r.y*H, w=r.w*W, h=r.h*H;
+      const tint=SL_TINTS[i%SL_TINTS.length], isSel=(s===sel);
+      g.strokeStyle=isSel?tint:'rgba(255,255,255,0.4)';
+      g.lineWidth=isSel?2:1;
+      g.setLineDash(s.on?[]:[5,4]);
+      g.strokeRect(x,y,w,h);
+      g.setLineDash([]);
+      g.fillStyle=tint; g.font='bold 12px sans-serif'; g.textAlign='left';
+      g.fillText((s.name||'')+(s.on?'':' (off)'), x+6, y+16);
+      if(isSel){
+        for(const hp of slHandles(r,W,H)){
+          g.fillStyle='#ffffff'; g.fillRect(hp[0]-5,hp[1]-5,10,10);
+          g.strokeStyle=tint; g.lineWidth=1; g.strokeRect(hp[0]-5,hp[1]-5,10,10);
+        }
+      }
+    });
+    const hint=$('slhint'); if(hint) hint.textContent='Input: drag the rectangle to choose which part of the composition this slice shows. Drag the edges and corners to resize it.';
+  }else{
+    g.fillStyle='#000000'; g.fillRect(0,0,W,H);
+    g.strokeStyle='#2a2f3a'; g.lineWidth=1; g.strokeRect(0.5,0.5,W-1,H-1);
+    S.slices.forEach((s,i)=>{
+      const tint=SL_TINTS[i%SL_TINTS.length], isSel=(s===sel);
+      const pts=s.out.map(p=>[p[0]*W,p[1]*H]);
+      g.beginPath(); g.moveTo(pts[0][0],pts[0][1]);
+      for(let k=1;k<4;k++) g.lineTo(pts[k][0],pts[k][1]);
+      g.closePath();
+      g.fillStyle=tint+(s.on?'2e':'14'); g.fill();
+      g.strokeStyle=tint; g.lineWidth=isSel?2:1; g.setLineDash(s.on?[]:[5,4]); g.stroke(); g.setLineDash([]);
+      const cx=(pts[0][0]+pts[2][0])/2, cy=(pts[0][1]+pts[2][1])/2;
+      g.fillStyle=tint; g.font='bold 12px sans-serif'; g.textAlign='center';
+      g.fillText((s.name||'')+(s.on?'':' (off)'), cx, cy);
+      g.textAlign='left';
+      if(isSel){
+        const names=['TL','TR','BR','BL'];
+        pts.forEach((p,k)=>{
+          g.beginPath(); g.arc(p[0],p[1],9,0,7); g.fillStyle='#ffffff'; g.fill();
+          g.strokeStyle=tint; g.lineWidth=2; g.stroke();
+          g.fillStyle='#000000'; g.font='bold 8px sans-serif'; g.textAlign='center';
+          g.fillText(names[k], p[0], p[1]+3); g.textAlign='left';
+        });
+      }
+    });
+    const hint=$('slhint'); if(hint) hint.textContent='Output: drag the corner pins to keystone this slice onto your surface. It renders live on the output — turn on Test pattern to align.';
+  }
+}
+function slCanvasPos(e){
+  const cv=$('slcv'), r=cv.getBoundingClientRect();
+  return {nx:(e.clientX-r.left)/r.width, ny:(e.clientY-r.top)/r.height,
+          px:(e.clientX-r.left)/r.width*cv.width, py:(e.clientY-r.top)/r.height*cv.height};
+}
+function slPointerDown(e){
+  const p=slCanvasPos(e); ensureSlices();
+  const sel=S.slices[SLED.sel]; if(!sel) return;
+  const cv=$('slcv');
+  if(SLED.tab==='out'){
+    const pts=sel.out.map(q=>[q[0]*cv.width, q[1]*cv.height]);
+    for(let k=0;k<4;k++){
+      if(Math.hypot(p.px-pts[k][0], p.py-pts[k][1])<16){ SLED.drag={corner:k}; try{ cv.setPointerCapture(e.pointerId); }catch(err){} return; }
+    }
+    for(let i=S.slices.length-1;i>=0;i--){
+      if(slPtInQuad(p.nx,p.ny,S.slices[i].out)){ if(i!==SLED.sel){ SLED.sel=i; buildSliceList(); buildSliceProps(); drawSliceEditor(); } return; }
+    }
+  }else{
+    const hs=slHandles(sel.in, cv.width, cv.height);
+    for(let k=0;k<8;k++){
+      if(Math.abs(p.px-hs[k][0])<13&&Math.abs(p.py-hs[k][1])<13){ SLED.drag={mode:SL_HIDS[k], sx:p.nx, sy:p.ny, orig:{x:sel.in.x, y:sel.in.y, w:sel.in.w, h:sel.in.h}}; try{ cv.setPointerCapture(e.pointerId); }catch(err){} return; }
+    }
+    if(p.nx>=sel.in.x&&p.nx<=sel.in.x+sel.in.w&&p.ny>=sel.in.y&&p.ny<=sel.in.y+sel.in.h){
+      SLED.drag={mode:'mv', sx:p.nx, sy:p.ny, orig:{x:sel.in.x, y:sel.in.y, w:sel.in.w, h:sel.in.h}};
+      try{ cv.setPointerCapture(e.pointerId); }catch(err){}
+      return;
+    }
+    for(let i=S.slices.length-1;i>=0;i--){
+      const r=S.slices[i].in;
+      if(p.nx>=r.x&&p.nx<=r.x+r.w&&p.ny>=r.y&&p.ny<=r.y+r.h){ SLED.sel=i; buildSliceList(); buildSliceProps(); drawSliceEditor(); return; }
+    }
+  }
+}
+function slPointerMove(e){
+  if(!SLED.drag) return;
+  const p=slCanvasPos(e); const sel=S.slices[SLED.sel]; if(!sel) return;
+  const d=SLED.drag;
+  if(d.corner!==undefined){
+    sel.out[d.corner]=[clamp(p.nx,-0.5,1.5), clamp(p.ny,-0.5,1.5)];
+  }else{
+    const o=d.orig, dx=p.nx-d.sx, dy=p.ny-d.sy;
+    let L=o.x, T=o.y, R=o.x+o.w, B=o.y+o.h;
+    if(d.mode==='mv'){
+      const mx=clamp(dx,-L,1-R), my=clamp(dy,-T,1-B);
+      L+=mx; R+=mx; T+=my; B+=my;
+    }else{
+      if(d.mode.indexOf('w')>=0) L=clamp(o.x+dx, 0, R-0.02);
+      if(d.mode.indexOf('e')>=0) R=clamp(o.x+o.w+dx, L+0.02, 1);
+      if(d.mode.indexOf('n')>=0) T=clamp(o.y+dy, 0, B-0.02);
+      if(d.mode.indexOf('s')>=0) B=clamp(o.y+o.h+dy, T+0.02, 1);
+    }
+    sel.in={x:L, y:T, w:R-L, h:B-T};
+  }
+  saveState(); drawSliceEditor();
+}
+/* called at the end of loop(): while the editor is open, refresh its
+   backdrop from the just-rendered canvas (same-frame copy, like the
+   pop-out output window) and redraw the overlay a few times a second */
+function pumpSliceEditor(){
+  if(!SLED.open) return;
+  if((SLED.grabT=(SLED.grabT+1)%4)!==0) return;
+  if(SLED.tab==='in'){
+    if(!slFrameCv){ slFrameCv=document.createElement('canvas'); slFrameCv.width=640; slFrameCv.height=360; }
+    try{ slFrameCv.getContext('2d').drawImage(canvas,0,0,640,360); }catch(e){}
+  }
+  drawSliceEditor();
 }
 
 /* ================= AUDIO ENGINE ================= */
@@ -7937,7 +8409,7 @@ function snapshot(){
     postBypass:S.postBypass, strobeOn:S.strobeOn, beatSync:S.beatSync,
     bpm:S.bpm, snap:S.snap||'bar', macros:S.macros, pluginCode:S.pluginCode, pluginUniforms:S.pluginUniforms, imports:S.imports, midi:S.midi,
     bltype:S.bltype||'black', ghue:S.ghue||0, gspeed:(S.gspeed===undefined?1:S.gspeed),
-    mods:S.mods, graphs:S.graphs
+    mods:S.mods, graphs:S.graphs, slices:S.slices
   }));
 }
 function applySnapshot(snap){
@@ -7968,6 +8440,7 @@ function applySnapshot(snap){
     S.params[pk]=S.layers[i].src/Math.max(1,nS);
     syncFiredToSrc(i);
   }
+  if(Array.isArray(snap.slices)&&snap.slices.length) S.slices=JSON.parse(JSON.stringify(snap.slices));
   S.postBypass=Object.assign({}, d.postBypass, snap.postBypass||{});
   S.strobeOn=!!snap.strobeOn; S.beatSync=!!snap.beatSync; S.bpm=snap.bpm||120;
   S.snap=snap.snap||'bar'; S.firedCol=null;
@@ -8199,6 +8672,8 @@ function wireStatic(){
   $('btnAudio').addEventListener('click',toggleAudio);
   $('btnOutWin').addEventListener('click',openOutputWindow);
   const _ow2=$('btnOutWin2'); if(_ow2) _ow2.addEventListener('click',openOutputWindow);
+  const _sl1=$('btnSlices'); if(_sl1) _sl1.addEventListener('click',()=>toggleSlices(true));
+  const _sl2=$('btnSlices2'); if(_sl2) _sl2.addEventListener('click',()=>toggleSlices(true));
   $('btnFull').addEventListener('click',toggleFullscreen);
   $('btnPerform').addEventListener('click',togglePerform);
   /* context loss */
@@ -8232,6 +8707,7 @@ function wireStatic(){
     if((k==='Delete'||k==='Backspace')&&S.clipSel&&S.clipSel.length){ e.preventDefault(); clearSelectedClips(); return; }
     if(k==='f'||k==='F') toggleFullscreen();
     else if(k==='o'||k==='O') openOutputWindow();
+    else if(k==='l'||k==='L') toggleSlices(true);
     else if(k==='p'||k==='P') togglePerform();
     else if(k==='m'||k==='M') setLearn(!learnArmed);
     else if(k>='1'&&k<='4') selectLayer(parseInt(k,10)-1);
@@ -8242,7 +8718,8 @@ function wireStatic(){
     else if(k===' '){ e.preventDefault(); toggleBlackout(); }
     else if(k==='?') toggleHelp();
     else if(k==='Escape'){
-      if(typeof closeClipInspector==='function'&&clipInsp.i!==null&&!neOpen) closeClipInspector();
+      if(typeof SLED!=='undefined'&&SLED.open) toggleSlices(false);
+      else if(typeof closeClipInspector==='function'&&clipInsp.i!==null&&!neOpen) closeClipInspector();
       else if($('help').classList.contains('show')) toggleHelp(false);
       else if(document.body.classList.contains('perform')) togglePerform();
     }
@@ -9426,6 +9903,15 @@ function loop(){
         pc=compT.tex;
       }catch(e){}
     }
+    /* v1.9.27 slices: warp the graded frame through the slice stage into
+       a scratch target; the blit below then shows the mapped output */
+    if(slicesActive()&&pc){
+      try{
+        ensureFxScratch();
+        const dest=(pc===fxScratch2.tex)?fxScratch:fxScratch2;
+        if(renderSlices(pc,dest)) pc=dest.tex;
+      }catch(e){}
+    }
     /* phone: blit the final image to the WebGL canvas - the display itself */
     try{
       const CP=PROG.copy;
@@ -9435,6 +9921,15 @@ function loop(){
       setTex(CP,'u_tex',0,pc);
       quadDraw();
     }catch(e){}
+  }else if(slicesActive()){
+    /* v1.9.27 slices: grade offscreen, then the slice stage draws the
+       mapped slices straight to the canvas (the pop-out output window
+       mirrors the canvas, so the projector gets the mapped image) */
+    try{
+      ensureFxScratch();
+      renderGradeInto(pc, fxScratch, t);
+      if(!renderSlices(fxScratch.tex, null)) renderGrade(pc,t);
+    }catch(e){ try{ renderGrade(pc,t); }catch(e2){} }
   }else renderGrade(pc,t);
   /* live clip preview: throttled to every 3rd frame (the readPixels stall was
      the dominant frame cost) and skipped while the node editor covers the deck.
@@ -9448,6 +9943,7 @@ function loop(){
     if(!isPhone||qFpsAvg>20) pumpThumbs(gt,isPhone?1:2);
   }
   pumpOutputWindow(); /* v1.9.25: mirror to the pop-out window, same task as the render */
+  pumpSliceEditor(); /* v1.9.27: keep the slice editor backdrop fresh */
   frames++;
   if(now-fpsT>0.5){
     /* rolling 1s fps average + effective render scale, always honest */
@@ -9460,6 +9956,7 @@ function loop(){
 /* ================= INIT ================= */
 function init(){
   ensureFxChains();
+  ensureSlices(); /* v1.9.27: sanitize the slice mapping for this state */
   /* phone: show JS errors in UI for debugging */
   if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
     window._errs=[];
