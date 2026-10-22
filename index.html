@@ -1436,7 +1436,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.38';
+const APP_VERSION='1.9.40';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -2520,22 +2520,23 @@ vec3 applyBlend(vec3 d, vec3 s, int m, float kT, float kS){
 void main(){
   vec3 acc = vec3(0.0);
   vec3 s;
-  s = texture(u_l0,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[0]+0.5),u_keyT[0],u_keyS[0]), u_op[0]*u_en[0]);
-  s = texture(u_l1,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[1]+0.5),u_keyT[1],u_keyS[1]), u_op[1]*u_en[1]);
-  s = texture(u_l2,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[2]+0.5),u_keyT[2],u_keyS[2]), u_op[2]*u_en[2]);
-  s = texture(u_l3,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[3]+0.5),u_keyT[3],u_keyS[3]), u_op[3]*u_en[3]);
-  s = texture(u_l4,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[4]+0.5),u_keyT[4],u_keyS[4]), u_op[4]*u_en[4]);
-  s = texture(u_l5,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[5]+0.5),u_keyT[5],u_keyS[5]), u_op[5]*u_en[5]);
-  s = texture(u_l6,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[6]+0.5),u_keyT[6],u_keyS[6]), u_op[6]*u_en[6]);
-  s = texture(u_l7,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[7]+0.5),u_keyT[7],u_keyS[7]), u_op[7]*u_en[7]);
+  float sa = 1.0;
+  { vec4 tv0 = texture(u_l0, v_uv); s = tv0.rgb; sa = tv0.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[0]+0.5),u_keyT[0],u_keyS[0]), u_op[0]*u_en[0]*sa);
+  { vec4 tv1 = texture(u_l1, v_uv); s = tv1.rgb; sa = tv1.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[1]+0.5),u_keyT[1],u_keyS[1]), u_op[1]*u_en[1]*sa);
+  { vec4 tv2 = texture(u_l2, v_uv); s = tv2.rgb; sa = tv2.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[2]+0.5),u_keyT[2],u_keyS[2]), u_op[2]*u_en[2]*sa);
+  { vec4 tv3 = texture(u_l3, v_uv); s = tv3.rgb; sa = tv3.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[3]+0.5),u_keyT[3],u_keyS[3]), u_op[3]*u_en[3]*sa);
+  { vec4 tv4 = texture(u_l4, v_uv); s = tv4.rgb; sa = tv4.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[4]+0.5),u_keyT[4],u_keyS[4]), u_op[4]*u_en[4]*sa);
+  { vec4 tv5 = texture(u_l5, v_uv); s = tv5.rgb; sa = tv5.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[5]+0.5),u_keyT[5],u_keyS[5]), u_op[5]*u_en[5]*sa);
+  { vec4 tv6 = texture(u_l6, v_uv); s = tv6.rgb; sa = tv6.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[6]+0.5),u_keyT[6],u_keyS[6]), u_op[6]*u_en[6]*sa);
+  { vec4 tv7 = texture(u_l7, v_uv); s = tv7.rgb; sa = tv7.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[7]+0.5),u_keyT[7],u_keyS[7]), u_op[7]*u_en[7]*sa);
   O = vec4(acc,1.0);
 }
 `;
@@ -2611,22 +2612,23 @@ vec3 applyBlend(vec3 d, vec3 s, int m, float kT, float kS){
 void main(){
   vec3 acc = u_useBase>0.5 ? texture(u_base,v_uv).rgb : vec3(0.0);
   vec3 s;
-  s = texture(u_l0,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[0]+0.5),u_keyT[0],u_keyS[0]), u_op[0]*u_en[0]);
-  s = texture(u_l1,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[1]+0.5),u_keyT[1],u_keyS[1]), u_op[1]*u_en[1]);
-  s = texture(u_l2,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[2]+0.5),u_keyT[2],u_keyS[2]), u_op[2]*u_en[2]);
-  s = texture(u_l3,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[3]+0.5),u_keyT[3],u_keyS[3]), u_op[3]*u_en[3]);
-  s = texture(u_l4,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[4]+0.5),u_keyT[4],u_keyS[4]), u_op[4]*u_en[4]);
-  s = texture(u_l5,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[5]+0.5),u_keyT[5],u_keyS[5]), u_op[5]*u_en[5]);
-  s = texture(u_l6,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[6]+0.5),u_keyT[6],u_keyS[6]), u_op[6]*u_en[6]);
-  s = texture(u_l7,v_uv).rgb;
-  acc = mix(acc, applyBlend(acc,s,int(u_blend[7]+0.5),u_keyT[7],u_keyS[7]), u_op[7]*u_en[7]);
+  float sa = 1.0;
+  { vec4 tv0 = texture(u_l0, v_uv); s = tv0.rgb; sa = tv0.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[0]+0.5),u_keyT[0],u_keyS[0]), u_op[0]*u_en[0]*sa);
+  { vec4 tv1 = texture(u_l1, v_uv); s = tv1.rgb; sa = tv1.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[1]+0.5),u_keyT[1],u_keyS[1]), u_op[1]*u_en[1]*sa);
+  { vec4 tv2 = texture(u_l2, v_uv); s = tv2.rgb; sa = tv2.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[2]+0.5),u_keyT[2],u_keyS[2]), u_op[2]*u_en[2]*sa);
+  { vec4 tv3 = texture(u_l3, v_uv); s = tv3.rgb; sa = tv3.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[3]+0.5),u_keyT[3],u_keyS[3]), u_op[3]*u_en[3]*sa);
+  { vec4 tv4 = texture(u_l4, v_uv); s = tv4.rgb; sa = tv4.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[4]+0.5),u_keyT[4],u_keyS[4]), u_op[4]*u_en[4]*sa);
+  { vec4 tv5 = texture(u_l5, v_uv); s = tv5.rgb; sa = tv5.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[5]+0.5),u_keyT[5],u_keyS[5]), u_op[5]*u_en[5]*sa);
+  { vec4 tv6 = texture(u_l6, v_uv); s = tv6.rgb; sa = tv6.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[6]+0.5),u_keyT[6],u_keyS[6]), u_op[6]*u_en[6]*sa);
+  { vec4 tv7 = texture(u_l7, v_uv); s = tv7.rgb; sa = tv7.a; }
+  acc = mix(acc, applyBlend(acc,s,int(u_blend[7]+0.5),u_keyT[7],u_keyS[7]), u_op[7]*u_en[7]*sa);
   O = vec4(acc,1.0);
 }
 `;
@@ -3153,6 +3155,13 @@ void main(){
   O = vec4(base + blur*m*u_str, 1.0);
 }
 `;
+const SRC_MEDIA = `#version 300 es
+precision highp float;
+out vec4 O;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+void main(){ O = texture(u_tex, v_uv); }
+`;
 const SRC_CAM = `#version 300 es
 precision highp float;
 out vec4 O;
@@ -3328,6 +3337,7 @@ function compileAll(){
     ['colorize',SRC_COLORIZE],
     ['bloompost',SRC_BLOOMPOST],
     ['cam',     SRC_CAM],
+    ['media',   SRC_MEDIA],
     ['copy',    SRC_COPY],
     ['slice',   SRC_SLICE],
     ['transmix',SRC_TRANSMIX],
@@ -4433,10 +4443,15 @@ function renderRoute(i,sidx,t,T){
 function renderVideo(i,sidx,t,T){
   const vi=videoIdx(sidx), v=S.videos[vi];
   if(!v||!v.el) return;
-  /* master speed applies to video clips too: it IS their playback rate */
-  const _wr=(S.gspeed||1);
-  if(v.el.playbackRate!==_wr){ try{ v.el.playbackRate=_wr; }catch(e){} }
-  if(v.el.readyState<2) return;
+  const isImg=(v.kind==='image');
+  if(isImg){
+    if(!v.el.complete||!v.el.naturalWidth) return; /* still decoding */
+  }else{
+    /* master speed applies to video clips too: it IS their playback rate */
+    const _wr=(S.gspeed||1);
+    if(v.el.playbackRate!==_wr){ try{ v.el.playbackRate=_wr; }catch(e){} }
+    if(v.el.readyState<2) return;
+  }
   if(!v._tex){ v._tex=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,v._tex);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
@@ -4445,9 +4460,16 @@ function renderVideo(i,sidx,t,T){
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
   }
   gl.bindTexture(gl.TEXTURE_2D,v._tex);
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,v.el);
+  /* stills upload once (animated GIFs re-upload per frame, like video);
+     v1.9.39: the draw uses PROG.media, which preserves the alpha
+     channel - a logo PNG's transparency reaches the layer target and
+     the combine composites it over the layers below */
+  if(!isImg||v.animated||!v._up){
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,v.el);
+    v._up=true;
+  }
   gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
-  const P=PROG.copy;
+  const P=PROG.media||PROG.copy;
   if(!P) return;
   gl.useProgram(P); setTex(P,'u_tex',0,v._tex);
   quadDraw();
@@ -5605,13 +5627,13 @@ function buildSliceUI(){
   $('btnSlSend').addEventListener('click',()=>{
     const sel=$('slOutSel'); const v=sel?sel.value:'';
     if(v!==''&&v!=='saved'&&DISPLAYS[+v]){ sendOutputToDisplay(DISPLAYS[+v]); return; }
-    if(v==='saved'&&S.outDisplay){ openOutputWindow('popup=yes,width='+S.outDisplay.w+',height='+S.outDisplay.h); updateOutInfo(); return; }
+    if(v==='saved'&&S.outDisplay){ sendOutputToDisplay(S.outDisplay); updateOutInfo(); return; }
     openOutputWindow(); updateOutInfo();
   });
   $('slOutSel').addEventListener('change',()=>{
     const v=$('slOutSel').value;
     if(v===''){ S.outDisplay=null; saveState(); }
-    else if(v!=='saved'&&DISPLAYS[+v]){ const d=DISPLAYS[+v]; S.outDisplay={label:d.label, w:d.w, h:d.h}; saveState(); }
+    else if(v!=='saved'&&DISPLAYS[+v]){ S.outDisplay=saveOutDisplay(DISPLAYS[+v]); saveState(); }
     updateOutInfo(); slSetSpace();
   });
   $('btnSlMatch').addEventListener('click',()=>{ const r=outRefSize(); setCompSize(r.w, r.h); });
@@ -7008,7 +7030,7 @@ function showClipMenu(x,y,i,k,opts){
   bImp.addEventListener('click',()=>{
     hideClipMenu();
     const inp=document.createElement('input');
-    inp.type='file'; inp.accept='.txt,.glsl,.frag,.fs,video/*'; inp.multiple=true;
+    inp.type='file'; inp.accept='.txt,.glsl,.frag,.fs,video/*,image/*'; inp.multiple=true;
     inp.onchange=()=>{ if(inp.files.length) loadShaderFilesOnto(inp.files,i,k); };
     inp.click();
   });
@@ -7897,6 +7919,17 @@ function buildSrcBrowser(){
     inp.click();
   });
   host.appendChild(vb);
+  const ib=el('button','srcrow');
+  ib.appendChild(el('span','sdot'));
+  ib.appendChild(el('span',null,'+ Import Image'));
+  ib.title='Import an image or logo (png/jpg/webp/gif/svg) - transparency works, it composites like a layer';
+  ib.addEventListener('click',()=>{
+    const inp=document.createElement('input');
+    inp.type='file'; inp.accept='image/*,.png,.jpg,.jpeg,.webp,.gif,.avif,.svg'; inp.multiple=true;
+    inp.onchange=()=>{ if(inp.files.length) for(const f of inp.files) importImage(f); };
+    inp.click();
+  });
+  host.appendChild(ib);
   srcOptions().forEach((s,si)=>{
     const b=el('button','srcrow');
     b.appendChild(el('span','sdot'));
@@ -8511,6 +8544,32 @@ function getIchTex(idx){
   if(!ICH_TEX[idx]) ICH_TEX[idx]=makeIchTex(idx);
   return ICH_TEX[idx];
 }
+function isImageFile(f){
+  return /^image\//.test(f.type||'')||/\.(png|jpe?g|webp|gif|avif|bmp|svg)$/i.test(f.name||'');
+}
+function isMediaFile(f){
+  return isImageFile(f)||/^video\//.test(f.type||'')||/\.(mp4|webm|mov|m4v|ogv)$/i.test(f.name||'');
+}
+/* v1.9.39: images/logos live in the same media registry as videos
+   (S.videos entries with kind:'image'), so every source surface -
+   deck, browser, menus, node graph - treats them identically.
+   Session-only, exactly like videos (blob URLs die on reload). */
+function importImage(file, onIdx){
+  const url=URL.createObjectURL(file);
+  const img=new Image();
+  img.onload=()=>{
+    S.videos.push({name:file.name.replace(/\.[^.]+$/,''), url, el:img, kind:'image', animated:/\.gif$/i.test(file.name||'')});
+    saveState(); buildSrcBrowser();
+    toast('Image imported: '+file.name);
+    if(onIdx) onIdx(5+S.imports.length+S.videos.length-1);
+  };
+  img.onerror=()=>{ shtoast('Could not load image: '+file.name, true); if(onIdx) onIdx(-1); };
+  img.src=url;
+}
+function importMedia(file, onIdx){
+  if(isImageFile(file)) importImage(file, onIdx);
+  else{ importVideo(file); if(onIdx) onIdx(5+S.imports.length+S.videos.length-1); }
+}
 function importVideo(file){
   const url=URL.createObjectURL(file);
   const el=document.createElement('video');
@@ -9101,9 +9160,17 @@ function firstEmptyClip(li){
 }
 /* Import each dropped/loaded file as a first-class source. */
 async function loadShaderFiles(files){
-  const list=Array.from(files||[]).filter(f=>/\.(txt|glsl|frag|fs)$/i.test(f.name||''));
-  if(!list.length){ shtoast('No .txt / .glsl / .frag shader files in that drop.'); return; }
+  const all=Array.from(files||[]);
   const li=Math.min(3,Math.max(0,S.selLayer|0));
+  for(const mf of all.filter(f=>isMediaFile(f))){
+    importMedia(mf,(si)=>{
+      if(si<0) return;
+      const k2=firstEmptyClip(li);
+      if(k2>=0){ S.clips[li][k2]=si; fireClipNow(li,k2); buildDeck(); saveState(); shtoast('Imported media → clip C'+(k2+1)+' on '+LAYER_NAMES[li]+' (fired)'); }
+    });
+  }
+  const list=all.filter(f=>/\.(txt|glsl|frag|fs)$/i.test(f.name||''));
+  if(!list.length){ if(!all.some(f=>isMediaFile(f))) shtoast('No shader, video or image files in that drop.'); return; }
   for(const f of list){
     let text=null;
     try{ text=await f.text(); }catch(e){}
@@ -9127,21 +9194,18 @@ async function loadShaderFiles(files){
    like clicking the clip's fire box. Extra files become Sources entries. */
 async function loadShaderFilesOnto(files, i, k){
   const arr=Array.from(files||[]);
-  /* videos go straight to a clip */
-  const vids=arr.filter(f=>/^video\//.test(f.type||'')||/\.(mp4|webm|mov|m4v|ogv)$/i.test(f.name||''));
-  if(vids.length){
-    for(const vf of vids){
-      importVideo(vf);
-      const vi=S.videos.length-1;
-      const si=5+S.imports.length+vi;
-      S.clips[i][k]=si;
+  /* media (video + image/logo) goes straight onto the clip */
+  const media=arr.filter(f=>isMediaFile(f));
+  if(media.length){
+    for(const mf of media){
+      importMedia(mf,(si)=>{ if(si>=0){ S.clips[i][k]=si; saveState(); buildDeck(); } });
     }
     saveState(); buildDeck(); buildSrcBrowser();
-    toast(vids.length+' video(s) → '+LAYER_NAMES[i]+' clip '+(k+1));
+    toast(media.length+' media file(s) → '+LAYER_NAMES[i]+' clip '+(k+1));
     return;
   }
   const list=arr.filter(f=>/\.(txt|glsl|frag|fs)$/i.test(f.name||''));
-  if(!list.length){ shtoast('No .txt / .glsl / .frag shader or video files in that drop.'); return; }
+  if(!list.length){ shtoast('No shader, video or image files in that drop.'); return; }
   let firstIdx=-1, firstName=null;
   for(const f of list){
     let text=null;
@@ -9306,24 +9370,88 @@ let outWin=null, outCanvas=null, outCtx=null, outCursorT=null;
    pop-out window to it at its native size, and offer a one-click
    comp-size match so the output renders 1:1 at the display's pixels. */
 let DISPLAYS=[];
+let DISPLAYS_RAW=[]; /* parallel ScreenDetailed objects (avail* live here) */
+function saveOutDisplay(d){
+  return { label:d.label, w:d.w, h:d.h, x:d.x||0, y:d.y||0,
+    ax:(d.ax!==undefined?d.ax:(d.x||0)), ay:(d.ay!==undefined?d.ay:(d.y||0)),
+    aw:d.aw||d.w, ah:d.ah||d.h };
+}
+/* The rect the output window should fill: the target display's available
+   area (full size when no work-area split exists). Null = no target. */
+function outTargetRect(){
+  const d=S.outDisplay; if(!d||!d.w||!d.h) return null;
+  return { x:(d.ax!==undefined?d.ax:(d.x||0)), y:(d.ay!==undefined?d.ay:(d.y||0)),
+    w:(d.aw&&d.aw>0)?d.aw:d.w, h:(d.ah&&d.ah>0)?d.ah:d.h, label:d.label||'Display' };
+}
 async function detectDisplays(){
-  let list=[];
+  let list=[], raw=[];
   try{
     if(window.getScreenDetails){
       const sd=await window.getScreenDetails();
-      list=(sd.screens||[]).map((s,i)=>({ id:'scr'+i, label:s.label||('Display '+(i+1)),
-        w:s.width, h:s.height, x:s.left||0, y:s.top||0, dpr:s.devicePixelRatio||1,
-        primary:!!s.isPrimary }));
+      raw=sd.screens||[];
+      list=raw.map((s,i)=>({ id:'scr'+i, label:s.label||('Display '+(i+1)),
+        w:s.width, h:s.height, x:s.left||0, y:s.top||0,
+        ax:(s.availLeft!==undefined?s.availLeft:(s.left||0)), ay:(s.availTop!==undefined?s.availTop:(s.top||0)),
+        aw:s.availWidth||s.width, ah:s.availHeight||s.height,
+        dpr:s.devicePixelRatio||1, primary:!!s.isPrimary }));
     }
-  }catch(e){ list=[]; }
+  }catch(e){ list=[]; raw=[]; }
   if(!list.length){
     list=[{ id:'scr0', label:'This display', w:window.screen.width, h:window.screen.height,
-      x:0, y:0, dpr:window.devicePixelRatio||1, primary:true, fallback:true }];
+      x:0, y:0, ax:0, ay:0, aw:window.screen.availWidth||window.screen.width, ah:window.screen.availHeight||window.screen.height,
+      dpr:window.devicePixelRatio||1, primary:true, fallback:true }];
+    raw=[];
   }
-  DISPLAYS=list;
+  DISPLAYS=list; DISPLAYS_RAW=raw;
+  /* v1.9.40: the chosen display keeps its POSITION across sessions (old
+     saves had none - backfill it now), and when no target was ever
+     chosen, a second screen adopts itself: detection alone used to
+     leave the output sitting on the laptop. */
+  if(S.outDisplay){
+    const m=list.find(d=>d.label===S.outDisplay.label&&d.w===S.outDisplay.w&&d.h===S.outDisplay.h);
+    if(m&&(m.x!==S.outDisplay.x||m.y!==S.outDisplay.y||S.outDisplay.aw===undefined)){ S.outDisplay=saveOutDisplay(m); saveState(); }
+  }else{
+    const ext=list.find(d=>!d.primary&&!d.fallback);
+    if(ext){ S.outDisplay=saveOutDisplay(ext); saveState(); }
+  }
   buildOutSel();
   updateOutInfo();
   return list;
+}
+/* Move/resize the open output window onto the target display and try
+   fullscreen there. Refuses a rect no detected display overlaps (the
+   projector was unplugged since the target was saved). */
+function placeOutputWindow(){
+  const r=outTargetRect(); if(!r) return false;
+  if(!outWin||outWin.closed) return false;
+  if(DISPLAYS.length){
+    const cx=r.x+r.w/2, cy=r.y+r.h/2;
+    const hit=DISPLAYS.some(d=>cx>=d.x&&cx<d.x+d.w&&cy>=d.y&&cy<d.y+d.h);
+    if(!hit) return false;
+  }
+  let ok=false;
+  try{ outWin.moveTo(Math.round(r.x), Math.round(r.y)); outWin.resizeTo(Math.round(r.w), Math.round(r.h)); ok=true; }catch(e){}
+  if(ok) tryOutFullscreen();
+  return ok;
+}
+function tryOutFullscreen(){
+  if(!outWin||outWin.closed||outWin.__hmFsTried) return;
+  outWin.__hmFsTried=true;
+  const w=outWin, label=w.__hmTargetLabel||'';
+  (async()=>{
+    let scr=null;
+    try{
+      if(w.getScreenDetails){
+        const sd=await w.getScreenDetails();
+        scr=(sd.screens||[]).find(s=>(s.label||'')===label)||sd.currentScreen||null;
+      }
+    }catch(e){}
+    try{
+      const el=w.document.documentElement;
+      const p=scr?el.requestFullscreen({screen:scr}):el.requestFullscreen();
+      if(p&&p.catch) p.catch(()=>{});
+    }catch(e){}
+  })();
 }
 function outRefSize(){
   const d=S.outDisplay;
@@ -9363,18 +9491,17 @@ function setCompSize(w,h){
 }
 function sendOutputToDisplay(d){
   if(!d) return;
-  S.outDisplay={label:d.label, w:d.w, h:d.h};
+  S.outDisplay=saveOutDisplay(d);
   saveState();
-  const feats='popup=yes,left='+Math.round(d.x||0)+',top='+Math.round(d.y||0)+',width='+Math.round(d.w)+',height='+Math.round(d.h);
   if(outWin&&!outWin.closed){
-    let moved=false;
-    try{ outWin.moveTo(Math.round(d.x||0), Math.round(d.y||0)); outWin.resizeTo(Math.round(d.w), Math.round(d.h)); outWin.focus(); moved=true; }catch(e){}
-    if(!moved){ try{ outWin.close(); }catch(e){} outWin=null; openOutputWindow(feats); }
+    outWin.__hmTargetLabel=d.label;
+    if(!placeOutputWindow()){ try{ outWin.close(); }catch(e){} outWin=null; openOutputWindow(); }
+    else outWin.focus();
   }else{
-    openOutputWindow(feats);
+    openOutputWindow();
   }
   updateOutInfo(); slSetSpace();
-  toast('Output sent to '+d.label+' ('+d.w+'\u00D7'+d.h+') \u2014 double-click it there for fullscreen');
+  toast('Output sent to '+d.label+' ('+d.w+'\u00D7'+d.h+')');
 }
 function fitOutWin(){
   if(!outWin||outWin.closed||!outCanvas) return;
@@ -9390,9 +9517,19 @@ function syncOutWinBtn(){
   }
 }
 function openOutputWindow(feats){
-  if(outWin&&!outWin.closed){ outWin.focus(); return; }
+  if(outWin&&!outWin.closed){ outWin.focus(); placeOutputWindow(); return; }
+  /* Open synchronously (popup blockers eat async opens) on the best-known
+     target; display detection then refines the placement by itself -
+     the window lands on the second screen without being dragged. */
+  if(!feats){
+    const r=outTargetRect();
+    if(r&&(DISPLAYS.length||(S.outDisplay&&S.outDisplay.aw!==undefined)))
+      feats='popup=yes,left='+Math.round(r.x)+',top='+Math.round(r.y)+',width='+Math.round(r.w)+',height='+Math.round(r.h);
+  }
   outWin=window.open('','hm-output', feats||('popup=yes,width='+Math.min(1600,BASE_W)+',height='+(Math.min(1000,BASE_H)+40)));
   if(!outWin){ toast('Pop-up blocked - allow pop-ups for this site, then hit Output again'); outWin=null; return; }
+  outWin.__hmTargetLabel=(S.outDisplay&&S.outDisplay.label)||'';
+  outWin.__hmFsTried=false;
   const d=outWin.document;
   d.title='HoloMapper - Output';
   d.body.style.cssText='margin:0;background:#000;overflow:hidden;width:100vw;height:100vh';
@@ -9403,11 +9540,12 @@ function openOutputWindow(feats){
   d.body.appendChild(outCanvas);
   outCtx=outCanvas.getContext('2d');
   const hint=d.createElement('div');
-  hint.textContent='HoloMapper Output - double-click or F for fullscreen';
+  hint.textContent='HoloMapper Output - click for fullscreen (F / double-click too)';
   hint.style.cssText='position:absolute;left:50%;bottom:14px;transform:translateX(-50%);color:#9aa3b2;font:12px sans-serif;background:rgba(10,10,14,.55);padding:5px 12px;border-radius:6px;pointer-events:none;transition:opacity 1s';
   d.body.appendChild(hint);
   outWin.setTimeout(()=>{ hint.style.opacity='0'; },4500);
-  const fs=()=>{ try{ const r=d.documentElement.requestFullscreen(); if(r&&r.catch) r.catch(()=>{}); }catch(e){} };
+  const fs=()=>{ outWin.__hmFsTried=false; tryOutFullscreen(); };
+  outWin.addEventListener('click',()=>{ if(!d.fullscreenElement) fs(); });
   outWin.addEventListener('dblclick',fs);
   outWin.addEventListener('keydown',(e)=>{ if(e.key==='f'||e.key==='F') fs(); });
   outWin.addEventListener('resize',fitOutWin);
@@ -9420,7 +9558,11 @@ function openOutputWindow(feats){
   armCursor();
   fitOutWin();
   syncOutWinBtn();
-  toast('Output window open - drag it to the projector, then double-click it for fullscreen');
+  detectDisplays().then(()=>{
+    if(!outWin||outWin.closed) return;
+    if(placeOutputWindow()) toast('Output on '+(((S.outDisplay||{}).label)||'the second display')+' - filling the screen');
+    else toast('Output window open');
+  });
 }
 function pumpOutputWindow(){
   if(!outWin) return;
