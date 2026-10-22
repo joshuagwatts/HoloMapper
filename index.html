@@ -905,6 +905,7 @@ button.slon{flex:none;padding:2px 8px;font-size:11px}
   This console is the server: every phone that scans in syncs through it.</div>
   <div id="srvlist"></div>
   <div id="pairlans" class="hint"></div>
+  <div class="krow"><button id="btnCamShare" title="Stream THIS device's camera to the linked screen, where it appears as the Phone Cam source">Share this camera</button><span id="camsharestat" class="hint"></span></div>
   <div class="krow"><button id="btnPairClose">Close</button><button id="btnPairCopy">Copy URL</button><button id="btnPairDisc">Disconnect</button></div>
   <div class="hint" style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">
     Optional hub link: if a HoloMapper hub is running on this laptop, <button id="btnPrm" title="Connect to the hub server on this laptop">connect to it</button> — phones can also join through the hub on your Wi-Fi.
@@ -1435,7 +1436,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.36';
+const APP_VERSION='1.9.38';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -2143,7 +2144,7 @@ function histApply(json, fromSync){
     if(typeof S.pluginCode==='string'&&S.pluginCode!==oldPlugin) compilePlugin(true);
     else if(Array.isArray(S.pluginUniforms)) registerPluginParams();
     let nq=oldQ;
-    if(S.quality==='high') nq=0; else if(S.quality==='medium') nq=1; else if(S.quality==='low') nq=2;
+    if(S.quality==='high') nq=0; else if(S.quality==='medium') nq=2; else if(S.quality==='low') nq=Q_SCALES.length-1;
     if(nq!==oldQ){ qScaleIdx=nq; buildTargets(); }
     syncQualityUI();
     buildDeck(); buildProps(); buildCompTab(); buildFxBrowser(); buildSrcBrowser(); buildPerform();
@@ -3258,9 +3259,9 @@ function makeTarget(w,h,depth){
    S.quality: 'auto' (default, adapts to measured fps), 'high', 'medium',
    'low'. Persisted in localStorage via S (saveState). */
 let BASE_W=1280, BASE_H=720; /* composition size; setCompSize() can match it to the output display (v1.9.30) */
-const Q_SCALES=[1.0, 0.75, 0.5];
+const Q_SCALES=[1.0, 0.875, 0.75, 0.625, 0.5];
 const Q_LABEL={auto:'Auto', high:'High', medium:'Medium', low:'Low'};
-let qScaleIdx=0; /* effective scale index: 0=1.0x, 1=0.75x, 2=0.5x */
+let qScaleIdx=0; /* effective scale index into Q_SCALES (v1.9.37: 5 steps, gentler auto drops) */
 if(window.HM_DEVICE&&HM_DEVICE.device==='phone')qScaleIdx=0; /* phones start full; auto-quality adapts */
 function effScale(){ return Q_SCALES[qScaleIdx]; }
 function buildTargets(){
@@ -3290,7 +3291,7 @@ function buildTargets(){
 function initGL(){
   const isPhone=window.HM_DEVICE&&HM_DEVICE.device==='phone';
   gl = canvas.getContext('webgl2',{antialias:false, alpha:false,
-    powerPreference:isPhone?'default':'high-performance',
+    powerPreference:'high-performance',
     preserveDrawingBuffer:false}); /* v1.9.22: was isPhone - preserving forces
        an extra full-screen copy on mobile GPUs and we redraw every frame */
   if(!gl){ showErr('WebGL2 is not available in this browser — HoloMapper cannot run.'); return false; }
@@ -4470,6 +4471,118 @@ function renderWebcam(i,t,T){
     quadDraw();
   }
 }
+
+/* ================= PHONE CAM (v1.9.38) =================
+   The linked phone's camera as a source on THIS screen. The sender
+   (any linked instance: Server -> Share this camera) captures its
+   camera to a 480px canvas and publishes JPEG frames over the sync
+   link (~7-8 fps); the receiver uploads them into a texture and the
+   "Phone Cam" source draws it. Modest frame rate by design - it is
+   an effect source riding the state link, not a video call - but it
+   works everywhere the sync works, no extra servers or accounts. */
+let phoneCam={tex:null, img:null, fresh:false, lastSeq:0, lastAt:0};
+let phoneCamSlateTex=null;
+function phoneCamSlate(){
+  if(phoneCamSlateTex) return phoneCamSlateTex;
+  const c=document.createElement('canvas'); c.width=640; c.height=360;
+  const g=c.getContext('2d');
+  g.fillStyle='#14161c'; g.fillRect(0,0,640,360);
+  g.strokeStyle='#2dd4bf'; g.lineWidth=3; g.strokeRect(14,14,612,332);
+  g.fillStyle='#e8eaee'; g.font='bold 40px sans-serif'; g.textAlign='center';
+  g.fillText('NO PHONE CAM',320,150);
+  g.fillStyle='#878b94'; g.font='20px sans-serif';
+  g.fillText('on the other screen: Server \u2192 Share this camera',320,196);
+  const t=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+  phoneCamSlateTex=t;
+  return t;
+}
+function uploadPhoneCam(){
+  const im=phoneCam.img; if(!im||!im.width) return;
+  if(!phoneCam.tex){
+    phoneCam.tex=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,phoneCam.tex);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  }
+  gl.bindTexture(gl.TEXTURE_2D,phoneCam.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+  try{ gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,im); }catch(e){}
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+  phoneCam.fresh=true; phoneCam.lastAt=Date.now();
+}
+function renderPhoneCam(i,t,T){
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
+  if(phoneCam.fresh&&Date.now()-phoneCam.lastAt>3000) phoneCam.fresh=false;
+  if(phoneCam.fresh&&phoneCam.tex){
+    const P=PROG.cam; if(!P) return;
+    gl.useProgram(P); setTex(P,'u_tex',0,phoneCam.tex);
+    gl.uniform1f(U(P,'u_flip'),0);
+    quadDraw();
+  }else{
+    const P=PROG.copy; if(!P) return;
+    gl.useProgram(P); setTex(P,'u_tex',0,phoneCamSlate());
+    quadDraw();
+  }
+}
+/* ---- sender side ---- */
+let camShare={on:false, timer:0, video:null, stream:null, cv:null, seq:0, q:0.55};
+function paintCamShare(){
+  const b=$('btnCamShare'); if(b) b.textContent=camShare.on?'\u25a0 Stop sharing camera':'Share this camera';
+  const s=$('camsharestat'); if(s) s.textContent=camShare.on?'live \u2014 streaming to the linked screen':'';
+}
+async function startCamShare(){
+  if(camShare.on) return;
+  if(!SYNC.on){ toast('Link a device first \u2014 the camera rides the sync link'); return; }
+  try{
+    if(!(camState==='live'&&camVideo)){
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ toast('Camera unavailable in this browser'); return; }
+      camShare.stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},facingMode:(S.camFace==='environment')?'environment':'user'},audio:false});
+      camShare.video=document.createElement('video');
+      camShare.video.muted=true; camShare.video.playsInline=true;
+      camShare.video.srcObject=camShare.stream;
+      await camShare.video.play();
+    }
+    camShare.on=true; camShare.seq=0; camShare.q=0.55;
+    if(!camShare.cv) camShare.cv=document.createElement('canvas');
+    camShare.timer=setInterval(camShareTick,130);
+    paintCamShare();
+    toast('Sharing this camera \u2014 pick "Phone Cam" as a source on the other screen');
+  }catch(e){ toast('Camera unavailable: '+((e&&e.name)||'error')); }
+}
+function camShareTick(){
+  if(!camShare.on) return;
+  if(!SYNC.on){ stopCamShare(); return; }
+  const v=(camState==='live'&&camVideo)?camVideo:camShare.video;
+  if(!v||v.readyState<2||!v.videoWidth) return;
+  const W=480, H=Math.max(2,Math.round(480*v.videoHeight/v.videoWidth));
+  const cv=camShare.cv; cv.width=W; cv.height=H;
+  const g=cv.getContext('2d');
+  if((S.camFace||'user')!=='environment'){ g.translate(W,0); g.scale(-1,1); }
+  g.drawImage(v,0,0,W,H);
+  let d=null; try{ d=cv.toDataURL('image/jpeg',camShare.q); }catch(e){}
+  if(!d) return;
+  if(d.length>150000){ camShare.q=Math.max(0.3,camShare.q-0.1); return; }
+  camShare.q=Math.min(0.6,camShare.q+0.01);
+  syncSend({kind:'sync-cam', seq:++camShare.seq, d:d});
+}
+function stopCamShare(){
+  if(camShare.timer){ clearInterval(camShare.timer); camShare.timer=0; }
+  if(camShare.stream){ try{ camShare.stream.getTracks().forEach(tk=>tk.stop()); }catch(e){} camShare.stream=null; }
+  if(camShare.video){ try{ camShare.video.pause(); }catch(e){} camShare.video=null; }
+  if(camShare.on) syncSend({kind:'sync-cam-off'});
+  camShare.on=false; paintCamShare();
+}
+
 /* v1.3 node graph: renderLayerInto renders a layer source into any target.
    srcOv overrides the layer's fired source (used by Source nodes). */
 /* ---- FX chain appliers (v1.4): instance-based FX rendering ----
@@ -4788,6 +4901,7 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
   const sidx=(srcOv===undefined)?S.layers[i].src:srcOv;
   if(sidx===4){ renderCloner(i,t,T); return; }
   if(sidx===camIdx()){ renderWebcam(i,t,T); return; }
+  if(sidx===phoneCamIdx()){ renderPhoneCam(i,t,T); return; }
   if(isVideoSrc(sidx)){ renderVideo(i,sidx,t,T); return; }
   if(isRouteSrc(sidx)){ renderRoute(i,sidx,t,T); return; }
   gl.clearColor(0,0,0,1);
@@ -5188,7 +5302,27 @@ function setGradeUniforms(P,t){
   gl.uniform1f(U(P,'u_strobeLvl'),_strobeLvl);
   gl.uniform1f(U(P,'u_strobeAmt'),PARAMS['P.samt'].map(eff('P.samt')));
 }
+/* v1.9.37 perf: when the master grade is fully neutral (fader 1,
+   no hue shift, no strobe/blackout, bri/con/sat 1, no vig/grain) the
+   grade shader is an identity pass - swap it for the trivial copy
+   shader and save a full-screen math pass every frame. Modulators and
+   MIDI feed through eff(), so a modulated grade is never bypassed. */
+function gradeNeutral(){
+  if(S.strobeOn||S.blackout) return false;
+  if(Math.abs(S.ghue||0)>0.0001) return false;
+  const M=(id)=>PARAMS[id].map(eff(id));
+  return Math.abs(M('P.bri')-1)<0.001&&Math.abs(M('P.con')-1)<0.001&&Math.abs(M('P.sat')-1)<0.001
+    &&Math.abs(M('P.vig'))<0.001&&Math.abs(M('P.grain'))<0.001&&Math.abs(M('P.master')-1)<0.001;
+}
+function copyPass(inTex, fb, w, h){
+  const CP=PROG.copy; if(!CP) return false;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fb);
+  gl.viewport(0,0,w,h);
+  gl.useProgram(CP); setTex(CP,'u_tex',0,inTex); quadDraw();
+  return true;
+}
 function renderGrade(inTex,t){
+  if(gradeNeutral()&&copyPass(inTex,null,canvas.width,canvas.height)) return;
   const P=PROG.grade;
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   gl.viewport(0,0,canvas.width,canvas.height);
@@ -5199,6 +5333,7 @@ function renderGrade(inTex,t){
 }
 /* phone: the same master grade rendered into a target (v1.9.15) */
 function renderGradeInto(inTex,T,t){
+  if(gradeNeutral()&&copyPass(inTex,T.fb,T.w,T.h)) return;
   const P=PROG.grade; if(!P) return;
   gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
   gl.viewport(0,0,T.w,T.h);
@@ -8230,7 +8365,11 @@ function compilePlugin(fromInit){
      pipeline as .txt imports (const params become uniforms), tiered so
      a bad conversion can never break a compiling plugin */
   let conv=convertConstParams(code,'all');
+  let mineL=null;
+  { const mn37=mineShaderNumbers(conv.code);
+    if(mn37.count>0){ conv={code:mn37.code, defs:Object.assign({},conv.defs,mn37.defs)}; mineL=mn37.labels; } }
   let pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(conv.code));
+  if(!pr){ conv=convertConstParams(code,'all'); mineL=null; pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(conv.code)); }
   if(!pr){ conv=convertConstParams(code,'float'); pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(conv.code)); }
   if(!pr){ conv={code:code, defs:{}}; pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code)); }
   if(!pr){
@@ -8248,6 +8387,7 @@ function compilePlugin(fromInit){
   S.pluginUniforms=scanShaderUniforms(conv.code);
   for(const u of S.pluginUniforms){ if(conv.defs[u.name]!==undefined) u.init=conv.defs[u.name]; }
   shApplyMeta(S.pluginUniforms, code);
+  if(mineL) for(const u of S.pluginUniforms){ if(mineL[u.name]) u.label=mineL[u.name]; }
   registerPluginParams();
   { const _pe=$('plugerr'); if(_pe) _pe.textContent='';
     const _po=$('plugok'); if(_po) _po.textContent='Compiled OK'; }
@@ -8269,7 +8409,8 @@ if(!PROG.imports) PROG.imports=[];
    shift. srcCount() grows by one; removeImport() already decrements any
    src > dead, which keeps webcam clips pointing at the webcam. */
 function camIdx(){ return routeBase()+numLayers()+(S.groups||[]).length; }
-function srcCount(){ return camIdx()+1; } /* v1.9.24: the src param's
+function phoneCamIdx(){ return camIdx()+1; }
+function srcCount(){ return phoneCamIdx()+1; } /* v1.9.24: the src param's
    range spans the WHOLE source list (builtins, imports, videos, routes,
    Webcam last). It used to stop at the imports, so any source past them -
    Webcam included - clamped onto the wrong index when fired/selected
@@ -8278,6 +8419,7 @@ function srcName(s){
   s|=0;
   if(s<5) return LAYER_SRC[s]||'?';
   if(s===camIdx()) return 'Webcam';
+  if(s===phoneCamIdx()) return 'Phone Cam';
   if(isVideoSrc(s)){ const v=(S.videos||[])[videoIdx(s)]; return v?v.name:'Video'; }
   if(isRouteSrc(s)){
     const ri=routeLayerIdx(s), nL=numLayers();
@@ -8292,7 +8434,7 @@ function srcOptions(){
   const routes=[];
   for(let li=0;li<numLayers();li++) routes.push('\u2192 '+LAYER_NAMES[li]);
   (S.groups||[]).forEach((g,gi)=>routes.push('\u2192 '+g.name));
-  return LAYER_SRC.concat(S.imports.map(im=>im.name)).concat((S.videos||[]).map(v=>v.name)).concat(routes).concat(['Webcam']);
+  return LAYER_SRC.concat(S.imports.map(im=>im.name)).concat((S.videos||[]).map(v=>v.name)).concat(routes).concat(['Webcam','Phone Cam']);
 }
 function routeBase(){ return 5+S.imports.length+(S.videos||[]).length; }
 function videoIdx(si){ return si-5-S.imports.length; }
@@ -8698,13 +8840,14 @@ function convertConstParams(code, tier){
     while((m=re.exec(stripped))){
       const n=m[2], body=m[3].trim();
       const lm=body.match(new RegExp('^\\(?\\s*('+FLOATLIT+')\\s*\\)?$'));
-      if(!lm||/[eE.]/.test(lm[1])===false) continue; /* must look like a float */
+      const isIntDef=lm&&/^-?\d+$/.test(lm[1]);
+      if(!lm||(!isIntDef&&/[eE.]/.test(lm[1])===false)) continue; /* float or int literal */
       if(skipName(n)) continue;
       const uses=(stripped.match(new RegExp('\\b'+n+'\\b','g'))||[]).length;
       if(uses<2) continue; /* the define itself + at least one real use */
       converted[n]=1; defs[n]=lm[1];
       repls.push({start:m.index, end:m.index+m[0].length, text:''});
-      newUniforms.push('uniform float '+n+';');
+      newUniforms.push('uniform '+(isIntDef?'int':'float')+' '+n+';');
     }
   }
   let out=src;
@@ -8713,6 +8856,74 @@ function convertConstParams(code, tier){
   if(newUniforms.length) out=newUniforms.join('\n')+'\n'+out;
   return {code:out, defs:defs};
 }
+
+/* v1.9.37 NUMBER MINING: the loader-v3 freedom, one level deeper -
+   bare numeric literals inside the shader MATH (scales, thresholds,
+   hash constants, color components, loop bounds) become sliders too.
+   Each mined literal is replaced by a uniform whose default IS the
+   original number, so a freshly mined shader renders pixel-identical
+   until a slider moves. Labels come from the surrounding expression
+   (the enclosing call or variable + the original literal). Excluded on
+   purpose: 0 and 1 (structural glue), anything at global scope (the
+   const/#define pass owns those), array sizes/indices, preprocessor
+   lines, uniform/const declarations, and plain integers outside loop
+   headers (too often type-load-bearing to float-ize safely). Loop
+   integers mine as int uniforms. Cap: 20 per shader. Runs on the
+   const-converted code, and import/plugin both try it as the FIRST
+   tier - a mined build that fails to compile falls back untouched. */
+function mineShaderNumbers(code){
+  const srcS=String(code||'');
+  const stripped=stripGlslComments(srcS);
+  const taken={};
+  { const ure=/\buniform\s+(?:float|int|bool|vec[234]|mat[234]|sampler2D)\s+([^;]+);/g; let um;
+    while((um=ure.exec(stripped))){ for(const part of um[1].split(',')){ const nm=part.trim().split(/[\s=\[(]/)[0]; if(nm) taken[nm]=1; } } }
+  const forSpans=[];
+  { const fre=/\bfor\s*\(/g; let fm;
+    while((fm=fre.exec(stripped))){ let d=0, j=fm.index+fm[0].length-1;
+      for(;j<stripped.length;j++){ const c=stripped[j]; if(c==='(')d++; else if(c===')'){ d--; if(!d) break; } }
+      forSpans.push([fm.index,j]); } }
+  const inFor=(idx)=>{ for(const s of forSpans) if(idx>=s[0]&&idx<=s[1]) return true; return false; };
+  const KW={float:1,int:1,bool:1,vec2:1,vec3:1,vec4:1,mat2:1,mat3:1,mat4:1,if:1,else:1,for:1,while:1,return:1,const:1,void:1,struct:1,in:1,out:1,inout:1,uniform:1};
+  const repls=[], defs={}, labels={}, decls=[];
+  let made=0, next=0;
+  const numRe=/(?<![\w.])(\d+\.\d*(?:[eE][-+]?\d+)?|\.\d+(?:[eE][-+]?\d+)?|\d+[eE][-+]?\d+|\d+)/g;
+  let m;
+  while((m=numRe.exec(stripped))&&made<20){
+    const lit=m[1], idx=m.index, end=idx+lit.length;
+    const val=parseFloat(lit);
+    if(isNaN(val)||val===0||val===1) continue;
+    const isInt=/^\d+$/.test(lit);
+    const asInt=isInt&&inFor(idx);
+    if(isInt&&!asInt) continue;
+    let depth=0, ob=0;
+    for(let i=0;i<idx;i++){ const c=stripped[i];
+      if(c==='{')depth++; else if(c==='}')depth--;
+      else if(c==='[')ob++; else if(c===']')ob--; }
+    if(depth<1||ob>0) continue;
+    { const ls=stripped.lastIndexOf('\n',idx-1);
+      if(/^\s*#/.test(stripped.slice(ls+1,idx))) continue; }
+    let ss=idx-1;
+    while(ss>=0&&stripped[ss]!==';'&&stripped[ss]!=='{'&&stripped[ss]!=='}') ss--;
+    if(/^\s*(uniform|const|attribute|varying|precision)\b/.test(stripped.slice(ss+1,idx))) continue;
+    const ctx=stripped.slice(ss+1,idx);
+    const ids=[...ctx.matchAll(/([A-Za-z_][A-Za-z0-9_.]*)\s*(\()?/g)].filter(x=>!KW[x[1]]);
+    let base='num';
+    if(ids.length){ const calls=ids.filter(x=>x[2]==='('); base=(calls.length?calls[calls.length-1]:ids[ids.length-1])[1]; }
+    let name; do{ name='u_num'+next++; }while(taken[name]);
+    taken[name]=1; made++;
+    defs[name]=lit;
+    labels[name]=base+' '+lit.slice(0,10);
+    decls.push('uniform '+(asInt?'int':'float')+' '+name+';');
+    repls.push({start:idx, end:end, text:name});
+  }
+  if(!made) return {code:srcS, defs:{}, labels:{}, count:0};
+  let out=srcS;
+  repls.sort((a,b)=>b.start-a.start);
+  for(const r of repls) out=out.slice(0,r.start)+r.text+out.slice(r.end);
+  out=decls.join('\n')+'\n'+out;
+  return {code:out, defs:defs, labels:labels, count:made};
+}
+
 /* Compile + register an import. Returns source index (>=5), or -1. */
 /* ---------- factory sources (v1.9.15): the swipes ----------
    Stock Shadertoy-style sources registered through the same import
@@ -8785,13 +8996,20 @@ function importShader(name, code){
      (converted) forms, plus the raw form for pre-conversion-era imports */
   const convAll=convertConstParams(raw,'all');
   const convFloat=convertConstParams(raw,'float');
+  const mined37=mineShaderNumbers(convAll.code);
   for(let k=0;k<S.imports.length;k++)
-    if(S.imports[k].code===convAll.code||S.imports[k].code===convFloat.code||S.imports[k].code===raw) return 5+k;
+    if(S.imports[k].code===convAll.code||S.imports[k].code===convFloat.code||S.imports[k].code===raw||S.imports[k].code===mined37.code) return 5+k;
   /* iChannel0..3 supported — bound to default procedural textures (or user-assigned) */
   lastGlslErr='';
-  code=convAll.code;
-  let defs=convAll.defs;
+  code=(mined37.count>0)?mined37.code:convAll.code;
+  let defs=(mined37.count>0)?Object.assign({},convAll.defs,mined37.defs):convAll.defs;
+  let mineLabels=(mined37.count>0)?mined37.labels:null;
   let pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
+  if(!pr&&convAll.code!==code){
+    /* mining broke compilation: retry the plain const conversion */
+    code=convAll.code; defs=convAll.defs; mineLabels=null;
+    pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
+  }
   if(!pr&&convFloat.code!==code){
     /* the wider conversion broke compilation: retry float-only */
     code=convFloat.code; defs=convFloat.defs;
@@ -8807,6 +9025,7 @@ function importShader(name, code){
   const uniforms=scanShaderUniforms(code);
   for(const u of uniforms){ if(defs[u.name]!==undefined) u.init=defs[u.name]; }
   shApplyMeta(uniforms, raw);
+  if(mineLabels) for(const u of uniforms){ if(mineLabels[u.name]) u.label=mineLabels[u.name]; }
   S.imports.push({name:clean, code:code, uniforms:uniforms});
   PROG.imports.push(pr);
   registerImportParams(5+S.imports.length-1);
@@ -10415,7 +10634,7 @@ else neInit();
 <script>
 'use strict';
 /* ================= MAIN LOOP ================= */
-let tStart=performance.now()/1000, lastT=0, frames=0, fpsT=0, pvTick=0;
+let tStart=performance.now()/1000, lastT=0, frames=0, fpsT=0, pvTick=0, _pvLast=0;
 /* Auto quality: a rolling 1s fps average drives the render-scale steps.
    Step DOWN (1.0 -> 0.75 -> 0.5) when fps < 42 sustained ~3s; step back UP
    when fps > 57 sustained ~10s. A 5s cooldown after every step plus the
@@ -10435,11 +10654,11 @@ function qualityAutoTick(now){
   if(qFpsAvg<42){ qSlowT+=dt; qFastT=0; }
   else if(qFpsAvg>57){ qFastT+=dt; qSlowT=0; }
   else { qSlowT=0; qFastT=0; }
-  if(qSlowT>=3.0 && qScaleIdx<2) setQualityScale(qScaleIdx+1,true);
+  if(qSlowT>=3.0 && qScaleIdx<Q_SCALES.length-1) setQualityScale(qScaleIdx+1,true);
   else if(qFastT>=10.0 && qScaleIdx>0) setQualityScale(qScaleIdx-1,true);
 }
 function setQualityScale(idx,auto){
-  qScaleIdx=Math.max(0,Math.min(2,idx));
+  qScaleIdx=Math.max(0,Math.min(Q_SCALES.length-1,idx));
   qSlowT=0; qFastT=0; qCooldown=5.0;
   buildTargets();
   syncQualityUI();
@@ -10451,8 +10670,8 @@ function setQuality(q){
   if(!Q_LABEL[q]) q='auto';
   S.quality=q;
   if(q==='high') qScaleIdx=0;
-  else if(q==='medium') qScaleIdx=1;
-  else if(q==='low') qScaleIdx=2;
+  else if(q==='medium') qScaleIdx=2;
+  else if(q==='low') qScaleIdx=Q_SCALES.length-1;
   qSlowT=0; qFastT=0; qCooldown=0;
   buildTargets(); syncQualityUI(); saveState();
 }
@@ -10616,7 +10835,7 @@ function loop(){
   /* live clip preview: throttled to every 3rd frame (the readPixels stall was
      the dominant frame cost) and skipped while the node editor covers the deck.
      Uses its own counter — `frames` resets every 0.5s for the fps meter. */
-  if(!neOpen && (pvTick=(pvTick+1)%3)===0) updatePreview(gt);
+  if(!neOpen && now-_pvLast>=0.066){ _pvLast=now; updatePreview(gt); } /* ~15fps, frame-rate independent (v1.9.37) */
   /* deck thumbnails: amortized — 2 renders/frame max until the queue drains,
      zero per-frame cost afterwards */
   if(!neOpen && thumbQueue.length){
@@ -11129,6 +11348,16 @@ function syncHandle(d){
     if(first) toast('Synced \u2014 this screen is live with your other device');
     return;
   }
+  if(d.kind==='sync-cam'){
+    SYNC.peerAt=now;
+    if(typeof d.seq==='number'&&d.seq>phoneCam.lastSeq&&typeof d.d==='string'&&d.d.indexOf('data:image/')===0){
+      phoneCam.lastSeq=d.seq;
+      if(!phoneCam.img){ phoneCam.img=new Image(); phoneCam.img.onload=()=>uploadPhoneCam(); }
+      phoneCam.img.src=d.d;
+    }
+    return;
+  }
+  if(d.kind==='sync-cam-off'){ phoneCam.fresh=false; return; }
   if(d.kind==='sync-fire'){
     SYNC.peerAt=now; SYNC.shakeAt=now;
     if(typeof d.l==='number'&&typeof d.c==='number'&&S.fired[d.l]!==d.c){
@@ -11268,6 +11497,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 $('btnPrm').addEventListener('click',()=>setPrmOn(!prmOn));
 $('btnPair').addEventListener('click',()=>togglePair(true));
 $('btnPairClose').addEventListener('click',()=>togglePair(false));
+$('btnCamShare').addEventListener('click',()=>{ if(camShare.on) stopCamShare(); else startCamShare(); });
 $('btnPairDisc').addEventListener('click',()=>{ p2pStop(); p2pCode=''; try{ localStorage.removeItem('holomapper.paircode'); }catch(e){} prmStatus('phone link off'); togglePair(false); });
 /* hub-served console (http on :8090) auto-links to the hub — no toggle needed */
 if(location.protocol==='http:'&&location.port==='8090'){ setPrmOn(true); }
