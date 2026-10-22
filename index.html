@@ -823,6 +823,14 @@ button.slon{flex:none;padding:2px 8px;font-size:11px}
         <div id="masterbar">
           <div class="mbgrp"><button id="mbpmDn" title="BPM -1">−</button><span id="mbpm">120</span><button id="mbpmUp" title="BPM +1">+</button><button id="mbTap" title="Tap tempo">TAP</button></div>
           <div class="mbknob" id="mbSpeedK"></div>
+          <div class="mbgrp mbscale" title="Master time scale - type your own numbers: slowest x, fastest x, and the exact current value">
+            <span class="mblab">SCALE</span>
+            <input id="mbSpdMin" class="mbnum" type="number" step="0.05" min="0.01" max="32" title="Slowest time scale (x)">
+            <span class="mbx">-</span>
+            <input id="mbSpdMax" class="mbnum" type="number" step="0.05" min="0.02" max="64" title="Fastest time scale (x)">
+            <span class="mbx">@</span>
+            <input id="mbSpdVal" class="mbnum" type="number" step="0.05" title="Exact time scale (x) - type a value and Enter">
+          </div>
           <div class="mbknob" id="mbHueK"></div>
           <div class="mbgrp"><button id="mbStrobe" title="Master strobe">STROBE</button><div class="mbknob" id="mbSRateK"></div></div>
           <div class="mbgrp"><button id="mbBlack" title="Blackout (Space)">BLACKOUT</button><select id="mbBlType" title="Blackout type"><option value="black">Black</option><option value="white">White</option><option value="freeze">Freeze</option></select></div>
@@ -1427,7 +1435,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.33';
+const APP_VERSION='1.9.35';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1989,7 +1997,7 @@ function defaultState(){
     postBypass:{feedback:false, kaleido:true, glitch:true, mirror:true, automask:true, colorize:true, bloompost:true},
     strobeOn:false, beatSync:false, bpm:120, blackout:false, knobSmooth:0,
     compW:0, compH:0, outDisplay:null,
-    bltype:'black', ghue:0, gspeed:1, camFace:'user',
+    bltype:'black', ghue:0, gspeed:1, gspeedMin:0.1, gspeedMax:2, camFace:'user',
     layerFx:Array.from({length:MAX_LAYERS},()=>[]),
     clipFx:Array.from({length:MAX_LAYERS},()=>Array.from({length:START_COLS},()=>[])),
     compFx:[],
@@ -6596,6 +6604,7 @@ function buildDeck(){
         ? (base0?('TRIGGER effect clip '+fxInstLabel(base0)+' on '+LAYER_NAMES[i]+' — processes the layers below'):'Empty slot \u2014 right-click to assign a source')
         : ('TRIGGER '+srcName(src)+' on '+LAYER_NAMES[i]+' (quantized: '+(S.snap||'bar')+')');
       th.addEventListener('click',(e)=>{
+        if(th._draggedAt&&Date.now()-th._draggedAt<500){ th._draggedAt=0; return; }
         if(window.placeTap&&window.placeTap(i,k)) return;
         if((e.ctrlKey||e.metaKey)&&(window.HM_DEVICE&&HM_DEVICE.device!=='phone')){
           /* v1.9.23 desktop: Ctrl+click a clip = select it, don't fire */
@@ -6623,18 +6632,61 @@ function buildDeck(){
           }
         }
       });
-      /* phone: long-press = assign source (no right-click on touch) */
+      /* phone: long-press = menu (no right-click on touch);
+         press-and-MOVE = drag the clip to rearrange (v1.9.35) -
+         same move/swap engine as the desktop drag. A stationary
+         hold still opens the menu; moving past 14px first turns
+         the press into a drag instead. */
       if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
-        let _lpT=null;
+        let _lpT=null, _td=null;
         th.addEventListener('touchstart',(e)=>{
+          const t0=e.touches[0];
+          _td={sx:t0.clientX, sy:t0.clientY, dragging:false, ghost:null, ti:-1, tk:-1, opened:false};
           _lpT=setTimeout(()=>{
-            const t=e.touches[0];
-            showClipMenu(t.clientX,t.clientY,i,k);
+            if(_td) _td.opened=true;
+            showClipMenu(t0.clientX,t0.clientY,i,k,{fromTouch:true});
             th._lastTap=0; /* suppress the tap-select */
           },500);
         },{passive:true});
-        th.addEventListener('touchend',()=>{ clearTimeout(_lpT); });
-        th.addEventListener('touchmove',()=>{ clearTimeout(_lpT); });
+        th.addEventListener('touchmove',(e)=>{
+          if(!_td) return;
+          const t=e.touches[0]; if(!t) return;
+          if(!_td.dragging){
+            if(_td.opened) return;
+            if(Math.hypot(t.clientX-_td.sx,t.clientY-_td.sy)<14) return;
+            clearTimeout(_lpT);
+            if(src===null||src===undefined){ if(!base0){ _td=null; return; } }
+            _td.dragging=true;
+            const r=c.getBoundingClientRect();
+            const g=c.cloneNode(true);
+            g.style.cssText='position:fixed;z-index:400;pointer-events:none;opacity:.85;margin:0;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;height:'+r.height+'px;';
+            document.body.appendChild(g); _td.ghost=g; _td.w=r.width; _td.h=r.height;
+          }
+          e.preventDefault();
+          _td.ghost.style.left=(t.clientX-_td.w/2)+'px';
+          _td.ghost.style.top=(t.clientY-_td.h/2)+'px';
+          const hit=document.elementFromPoint(t.clientX,t.clientY);
+          const cell=hit&&hit.closest?hit.closest('.clip'):null;
+          document.querySelectorAll('.clip.drophl').forEach(x=>{ if(x!==cell) x.classList.remove('drophl'); });
+          if(cell){ cell.classList.add('drophl'); _td.ti=parseInt(cell.dataset.i,10); _td.tk=parseInt(cell.dataset.k,10); }
+          else{ _td.ti=-1; _td.tk=-1; }
+        },{passive:false});
+        const _tend=()=>{
+          clearTimeout(_lpT);
+          if(_td&&_td.dragging){
+            if(_td.ghost) _td.ghost.remove();
+            document.querySelectorAll('.clip.drophl').forEach(x=>x.classList.remove('drophl'));
+            th._draggedAt=Date.now();
+            const ti=_td.ti, tk=_td.tk;
+            if(ti>=0&&tk>=0&&(ti!==i||tk!==k)){
+              const cells=(S.clipSel&&S.clipSel.some(cc=>cc.i===i&&cc.k===k))?S.clipSel.map(cc=>({i:cc.i,k:cc.k})):[{i,k}];
+              moveClipsDrag(cells,ti,tk);
+            }
+          }
+          _td=null;
+        };
+        th.addEventListener('touchend',_tend);
+        th.addEventListener('touchcancel',_tend);
       }
       const cnm=el('div','cname',(src===null||src===undefined)?(base0?('FX \u00B7 '+fxInstLabel(base0)):'empty'):srcName(src));
       cnm.title='Select clip '+(k+1)+' without triggering';
@@ -6793,8 +6845,14 @@ function buildDeck(){
   }
 }
 /* clip source-assign popup */
-function showClipMenu(x,y,i,k){
+function showClipMenu(x,y,i,k,opts){
   const m=$('clipmenu'); m.innerHTML='';
+  /* v1.9.35: a touch long-press opens this menu UNDER the finger - the
+     click synthesized when the finger lifts would otherwise activate
+     whatever item happens to sit at the release point (usually a
+     source row, which also closes the menu, eating the long-press).
+     The capture listener below swallows exactly that one click. */
+  m._swallowNext=!!(opts&&opts.fromTouch);
   const cur=S.clips[i][k];
   /* v1.9.19: the add-anything menu - shader file, source, or effect */
   const bImp=el('button','cmimp','+ Shader from .txt file…');
@@ -6807,22 +6865,16 @@ function showClipMenu(x,y,i,k){
     inp.click();
   });
   m.appendChild(bImp);
-  m.appendChild(el('div','cmsep','Sources'));
-  srcOptions().forEach((s,si)=>{
-    const b=el('button',null,(si===cur?'\u2713 ':'')+s);
-    b.addEventListener('click',()=>{ S.clips[i][k]=si; hideClipMenu(); saveState(); buildDeck(); buildProps(); });
-    m.appendChild(b);
-  });
-  m.appendChild(el('div','cmsep','Effects'));
-  FXDEFS.forEach(def=>{
-    const b=el('button',null,def.name);
-    b.title='Add '+def.name+' - on an empty slot it becomes an effect clip (processes the layers below)';
-    b.addEventListener('click',()=>{ hideClipMenu(); dropFxOnClip(def.key,i,k); });
-    m.appendChild(b);
-  });
+  /* Edit FIRST (v1.9.35): Cut/Copy/Paste/Clear used to sit under ~35
+     source/effect rows, and the menu box could extend past the bottom
+     of the screen - on the phone the edit actions were unreachable. */
   m.appendChild(el('div','cmsep','Edit'));
   const inSel=S.clipSel&&S.clipSel.some(c=>c.i===i&&c.k===k);
   const selN=inSel?S.clipSel.length:1;
+  const bSelT=el('button',null,(inSel?'Remove from selection':'Add to selection')+((S.clipSel&&S.clipSel.length)?' \u00b7 '+S.clipSel.length+' selected':''));
+  bSelT.title='Multi-select: build a selection clip by clip, then Cut/Copy acts on all of them';
+  bSelT.addEventListener('click',()=>{ toggleClipSel(i,k,true); hideClipMenu(); toast(S.clipSel.length?S.clipSel.length+' clip(s) selected':'Selection cleared'); });
+  m.appendChild(bSelT);
   const bCut=el('button',null,'Cut'+(selN>1?' ('+selN+' clips)':''));
   bCut.addEventListener('click',()=>{ if(!inSel) S.clipSel=[{i,k}]; hideClipMenu(); copyClips(true); });
   m.appendChild(bCut);
@@ -6840,9 +6892,26 @@ function showClipMenu(x,y,i,k){
     hideClipMenu(); saveState(); buildDeck(); buildProps();
   });
   m.appendChild(bc);
+  m.appendChild(el('div','cmsep','Sources'));
+  srcOptions().forEach((s,si)=>{
+    const b=el('button',null,(si===cur?'\u2713 ':'')+s);
+    b.addEventListener('click',()=>{ S.clips[i][k]=si; hideClipMenu(); saveState(); buildDeck(); buildProps(); });
+    m.appendChild(b);
+  });
+  m.appendChild(el('div','cmsep','Effects'));
+  FXDEFS.forEach(def=>{
+    const b=el('button',null,def.name);
+    b.title='Add '+def.name+' - on an empty slot it becomes an effect clip (processes the layers below)';
+    b.addEventListener('click',()=>{ hideClipMenu(); dropFxOnClip(def.key,i,k); });
+    m.appendChild(b);
+  });
   m.style.display='flex';
-  m.style.left=Math.min(x,Math.max(0,window.innerWidth-215))+'px';
-  m.style.top=Math.min(y,Math.max(0,window.innerHeight-480))+'px';
+  /* clamp against the MEASURED box (v1.9.35): the old vh-480 guess let
+     the box bottom run past the screen edge, and the items down there
+     (Paste, Clear) could never be scrolled into view on a phone. */
+  const _mw=m.offsetWidth, _mh=m.offsetHeight;
+  m.style.left=Math.max(4,Math.min(x,window.innerWidth-_mw-8))+'px';
+  m.style.top=Math.max(4,Math.min(y,window.innerHeight-_mh-8))+'px';
 }
 function hideClipMenu(){ const m=$('clipmenu'); if(m) m.style.display='none'; }
 /* ---------- properties panel (selection-driven, tabbed) ---------- */
@@ -7903,9 +7972,17 @@ function mbMakeKnob(hostId, label, opts){
   K.paint();
   return K;
 }
+/* Master time scale range (v1.9.34): the user types the available
+   numbers - the SPEED knob sweeps gspeedMin..gspeedMax instead of the
+   hardwired 0.1x..2x. Defaults preserve the old behavior exactly. */
+function gsMin(){ const v=parseFloat(S.gspeedMin); return (isFinite(v)&&v>0)?v:0.1; }
+function gsMax(){ const v=parseFloat(S.gspeedMax); return (isFinite(v)&&v>gsMin())?v:Math.max(2,gsMin()+0.1); }
+function gsToKnob(x){ return clamp((x-gsMin())/(gsMax()-gsMin()),0,1); }
+function gsFromKnob(v){ return gsMin()+v*(gsMax()-gsMin()); }
 function syncMasterBar(){
   const b=$('mbpm'); if(b) b.textContent=S.bpm||120;
-  if(MBK.speed) MBK.speed.set(clamp(((S.gspeed===undefined?1:S.gspeed)-0.1)/1.9,0,1),false);
+  if(MBK.speed) MBK.speed.set(gsToKnob(S.gspeed===undefined?1:S.gspeed),false);
+  if(MBK.paintScale) MBK.paintScale();
   if(MBK.hue) MBK.hue.set(S.ghue||0,false);
   if(MBK.rate) MBK.rate.set((S.params['P.srate']!==undefined)?S.params['P.srate']:PARAMS['P.srate'].def,false);
   if(MBK.out) MBK.out.set((S.params['P.master']!==undefined)?S.params['P.master']:1,false);
@@ -7918,9 +7995,29 @@ function wireMasterBar(){
   if(dn) dn.addEventListener('click',()=>bpmSet((S.bpm||120)-1));
   if(up) up.addEventListener('click',()=>bpmSet((S.bpm||120)+1));
   if(tp) tp.addEventListener('click',()=>tapTempo());
-  MBK.speed=mbMakeKnob('mbSpeedK','SPEED',{ def:(1-0.1)/1.9,
-    fmt:v=>(0.1+v*1.9).toFixed(2)+'x',
-    set:v=>{ S.gspeed=0.1+v*1.9; saveState(); if(typeof syncFieldSend==='function') syncFieldSend('gspeed',S.gspeed); } });
+  MBK.speed=mbMakeKnob('mbSpeedK','SPEED',{ def:gsToKnob(1),
+    fmt:v=>gsFromKnob(v).toFixed(2)+'x',
+    set:v=>{ S.gspeed=gsFromKnob(v); saveState(); if(typeof syncFieldSend==='function') syncFieldSend('gspeed',S.gspeed); if(MBK.paintScale) MBK.paintScale(); } });
+  { const sMin=$('mbSpdMin'), sMax=$('mbSpdMax'), sVal=$('mbSpdVal');
+    MBK.paintScale=()=>{ if(sMin) sMin.value=gsMin(); if(sMax) sMax.value=gsMax(); if(sVal) sVal.value=Math.round((S.gspeed===undefined?1:S.gspeed)*100)/100; };
+    MBK.paintScale();
+    const applyScale=()=>{
+      let mn=parseFloat(sMin?sMin.value:''), mx=parseFloat(sMax?sMax.value:'');
+      if(!isFinite(mn)) mn=0.1; if(!isFinite(mx)) mx=2;
+      mn=Math.min(32,Math.max(0.01,mn)); mx=Math.min(64,Math.max(mn+0.01,mx));
+      S.gspeedMin=mn; S.gspeedMax=mx;
+      S.gspeed=clamp(S.gspeed===undefined?1:S.gspeed, mn, mx);
+      saveState(); syncMasterBar();
+    };
+    if(sMin) sMin.addEventListener('change',applyScale);
+    if(sMax) sMax.addEventListener('change',applyScale);
+    if(sVal) sVal.addEventListener('change',()=>{
+      let v=parseFloat(sVal.value); if(!isFinite(v)) v=1;
+      S.gspeed=clamp(v, gsMin(), gsMax()); saveState();
+      if(typeof syncFieldSend==='function') syncFieldSend('gspeed',S.gspeed);
+      syncMasterBar();
+    });
+  }
   MBK.hue=mbMakeKnob('mbHueK','HUE',{ def:0,
     fmt:v=>Math.round(v*360)+'°',
     set:v=>{ S.ghue=v; saveState(); if(typeof syncFieldSend==='function') syncFieldSend('ghue',S.ghue); } });
@@ -8886,7 +8983,7 @@ function snapshot(){
     decks:S.decks, deckIdx:S.deckIdx, autopilot:S.autopilot,
     postBypass:S.postBypass, strobeOn:S.strobeOn, beatSync:S.beatSync,
     bpm:S.bpm, snap:S.snap||'bar', macros:S.macros, pluginCode:S.pluginCode, pluginUniforms:S.pluginUniforms, imports:S.imports, midi:S.midi,
-    bltype:S.bltype||'black', ghue:S.ghue||0, gspeed:(S.gspeed===undefined?1:S.gspeed),
+    bltype:S.bltype||'black', ghue:S.ghue||0, gspeed:(S.gspeed===undefined?1:S.gspeed), gspeedMin:S.gspeedMin, gspeedMax:S.gspeedMax,
     mods:S.mods, graphs:S.graphs, slices:S.slices
   }));
 }
@@ -8939,6 +9036,8 @@ function applySnapshot(snap){
   if(snap.bltype) S.bltype=snap.bltype;
   if(snap.ghue!==undefined) S.ghue=snap.ghue;
   if(snap.gspeed!==undefined) S.gspeed=snap.gspeed;
+  if(snap.gspeedMin!==undefined) S.gspeedMin=snap.gspeedMin;
+  if(snap.gspeedMax!==undefined) S.gspeedMax=snap.gspeedMax;
   syncTopToggles(); drawPreview(); syncTransport();
   $('bpm').textContent=S.bpm;
   saveState();
@@ -9109,6 +9208,11 @@ function wireStatic(){
     const m=$('clipmenu');
     if(m&&m.style.display==='flex'&&!m.contains(e.target)) hideClipMenu();
   });
+  /* swallow the one release-click that follows a touch long-press open */
+  document.addEventListener('click',(e)=>{
+    const m=$('clipmenu');
+    if(m&&m._swallowNext){ m._swallowNext=false; e.stopPropagation(); e.preventDefault(); }
+  },true);
   document.addEventListener('keydown',(e)=>{ if(e.key==='Escape') hideClipMenu(); });
   /* presets */
   $('btnSavePreset').addEventListener('click',()=>{
@@ -11160,7 +11264,7 @@ setInterval(broadcastState,500);
 </script>
 
 <style>
-#clipmenu{position:fixed;z-index:200;background:#171a21;border:1px solid var(--line);border-radius:10px;padding:6px;min-width:200px;max-width:78vw;max-height:72vh;overflow-y:auto;box-shadow:0 12px 32px rgba(0,0,0,.55);flex-direction:column;gap:2px}
+#clipmenu{position:fixed;z-index:200;background:#171a21;border:1px solid var(--line);border-radius:10px;padding:6px;min-width:200px;max-width:78vw;max-height:88vh;overflow-y:auto;box-shadow:0 12px 32px rgba(0,0,0,.55);flex-direction:column;gap:2px}
 #clipmenu button{display:block;width:100%;text-align:left;padding:8px 10px;font-size:13px;background:transparent;border:none;border-radius:6px;color:var(--ink);cursor:pointer;white-space:nowrap}
 #clipmenu button:hover{background:#232733}
 #clipmenu .cmsep{font-size:9.5px;letter-spacing:.14em;color:var(--dim);font-weight:700;padding:8px 10px 2px;text-transform:uppercase}
@@ -11168,6 +11272,8 @@ setInterval(broadcastState,500);
 #masterbar{display:flex;flex-wrap:nowrap;gap:12px;align-items:center;padding:5px 10px;background:#14161c;border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 #masterbar::-webkit-scrollbar{display:none}
 #masterbar .mblab{font-size:10px;letter-spacing:.14em;color:var(--dim);font-weight:700;white-space:nowrap}
+#masterbar .mbnum{width:54px;background:#0a0b0e;color:var(--ink,#e8eaf0);border:1px solid var(--line);border-radius:4px;font-size:11px;padding:2px 4px}
+#masterbar .mbx{color:var(--dim);font-size:11px}
 #masterbar .mbgrp{display:flex;align-items:center;gap:6px;flex:none}
 #masterbar button{padding:6px 9px;font-size:12px;white-space:nowrap}
 #masterbar button.on{background:#0d3f3a;color:#5eead4;border-color:#2dd4bf}
