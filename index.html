@@ -682,17 +682,29 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
   border-top:1px solid var(--line);}
 .modcv.nodecv{width:100%;height:110px;}
 
-/* slices editor (v1.9.27) */
-#sliceov{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;z-index:60;
-  align-items:center;justify-content:center}
-#sliceov.show{display:flex}
-#sliceov .box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
-  padding:16px 20px;width:min(1120px,96vw);max-height:92vh;overflow:auto}
+/* slices editor (v1.9.27; full-window Advanced Output layout v1.9.30) */
+#sliceov{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;z-index:60}
+#sliceov.show{display:block}
+#sliceov .box{background:var(--panel);border:1px solid var(--line);
+  padding:12px 16px;width:100vw;height:100vh;height:100dvh;box-sizing:border-box;
+  display:flex;flex-direction:column}
 #sliceov h2{color:var(--play);font-size:14px;margin:0}
-.slhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.slbody{display:flex;gap:16px;align-items:flex-start}
-.slside{width:300px;flex:none;display:flex;flex-direction:column;gap:10px}
-.slstage{flex:1;min-width:280px}
+.slhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sloutbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.sloutbar select{max-width:320px}
+.slbody{display:flex;gap:16px;align-items:stretch;flex:1;min-height:0}
+.slside{width:280px;flex:none;display:flex;flex-direction:column;gap:10px;overflow:auto}
+.slstage{flex:1;min-width:280px;display:flex;flex-direction:column;min-height:0}
+.slpropscol{width:320px;flex:none;overflow:auto}
+#slcvwrap{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;
+  background:#0a0a0c;border:1px solid var(--line);border-radius:6px;padding:8px}
+.slzoom{display:inline-flex;gap:6px;align-items:center;margin-left:14px}
+.slzoom button.on{background:#123b38;border-color:var(--play);color:var(--play);font-weight:700}
+@media (max-width:900px){
+  .slbody{flex-direction:column;overflow:auto}
+  .slside,.slpropscol{width:auto;flex:none;overflow:visible}
+  .slstage{min-height:60vh}
+}
 .sltabs{display:flex;gap:6px;margin-bottom:8px}
 .sltabs button.on{background:#123b38;border-color:var(--play);color:var(--play);font-weight:700}
 #slcv{width:100%;height:auto;background:#000;border:1px solid var(--line);border-radius:6px;display:block}
@@ -891,20 +903,28 @@ button.slon{flex:none;padding:2px 8px;font-size:11px}
 </div></div>
 <!-- slices editor overlay (v1.9.27) -->
 <div id="sliceov"><div class="box">
-  <div class="slhead"><h2>Slices — input / output mapping</h2><button id="btnSliceClose">Close</button></div>
+  <div class="slhead"><h2>Advanced Output — slices</h2><button id="btnSliceClose">Close</button></div>
+  <div class="sloutbar">
+    <span class="sllab">Output</span>
+    <select id="slOutSel"><option value="">Output window (no target display)</option></select>
+    <button id="btnSlDetect">Detect displays</button>
+    <button id="btnSlSend">Send output there</button>
+    <button id="btnSlMatch">Match comp to output</button>
+    <span class="dim" id="slOutInfo"></span>
+  </div>
   <div class="slbody">
     <div class="slside">
       <div id="sllist"></div>
       <div class="krow"><button id="btnSliceAdd">+ Add slice</button><button id="btnSliceDup">Duplicate</button><button id="btnSliceDel">Delete</button></div>
-      <div id="slprops"></div>
       <div class="krow"><button id="btnSliceReset">Reset slice</button><button id="btnSliceResetAll">Reset all</button></div>
-      <div class="hint">The output window / projector shows the mapping live. Turn on a slice's Test pattern to align its corners.</div>
+      <div class="hint">The output window / projector shows the mapping live. Turn on a slice's Test pattern to align its corners. Click a corner pin to select it, then nudge with the arrow keys (1 px, Shift = 10 px). Hold Alt while dragging for fine control.</div>
     </div>
     <div class="slstage">
-      <div class="sltabs"><button id="btnSlTabIn">Input</button><button id="btnSlTabOut" class="on">Output</button></div>
-      <canvas id="slcv" width="960" height="540"></canvas>
+      <div class="sltabs"><button id="btnSlTabIn">Input Selection</button><button id="btnSlTabOut" class="on">Output Transformation</button><span class="slzoom"><span class="sllab">Zoom</span><button data-slzoom="fit" class="on">Fit</button><button data-slzoom="0.5">50%</button><button data-slzoom="1">100%</button><button data-slzoom="2">200%</button></span></div>
+      <div id="slcvwrap"><canvas id="slcv" width="960" height="540"></canvas></div>
       <div class="hint" id="slhint"></div>
     </div>
+    <div class="slpropscol"><div id="slprops"></div></div>
   </div>
 </div></div>
 <div id="ctxlost">
@@ -1406,7 +1426,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.28';
+const APP_VERSION='1.9.30';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1966,6 +1986,7 @@ function defaultState(){
     params:params, assigns:{}, mods:{},
     postBypass:{feedback:false, kaleido:true, glitch:true, mirror:true, automask:true, colorize:true, bloompost:true},
     strobeOn:false, beatSync:false, bpm:120, blackout:false, knobSmooth:0,
+    compW:0, compH:0, outDisplay:null,
     bltype:'black', ghue:0, gspeed:1, camFace:'user',
     layerFx:Array.from({length:MAX_LAYERS},()=>[]),
     clipFx:Array.from({length:MAX_LAYERS},()=>Array.from({length:START_COLS},()=>[])),
@@ -2087,17 +2108,26 @@ function histRedo(){
   if(histPtr>=histStack.length-1){ toast('Nothing to redo'); histSyncUI(); return; }
   histPtr++; histApply(histStack[histPtr]); toast('Redo');
 }
-function histApply(json){
+function histApply(json, fromSync){
   histRestoring=true;
   try{
     const parsed=JSON.parse(json);
     const vids=S.videos, oldPlugin=S.pluginCode;
+    /* Runtime clocks ride through a restore (v1.9.30): layerTime /
+       impTime / _frz are excluded from snapshots, so the swap below
+       used to delete them and every shader's time base restarted at
+       zero - the visible "output resets" whenever a synced state (or
+       an undo) landed. They are runtime, not state: preserve them. */
+    const vol={layerTime:S.layerTime, impTime:S.impTime, _frz:S._frz};
     const oldImports=JSON.stringify(S.imports||[]);
     const oldQ=qScaleIdx;
     for(const k of Object.keys(S)) delete S[k];
     Object.assign(S,parsed);
     S.videos=vids;
-    pendingFires=[]; transX=[null,null,null,null];
+    if(vol.layerTime) S.layerTime=vol.layerTime;
+    if(vol.impTime) S.impTime=vol.impTime;
+    if(vol._frz) S._frz=vol._frz;
+    if(!fromSync){ pendingFires=[]; transX=[null,null,null,null]; }
     rebindClips(); ensureFxChains(); ensureAllGraphs();
     if(JSON.stringify(S.imports||[])!==oldImports) recompileImports();
     if(typeof S.pluginCode==='string'&&S.pluginCode!==oldPlugin) compilePlugin(true);
@@ -3123,13 +3153,14 @@ function makeTarget(w,h,depth){
    composite, never scaled). Internal targets are BASE * Q_SCALES[qScaleIdx].
    S.quality: 'auto' (default, adapts to measured fps), 'high', 'medium',
    'low'. Persisted in localStorage via S (saveState). */
-const BASE_W=1280, BASE_H=720;
+let BASE_W=1280, BASE_H=720; /* composition size; setCompSize() can match it to the output display (v1.9.30) */
 const Q_SCALES=[1.0, 0.75, 0.5];
 const Q_LABEL={auto:'Auto', high:'High', medium:'Medium', low:'Low'};
 let qScaleIdx=0; /* effective scale index: 0=1.0x, 1=0.75x, 2=0.5x */
 if(window.HM_DEVICE&&HM_DEVICE.device==='phone')qScaleIdx=0; /* phones start full; auto-quality adapts */
 function effScale(){ return Q_SCALES[qScaleIdx]; }
 function buildTargets(){
+  if(typeof S!=='undefined'&&S&&S.compW>0&&S.compH>0){ BASE_W=S.compW; BASE_H=S.compH; }
   /* Render quality: the display canvas always stays at the full base
      resolution (the final composite never shrinks); the internal render
      targets are multiplied by the quality scale. At 1.0x this is
@@ -4710,21 +4741,29 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
     const uns=(sidx===3)?S.pluginUniforms:((S.imports[sidx-5]||{}).uniforms);
     if(uns&&uns.length){
       if(sidx>=5&&!PARAMS['SH'+sidx+'.timeSpeed']) registerImportParams(sidx);
+      const mp=(id)=>PARAMS[id]?PARAMS[id].map(eff(id)):eff(id);
       for(const u0 of uns){
         const u=normUniform(u0); if(!u) continue;
         const base='SH'+sidx+'.'+u.name;
-        if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
+        const cnt=u.count||1;
+        if(cnt>1&&(u.type==='float'||u.type==='int')){
+          const loc=U(prog,u.name);
+          if(loc){
+            if(u.type==='int'){ const arr=new Int32Array(cnt); for(let e=0;e<cnt;e++) arr[e]=mp(base+'_'+e); gl.uniform1iv(loc,arr); }
+            else{ const arr=new Float32Array(cnt); for(let e=0;e<cnt;e++) arr[e]=mp(base+'_'+e); gl.uniform1fv(loc,arr); }
+          }
+        }else if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
           const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw', vv=[];
-          for(let c=0;c<ncomp;c++) vv.push(eff(base+'.'+axes[c]));
+          for(let c=0;c<ncomp;c++) vv.push(mp(base+'.'+axes[c]));
           if(ncomp===2) gl.uniform2f(U(prog,u.name),vv[0],vv[1]);
           else if(ncomp===3) gl.uniform3f(U(prog,u.name),vv[0],vv[1],vv[2]);
           else gl.uniform4f(U(prog,u.name),vv[0],vv[1],vv[2],vv[3]);
         }else if(u.type==='int'){
-          gl.uniform1i(U(prog,u.name),PARAMS[base].map(eff(base)));
+          gl.uniform1i(U(prog,u.name),mp(base));
         }else if(u.type==='bool'){
           gl.uniform1i(U(prog,u.name),eff(base)>=0.5?1:0);
         }else{
-          gl.uniform1f(U(prog,u.name),eff(base));
+          gl.uniform1f(U(prog,u.name),mp(base));
         }
       }
     }
@@ -5053,7 +5092,7 @@ function renderGradeInto(inTex,T,t){
    presets and app-to-app sync all carry the mapping for free.
    Coordinates: input rect and output corners are normalized, top-left
    origin; out corners are ordered TL, TR, BR, BL. */
-const SLED={open:false, sel:0, tab:'out', drag:null, grabT:0, built:false};
+const SLED={open:false, sel:0, tab:'out', drag:null, grabT:0, built:false, zoom:'fit', unit:'pct', pt:0};
 const SL_TINTS=['#2dd4bf','#f472b6','#facc15','#60a5fa','#a78bfa','#34d399','#fb923c','#f87171'];
 let slFrameCv=null; /* last grabbed composite frame (input-tab backdrop) */
 function defaultSlice(n){
@@ -5177,7 +5216,26 @@ function toggleSlices(force){
   const show=(force!==undefined)?force:!ov.classList.contains('show');
   ov.classList.toggle('show',show);
   SLED.open=show;
-  if(show){ ensureSlices(); buildSliceUI(); drawSliceEditor(); }
+  if(show){ ensureSlices(); buildSliceUI(); buildOutSel(); updateOutInfo(); slSetSpace(); }
+}
+/* The editor canvas adopts the aspect of the space being edited:
+   Input tab = composition, Output tab = the chosen output display
+   (or the composition when no display is targeted). */
+function slRefSize(){ return SLED.tab==='in' ? {w:BASE_W, h:BASE_H} : outRefSize(); }
+function slSetSpace(){
+  const cv=$('slcv'); if(!cv) return;
+  const r=slRefSize();
+  const w=960, h=Math.max(200, Math.round(960*r.h/Math.max(1,r.w)));
+  if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; }
+  applySlZoom();
+  drawSliceEditor();
+}
+function applySlZoom(){
+  const cv=$('slcv'); if(!cv) return;
+  const z=SLED.zoom||'fit';
+  document.querySelectorAll('[data-slzoom]').forEach(b=>b.classList.toggle('on', b.getAttribute('data-slzoom')===String(z)));
+  if(z==='fit'){ cv.style.width='100%'; cv.style.height='auto'; }
+  else{ const r=slRefSize(); cv.style.width=Math.round(r.w*parseFloat(z))+'px'; cv.style.height='auto'; }
 }
 function slCheck(val, fn){
   const inp=document.createElement('input'); inp.type='checkbox'; inp.checked=!!val;
@@ -5187,6 +5245,19 @@ function slNum(val, fn){
   const inp=document.createElement('input'); inp.type='number'; inp.className='slportnum';
   inp.step='0.5'; inp.value=Math.round(val*1000)/10;
   inp.addEventListener('change',()=>{ const v=parseFloat(inp.value); if(!isNaN(v)) fn(v/100); });
+  return inp;
+}
+/* Corner field in the editor's current unit: % of the space, or exact
+   output pixels against the chosen display (v1.9.30 precision pass). */
+function slNumUnit(val, ref, fn){
+  const inp=document.createElement('input'); inp.type='number'; inp.className='slportnum';
+  if(SLED.unit==='px'){
+    inp.step='1'; inp.value=Math.round(val*ref);
+    inp.addEventListener('change',()=>{ const v=parseFloat(inp.value); if(!isNaN(v)) fn(v/Math.max(1,ref)); });
+  }else{
+    inp.step='0.5'; inp.value=Math.round(val*1000)/10;
+    inp.addEventListener('change',()=>{ const v=parseFloat(inp.value); if(!isNaN(v)) fn(v/100); });
+  }
   return inp;
 }
 function slRange(val, min, max, fn){
@@ -5232,12 +5303,19 @@ function buildSliceProps(){
   rowW.appendChild(el('span','sllab','W %')); rowW.appendChild(slNum(s.in.w, v=>{ s.in.w=clamp(v,0.02,1-s.in.x); saveState(); drawSliceEditor(); }));
   rowW.appendChild(el('span','sllab','H %')); rowW.appendChild(slNum(s.in.h, v=>{ s.in.h=clamp(v,0.02,1-s.in.y); saveState(); drawSliceEditor(); }));
   host.appendChild(rowW);
-  host.appendChild(el('div','plab','Output corners — where it lands on the surface'));
+  const oh=el('div','slrow');
+  oh.appendChild(el('div','plab','Output corners — where it lands on the surface'));
+  const ub=el('button',null,'Units: '+(SLED.unit==='px'?'px':'%'));
+  ub.addEventListener('click',()=>{ SLED.unit=(SLED.unit==='px')?'pct':'px'; buildSliceProps(); });
+  oh.appendChild(ub);
+  host.appendChild(oh);
   const CN=['TL','TR','BR','BL'];
+  const oref=outRefSize();
+  const unu=(SLED.unit==='px'?' px':' %');
   s.out.forEach((p,ci)=>{
     const r=el('div','slrow');
-    r.appendChild(el('span','sllab',CN[ci]+' X %')); r.appendChild(slNum(p[0], v=>{ s.out[ci][0]=clamp(v,-0.5,1.5); saveState(); drawSliceEditor(); }));
-    r.appendChild(el('span','sllab','Y %')); r.appendChild(slNum(p[1], v=>{ s.out[ci][1]=clamp(v,-0.5,1.5); saveState(); drawSliceEditor(); }));
+    r.appendChild(el('span','sllab',CN[ci]+' X'+unu)); r.appendChild(slNumUnit(p[0], oref.w, v=>{ s.out[ci][0]=clamp(v,-0.5,1.5); saveState(); drawSliceEditor(); }));
+    r.appendChild(el('span','sllab','Y'+unu)); r.appendChild(slNumUnit(p[1], oref.h, v=>{ s.out[ci][1]=clamp(v,-0.5,1.5); saveState(); drawSliceEditor(); }));
     host.appendChild(r);
   });
   const fr=el('div','slrow'); fr.appendChild(el('span','sllab','Feather'));
@@ -5259,8 +5337,45 @@ function buildSliceUI(){
   buildSliceList(); buildSliceProps();
   if(SLED.built) return; SLED.built=true;
   $('btnSliceClose').addEventListener('click',()=>toggleSlices(false));
-  $('btnSlTabIn').addEventListener('click',()=>{ SLED.tab='in'; $('btnSlTabIn').classList.add('on'); $('btnSlTabOut').classList.remove('on'); drawSliceEditor(); });
-  $('btnSlTabOut').addEventListener('click',()=>{ SLED.tab='out'; $('btnSlTabOut').classList.add('on'); $('btnSlTabIn').classList.remove('on'); drawSliceEditor(); });
+  $('btnSlTabIn').addEventListener('click',()=>{ SLED.tab='in'; $('btnSlTabIn').classList.add('on'); $('btnSlTabOut').classList.remove('on'); slSetSpace(); });
+  $('btnSlTabOut').addEventListener('click',()=>{ SLED.tab='out'; $('btnSlTabOut').classList.add('on'); $('btnSlTabIn').classList.remove('on'); slSetSpace(); });
+  $('btnSlDetect').addEventListener('click',()=>{ detectDisplays().then(()=>{ toast(DISPLAYS.length+' display(s) detected'); }); });
+  $('btnSlSend').addEventListener('click',()=>{
+    const sel=$('slOutSel'); const v=sel?sel.value:'';
+    if(v!==''&&v!=='saved'&&DISPLAYS[+v]){ sendOutputToDisplay(DISPLAYS[+v]); return; }
+    if(v==='saved'&&S.outDisplay){ openOutputWindow('popup=yes,width='+S.outDisplay.w+',height='+S.outDisplay.h); updateOutInfo(); return; }
+    openOutputWindow(); updateOutInfo();
+  });
+  $('slOutSel').addEventListener('change',()=>{
+    const v=$('slOutSel').value;
+    if(v===''){ S.outDisplay=null; saveState(); }
+    else if(v!=='saved'&&DISPLAYS[+v]){ const d=DISPLAYS[+v]; S.outDisplay={label:d.label, w:d.w, h:d.h}; saveState(); }
+    updateOutInfo(); slSetSpace();
+  });
+  $('btnSlMatch').addEventListener('click',()=>{ const r=outRefSize(); setCompSize(r.w, r.h); });
+  document.querySelectorAll('[data-slzoom]').forEach(b=>b.addEventListener('click',()=>{ SLED.zoom=b.getAttribute('data-slzoom'); applySlZoom(); }));
+  /* arrow-key nudge: 1 output pixel per press (Shift = 10). Output tab
+     moves the selected corner; Input tab moves the input rect. */
+  document.addEventListener('keydown',(e)=>{
+    if(!SLED.open) return;
+    if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight'&&e.key!=='ArrowUp'&&e.key!=='ArrowDown') return;
+    const t=e.target;
+    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT')) return;
+    const s=S.slices[SLED.sel]; if(!s) return;
+    const step=(e.shiftKey?10:1);
+    const dx=(e.key==='ArrowLeft'?-step:(e.key==='ArrowRight'?step:0));
+    const dy=(e.key==='ArrowUp'?-step:(e.key==='ArrowDown'?step:0));
+    if(SLED.tab==='out'){
+      const r=outRefSize(), ci=SLED.pt||0;
+      s.out[ci][0]=clamp(s.out[ci][0]+dx/Math.max(1,r.w),-0.5,1.5);
+      s.out[ci][1]=clamp(s.out[ci][1]+dy/Math.max(1,r.h),-0.5,1.5);
+    }else{
+      s.in.x=clamp(s.in.x+dx/Math.max(1,BASE_W),0,1-s.in.w);
+      s.in.y=clamp(s.in.y+dy/Math.max(1,BASE_H),0,1-s.in.h);
+    }
+    e.preventDefault();
+    saveState(); buildSliceProps(); drawSliceEditor();
+  });
   $('btnSliceAdd').addEventListener('click',()=>{ ensureSlices(); S.slices.push(defaultSlice(S.slices.length+1)); SLED.sel=S.slices.length-1; saveState(); buildSliceList(); buildSliceProps(); drawSliceEditor(); });
   $('btnSliceDup').addEventListener('click',()=>{ const s=S.slices[SLED.sel]; if(!s) return; const c=JSON.parse(JSON.stringify(s)); c.id='sl'+Math.random().toString(36).slice(2,8); c.name=(s.name||'Slice')+' copy'; S.slices.splice(SLED.sel+1,0,c); SLED.sel++; saveState(); buildSliceList(); buildSliceProps(); drawSliceEditor(); });
   $('btnSliceDel').addEventListener('click',()=>{ if(S.slices.length<=1){ toast('Keep at least one slice — switch it off instead'); return; } S.slices.splice(SLED.sel,1); SLED.sel=Math.max(0,SLED.sel-1); saveState(); buildSliceList(); buildSliceProps(); drawSliceEditor(); });
@@ -5330,9 +5445,10 @@ function drawSliceEditor(){
       if(isSel){
         const names=['TL','TR','BR','BL'];
         pts.forEach((p,k)=>{
-          g.beginPath(); g.arc(p[0],p[1],9,0,7); g.fillStyle='#ffffff'; g.fill();
-          g.strokeStyle=tint; g.lineWidth=2; g.stroke();
-          g.fillStyle='#000000'; g.font='bold 8px sans-serif'; g.textAlign='center';
+          const isPt=(k===(SLED.pt||0));
+          g.beginPath(); g.arc(p[0],p[1],isPt?12:9,0,7); g.fillStyle=isPt?tint:'#ffffff'; g.fill();
+          g.strokeStyle=isPt?'#ffffff':tint; g.lineWidth=2; g.stroke();
+          g.fillStyle=isPt?'#ffffff':'#000000'; g.font='bold 8px sans-serif'; g.textAlign='center';
           g.fillText(names[k], p[0], p[1]+3); g.textAlign='left';
         });
       }
@@ -5352,7 +5468,7 @@ function slPointerDown(e){
   if(SLED.tab==='out'){
     const pts=sel.out.map(q=>[q[0]*cv.width, q[1]*cv.height]);
     for(let k=0;k<4;k++){
-      if(Math.hypot(p.px-pts[k][0], p.py-pts[k][1])<16){ SLED.drag={corner:k}; try{ cv.setPointerCapture(e.pointerId); }catch(err){} return; }
+      if(Math.hypot(p.px-pts[k][0], p.py-pts[k][1])<16){ SLED.drag={corner:k, sx:p.nx, sy:p.ny, ox:sel.out[k][0], oy:sel.out[k][1]}; SLED.pt=k; drawSliceEditor(); try{ cv.setPointerCapture(e.pointerId); }catch(err){} return; }
     }
     for(let i=S.slices.length-1;i>=0;i--){
       if(slPtInQuad(p.nx,p.ny,S.slices[i].out)){ if(i!==SLED.sel){ SLED.sel=i; buildSliceList(); buildSliceProps(); drawSliceEditor(); } return; }
@@ -5377,10 +5493,11 @@ function slPointerMove(e){
   if(!SLED.drag) return;
   const p=slCanvasPos(e); const sel=S.slices[SLED.sel]; if(!sel) return;
   const d=SLED.drag;
+  const f=e.altKey?0.15:1; /* Alt = fine drag */
   if(d.corner!==undefined){
-    sel.out[d.corner]=[clamp(p.nx,-0.5,1.5), clamp(p.ny,-0.5,1.5)];
+    sel.out[d.corner]=[clamp(d.ox+(p.nx-d.sx)*f,-0.5,1.5), clamp(d.oy+(p.ny-d.sy)*f,-0.5,1.5)];
   }else{
-    const o=d.orig, dx=p.nx-d.sx, dy=p.ny-d.sy;
+    const o=d.orig, dx=(p.nx-d.sx)*f, dy=(p.ny-d.sy)*f;
     let L=o.x, T=o.y, R=o.x+o.w, B=o.y+o.h;
     if(d.mode==='mv'){
       const mx=clamp(dx,-L,1-R), my=clamp(dy,-T,1-B);
@@ -5401,6 +5518,7 @@ function slPointerMove(e){
 function pumpSliceEditor(){
   if(!SLED.open) return;
   if((SLED.grabT=(SLED.grabT+1)%4)!==0) return;
+  updateOutInfo();
   if(SLED.tab==='in'){
     if(!slFrameCv){ slFrameCv=document.createElement('canvas'); slFrameCv.width=640; slFrameCv.height=360; }
     try{ slFrameCv.getContext('2d').drawImage(canvas,0,0,640,360); }catch(e){}
@@ -6569,7 +6687,10 @@ function hideClipMenu(){ const m=$('clipmenu'); if(m) m.style.display='none'; }
 function shUniformRows(sec,sidx,uns){
   for(const u of uns){
     const base='SH'+sidx+'.'+u.name;
-    if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
+    const cnt=u.count||1;
+    if(cnt>1&&(u.type==='float'||u.type==='int')){
+      for(let e=0;e<cnt;e++) paramRow(sec, base+'_'+e, u.name+'['+e+']', u.type==='int'?0.1:undefined);
+    }else if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
       const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw';
       for(let c=0;c<ncomp;c++) paramRow(sec,base+'.'+axes[c],u.name+'.'+axes[c]);
     }else if(u.type==='bool'){
@@ -6611,9 +6732,9 @@ function buildClipParamSection(host,i,src){
     /* Time Speed: every import gets one, so there's always a live knob */
     paramRow(sec,'SH'+src+'.timeSpeed','Time Speed');
     if(!uns.length)
-      sec.appendChild(mkHint('No tunable uniforms found \u2014 add `uniform float myParam;` or `const float myParam = 0.5;` to your shader and re-import to get knobs.'));
+      sec.appendChild(mkHint('No tunable params found \u2014 declare `uniform float myParam;` or a literal const like `const float myParam = 0.5;` / `const vec3 myColor = vec3(1.0, 0.5, 0.25);` and re-import to get knobs.'));
     else
-      sec.appendChild(mkHint('int uniforms are 0\u201310, bool is a toggle. Drag a label onto a dashboard dial; click a control while MIDI Learn is armed.'));
+      sec.appendChild(mkHint('Knobs are scraped from uniform + const declarations (float / int / bool / vec / arrays). A default outside 0\u20131 widens the knob range. Drag a label onto a dashboard dial; click a control while MIDI Learn is armed.'));
   }else if(src===4){
     sec.appendChild(el('div','plab','Cloner 3D (key params)'));
     discreteRow(sec,'L'+i+'.clMode','Mode',CL_MODES);
@@ -7801,7 +7922,13 @@ function compilePlugin(fromInit){
   const _tc=$('plugcode');
   const code=_tc?_tc.value:(S.pluginCode||PLUGIN_DEFAULT);
   lastGlslErr='';
-  const pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
+  /* v1.9.29: the plugin source runs through the same scrape-and-convert
+     pipeline as .txt imports (const params become uniforms), tiered so
+     a bad conversion can never break a compiling plugin */
+  let conv=convertConstParams(code,'all');
+  let pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(conv.code));
+  if(!pr){ conv=convertConstParams(code,'float'); pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(conv.code)); }
+  if(!pr){ conv={code:code, defs:{}}; pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code)); }
   if(!pr){
     const _pe=$('plugerr'); if(_pe) _pe.textContent='COMPILE ERROR:\n'+lastGlslErr;
     const _po=$('plugok'); if(_po) _po.textContent='';
@@ -7814,7 +7941,8 @@ function compilePlugin(fromInit){
      custom uniforms get SH3.* knobs in the clip inspector and are fed
      at render time (reserved engine uniforms are excluded by the
      scanner, exactly like imports). */
-  S.pluginUniforms=scanShaderUniforms(code);
+  S.pluginUniforms=scanShaderUniforms(conv.code);
+  for(const u of S.pluginUniforms){ if(conv.defs[u.name]!==undefined) u.init=conv.defs[u.name]; }
   registerPluginParams();
   { const _pe=$('plugerr'); if(_pe) _pe.textContent='';
     const _po=$('plugok'); if(_po) _po.textContent='Compiled OK'; }
@@ -7949,77 +8077,129 @@ function importVideo(file){
    Only the engine's own uniforms are reserved — user shaders can use
    u_* names freely (e.g. u_speed, u_color) and they'll get knobs. */
 const SH_RESERVED=/^(iResolution|iTime|iTimeDelta|iFrame|iMouse|iDate|iSampleRate|iChannel[0-3]|u_time|u_res|u_beat|u_hue|u_speed|u_param1|u_param2|u_audioBass|u_audioMid|u_audioHigh)$/;
-/* Uniform scanner: float -> slider (0-1), int -> stepped slider (0-10),
-   bool -> toggle, vec2/3/4 -> per-component sliders (0-1 each).
-   Returns descriptors {name, type, init}. An initializer sets the knob
-   default (clamped into the knob's range); without one, float=0.5, int=0,
-   bool=off, vec components=0.5. Arrays are skipped. Old saved states stored
+/* Uniform scanner: float -> slider, int -> stepped slider, bool ->
+   toggle, vec2/3/4 -> per-component sliders, float/int arrays -> one
+   slider per element. Returns descriptors {name, type, init, count}.
+   An initializer sets the knob default AND its range (see shRange):
+   a param born outside 0..1 gets a widened range so the knob can always
+   reach the shader's own default. Comma declarations
+   (`uniform float a, b;`) yield every name. Old saved states stored
    plain name strings -> normUniform() treats them as float. */
 function scanShaderUniforms(code){
   const out=[], seen={};
-  const re=/uniform\s+(?:highp\s+|mediump\s+|lowp\s+)?(float|int|bool|vec2|vec3|vec4)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:=\s*([^;]+?))?\s*;/g;
+  const re=/uniform\s+(?:highp\s+|mediump\s+|lowp\s+)?(float|int|bool|vec2|vec3|vec4)\s+([^;]+);/g;
   let m;
   while((m=re.exec(String(code||'')))){
-    const type=m[1], n=m[2];
-    if(SH_RESERVED.test(n)||seen[n]) continue;
-    seen[n]=1;
-    out.push({name:n, type:type, init:(m[3]||'').trim()||null});
+    const type=m[1];
+    /* split the declarator list on top-level commas (initializers can
+       hold commas inside vec constructors - track paren depth) */
+    const parts=[]; let depth=0, cur='';
+    for(const ch of m[2]){
+      if(ch==='(') depth++;
+      else if(ch===')') depth--;
+      if(ch===','&&depth===0){ parts.push(cur); cur=''; }
+      else cur+=ch;
+    }
+    if(cur.trim()) parts.push(cur);
+    for(const part of parts){
+      const dm=part.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[\s*(\d+)\s*\])?\s*(?:=\s*([\s\S]+))?$/);
+      if(!dm) continue;
+      const n=dm[1];
+      if(SH_RESERVED.test(n)||seen[n]) continue;
+      seen[n]=1;
+      out.push({name:n, type:type, init:(dm[3]||'').trim()||null, count:dm[2]?parseInt(dm[2],10):1});
+    }
   }
   return out;
 }
 function normUniform(u){
-  if(typeof u==='string') return {name:u, type:'float', init:null};
-  if(u&&typeof u.name==='string') return {name:u.name, type:u.type||'float', init:u.init||null};
+  if(typeof u==='string') return {name:u, type:'float', init:null, count:1};
+  if(u&&typeof u.name==='string') return {name:u.name, type:u.type||'float', init:u.init||null, count:u.count||1};
   return null;
+}
+/* Raw numeric value of a descriptor's initializer (component comp for
+   vecs / arrays), or null when there is no usable literal. A constructor
+   wrapper like vec3(...) is unwrapped first so its name's digits (the
+   "3" in "vec3") aren't mistaken for a component value. */
+function shInitRaw(u, comp){
+  const init=u.init;
+  if(init===null||init===undefined||init==='') return null;
+  if(u.type==='bool'){
+    if(/true/i.test(init)) return 1;
+    if(/false/i.test(init)) return 0;
+    const p=parseFloat(init);
+    return isNaN(p)?null:(p!==0?1:0);
+  }
+  const pm=String(init).match(/\(([^()]*)\)/);
+  const numSrc=pm?pm[1]:String(init);
+  const nums=numSrc.match(/-?\d*\.?\d+(?:[eE][-+]?\d+)?/g)||[];
+  if(!nums.length) return null;
+  if(nums.length===1) return parseFloat(nums[0]); /* scalar or splat */
+  return parseFloat(nums[Math.min(comp|0,nums.length-1)]);
+}
+/* Slider range for a float-ish param. An initializer outside 0..1 widens
+   the range (v1.9.29): a uniform born at 4.0 used to be clamped to 1.0
+   forever - the knob could never even reach the shader's own default.
+   Now the default sits mid-slider and the range runs to twice it. */
+function shRange(raw){
+  if(raw===null||isNaN(raw)) return [0,1];
+  if(raw>1) return [0, raw*2];
+  if(raw<0) return [raw*2, 1];
+  return [0,1];
+}
+function shIntRange(v){
+  let lo=0, hi=10;
+  if(v>10) hi=v*2;
+  if(v<0) lo=v*2;
+  return [lo,hi];
 }
 /* Normalized (0-1) knob default from a descriptor. comp = vec component idx. */
 function shDefVal(u, comp){
-  const init=u.init;
-  if(u.type==='bool'){
-    if(!init) return 0;
-    return (/true/i.test(init)||parseFloat(init)!==0)?1:0;
-  }
+  const raw=shInitRaw(u,comp);
+  if(u.type==='bool') return raw?1:0;
   if(u.type==='int'){
-    const v=init!==null?parseInt(init,10):0;
-    return clamp(isNaN(v)?0:v,0,10)/10;
+    const v=(raw===null)?0:Math.round(raw);
+    const r=shIntRange(v);
+    return clamp((v-r[0])/Math.max(1e-6,r[1]-r[0]),0,1);
   }
-  let raw=0.5;
-  if(init!==null){
-    /* strip a constructor wrapper like vec3(...) so its name's digits
-       (the "3" in "vec3") aren't mistaken for a component value */
-    const pm=init.match(/\(([^()]*)\)/);
-    const numSrc=pm?pm[1]:init;
-    const nums=numSrc.match(/-?\d*\.?\d+(?:[eE][-+]?\d+)?/g)||[];
-    if(nums.length===1) raw=parseFloat(nums[0]); /* scalar or splat */
-    else if(nums.length>1) raw=parseFloat(nums[Math.min(comp|0,nums.length-1)]);
-  }
-  return clamp(raw,0,1);
+  if(raw===null) return 0.5;
+  const r=shRange(raw);
+  return clamp((raw-r[0])/Math.max(1e-6,r[1]-r[0]),0,1);
 }
-/* Register SH<srcIdx>.<name> params from scanned uniform descriptors
-   (idempotent). vec components get SH<srcIdx>.<name>.x/.y/.z/.w. */
+/* Register one scalar SH param (a plain uniform, one vec component, or
+   one array element) with its inferred range. Idempotent: the first
+   registration wins, so re-imports never move a knob's range under a
+   saved slider position. */
+function registerScalarParam(id, lab, u, comp){
+  const d=shDefVal(u,comp);
+  if(!PARAMS[id]){
+    if(u.type==='bool'){
+      defParam(id, lab, d, v=>v>=0.5?1:0, v=>v>=0.5?'on':'off');
+    }else if(u.type==='int'){
+      const raw=shInitRaw(u,comp), [lo,hi]=shIntRange(raw===null?0:Math.round(raw));
+      defParam(id, lab, d, v=>Math.round(lo+v*(hi-lo)), v=>String(Math.round(lo+v*(hi-lo))));
+    }else{
+      const raw=shInitRaw(u,comp), [lo,hi]=shRange(raw);
+      if(lo===0&&hi===1) defParam(id, lab, d);
+      else defParam(id, lab, d, v=>lo+v*(hi-lo), v=>String(Math.round((lo+v*(hi-lo))*100)/100));
+    }
+  }
+  if(S.params[id]===undefined) S.params[id]=d;
+}
+/* Register SH<srcIdx>.<name> params from scanned uniform descriptors.
+   vec components get .x/.y/.z/.w, array elements get _0.._N. */
 function registerUniformParams(sidx, label, uniforms){
   for(const u0 of (uniforms||[])){
     const u=normUniform(u0); if(!u) continue;
     const base='SH'+sidx+'.'+u.name, lab=label+' \u00b7 '+u.name;
-    if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
+    const cnt=u.count||1;
+    if(cnt>1&&(u.type==='float'||u.type==='int')){
+      for(let e=0;e<cnt;e++) registerScalarParam(base+'_'+e, lab+'['+e+']', u, e);
+    }else if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
       const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw';
-      for(let c=0;c<ncomp;c++){
-        const id=base+'.'+axes[c], d=shDefVal(u,c);
-        if(!PARAMS[id]) defParam(id, lab+'.'+axes[c], d);
-        if(S.params[id]===undefined) S.params[id]=d;
-      }
-    }else if(u.type==='int'){
-      const d=shDefVal(u);
-      if(!PARAMS[base]) defParam(base, lab, d, v=>Math.round(v*10), v=>String(Math.round(v*10)));
-      if(S.params[base]===undefined) S.params[base]=d;
-    }else if(u.type==='bool'){
-      const d=shDefVal(u);
-      if(!PARAMS[base]) defParam(base, lab, d, v=>v>=0.5?1:0, v=>v>=0.5?'on':'off');
-      if(S.params[base]===undefined) S.params[base]=d;
+      for(let c=0;c<ncomp;c++) registerScalarParam(base+'.'+axes[c], lab+'.'+axes[c], u, c);
     }else{
-      const d=shDefVal(u);
-      if(!PARAMS[base]) defParam(base, lab, d);
-      if(S.params[base]===undefined) S.params[base]=d;
+      registerScalarParam(base, lab, u, 0);
     }
   }
 }
@@ -8042,7 +8222,10 @@ function registerPluginParams(){
   const valid={};
   for(const u0 of (S.pluginUniforms||[])){
     const u=normUniform(u0); if(!u) continue;
-    if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
+    const cnt=u.count||1;
+    if(cnt>1&&(u.type==='float'||u.type==='int')){
+      for(let e=0;e<cnt;e++) valid['SH3.'+u.name+'_'+e]=1;
+    }else if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
       const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw';
       for(let c=0;c<ncomp;c++) valid['SH3.'+u.name+'.'+axes[c]]=1;
     }else valid['SH3.'+u.name]=1;
@@ -8057,23 +8240,28 @@ function stripGlslComments(src){
     .replace(/\/\*[\s\S]*?\*\//g, s=>' '.repeat(s.length))
     .replace(/\/\/[^\n]*/g, s=>' '.repeat(s.length));
 }
-/* const-float / #define -> uniform conversion (knob expansion).
+/* const / #define -> uniform conversion (knob expansion).
    Shadertoy-style shaders often declare tweakables as global
-   `const float NAME = <literal>;` or `#define NAME <float-literal>` instead
-   of uniforms — those read as "no knobs" (broken-feeling). Safe ones are
-   rewritten to `uniform float NAME;` and the literal becomes the knob
-   default. Conservative by design:
-   - float literals only, global scope only (brace depth 0)
+   `const float NAME = <literal>;` or `#define NAME <float-literal>`
+   instead of uniforms — those read as "no knobs" (broken-feeling).
+   Safe ones are rewritten to `uniform <type> NAME;` and the literal
+   becomes the knob default. Two tiers: 'float' converts only float
+   consts + float defines (the long-standing safe set); 'all' also
+   converts const int / bool / vec2 / vec3 / vec4 with literal
+   initializers — colors and counts are usually the best knobs in a
+   shader. Callers try 'all' first, then 'float', then the raw source,
+   so a compiling shader can never break here.
+   Conservative by design:
+   - literal initializers only, global scope only (brace depth 0)
    - skip when used as an array size/index ([...]), a loop bound (for
      header), or another const's initializer (uniforms aren't constant
      expressions) — when in doubt, it's skipped
-   - #define: only whole-line simple defines whose literal looks like a
-     float (has . or exponent); skipped entirely if the file uses any
+   - #define: only whole-line simple defines whose literal looks like
+     a float (has . or exponent) — an int-looking define's type at its
+     use sites is unknowable; skipped entirely if the file uses any
      #if/#ifdef/#ifndef (conditional redefinition risk)
-   - importShader falls back to the original source if the converted source
-     fails to compile, so a compiling shader can never break.
    Returns {code, defs:{name: literalString}}. */
-function convertConstFloats(code){
+function convertConstParams(code, tier){
   const defs={};
   const src=String(code||'');
   const stripped=stripGlslComments(src);
@@ -8094,15 +8282,25 @@ function convertConstFloats(code){
   };
   const repls=[];   /* {start,end,text} applied back-to-front */
   const newUniforms=[];
-  /* 1. global const float declarations */
+  /* 1. global const declarations */
   {
-    const re=new RegExp('^([ \\t]*)const\\s+float\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*('+FLOATLIT+')\\s*;','gm');
+    const re=/^([ \t]*)const\s+(float|int|bool|vec2|vec3|vec4)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+?)\s*;/gm;
     let m;
     while((m=re.exec(stripped))){
-      const n=m[2];
+      const ty=m[2], n=m[3], lit=m[4].trim();
+      if(tier!=='all'&&ty!=='float') continue;
+      let ok=false;
+      if(ty==='float') ok=new RegExp('^'+FLOATLIT+'$').test(lit);
+      else if(ty==='int') ok=/^-?\d+$/.test(lit);
+      else if(ty==='bool') ok=/^(true|false)$/.test(lit);
+      else{
+        const vm=lit.match(/^vec[234]\s*\(([^()]*)\)$/);
+        if(vm){ const args=vm[1].split(',').map(s=>s.trim()); ok=args.length>=1&&args.every(a=>new RegExp('^'+FLOATLIT+'$').test(a)); }
+      }
+      if(!ok) continue;
       if(skipName(n)||depthAt(m.index)!==0) continue;
-      converted[n]=1; defs[n]=m[3];
-      repls.push({start:m.index, end:m.index+m[0].length, text:m[1]+'uniform float '+n+';'});
+      converted[n]=1; defs[n]=lit;
+      repls.push({start:m.index, end:m.index+m[0].length, text:m[1]+'uniform '+ty+' '+n+';'});
     }
   }
   /* 2. simple #define float literals (never inside conditional blocks) */
@@ -8195,15 +8393,22 @@ function ensureFactorySources(){
 function importShader(name, code){
   const raw=String(code||'');
   const clean=(String(name||'shader').replace(/\.(txt|glsl|frag|fs)$/i,'').trim().slice(0,40))||'shader';
-  /* const-float/#define conversion first: dedup compares the canonical
-     (converted) form, plus the raw form for pre-conversion-era imports */
-  const conv=convertConstFloats(raw);
-  code=conv.code;
-  for(let k=0;k<S.imports.length;k++) if(S.imports[k].code===code||S.imports[k].code===raw) return 5+k;
+  /* const/#define conversion first: dedup compares the canonical
+     (converted) forms, plus the raw form for pre-conversion-era imports */
+  const convAll=convertConstParams(raw,'all');
+  const convFloat=convertConstParams(raw,'float');
+  for(let k=0;k<S.imports.length;k++)
+    if(S.imports[k].code===convAll.code||S.imports[k].code===convFloat.code||S.imports[k].code===raw) return 5+k;
   /* iChannel0..3 supported — bound to default procedural textures (or user-assigned) */
   lastGlslErr='';
+  code=convAll.code;
+  let defs=convAll.defs;
   let pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
-  let defs=conv.defs;
+  if(!pr&&convFloat.code!==code){
+    /* the wider conversion broke compilation: retry float-only */
+    code=convFloat.code; defs=convFloat.defs;
+    pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
+  }
   if(!pr){
     /* conversion broke compilation: fall back to the original source with
        no const knobs — a compiling shader can never break here */
@@ -8483,6 +8688,84 @@ function syncTopToggles(){
    preserveDrawingBuffer off, so the copy has to happen in the same task
    as the render, which the loop guarantees. */
 let outWin=null, outCanvas=null, outCtx=null, outCursorT=null;
+/* ---------- displays + output targeting (v1.9.30) ----------
+   Resolume's Advanced Output knows its screens ("Display 2 (1920x1200)")
+   and lets you aim each output. Here: detect the connected displays
+   (Window Management API when the browser offers it, window.screen as
+   the fallback), remember the chosen one in S.outDisplay, send the
+   pop-out window to it at its native size, and offer a one-click
+   comp-size match so the output renders 1:1 at the display's pixels. */
+let DISPLAYS=[];
+async function detectDisplays(){
+  let list=[];
+  try{
+    if(window.getScreenDetails){
+      const sd=await window.getScreenDetails();
+      list=(sd.screens||[]).map((s,i)=>({ id:'scr'+i, label:s.label||('Display '+(i+1)),
+        w:s.width, h:s.height, x:s.left||0, y:s.top||0, dpr:s.devicePixelRatio||1,
+        primary:!!s.isPrimary }));
+    }
+  }catch(e){ list=[]; }
+  if(!list.length){
+    list=[{ id:'scr0', label:'This display', w:window.screen.width, h:window.screen.height,
+      x:0, y:0, dpr:window.devicePixelRatio||1, primary:true, fallback:true }];
+  }
+  DISPLAYS=list;
+  buildOutSel();
+  updateOutInfo();
+  return list;
+}
+function outRefSize(){
+  const d=S.outDisplay;
+  if(d&&d.w>0&&d.h>0) return {w:d.w, h:d.h, label:d.label||'Output'};
+  return {w:BASE_W, h:BASE_H, label:'Composition'};
+}
+function buildOutSel(){
+  const sel=$('slOutSel'); if(!sel) return;
+  const cur=S.outDisplay;
+  sel.innerHTML='';
+  const o0=document.createElement('option'); o0.value=''; o0.textContent='Output window (no target display)'; sel.appendChild(o0);
+  DISPLAYS.forEach((d,i)=>{
+    const o=document.createElement('option'); o.value=String(i);
+    o.textContent=d.label+' ('+d.w+'\u00D7'+d.h+')';
+    if(cur&&cur.label===d.label&&cur.w===d.w&&cur.h===d.h) o.selected=true;
+    sel.appendChild(o);
+  });
+  if(cur&&!DISPLAYS.length){
+    const o=document.createElement('option'); o.value='saved'; o.textContent=cur.label+' ('+cur.w+'\u00D7'+cur.h+')'; o.selected=true; sel.appendChild(o);
+  }
+}
+function updateOutInfo(){
+  const info=$('slOutInfo'); if(!info) return;
+  const r=outRefSize();
+  let t='Output: '+r.label+' \u00B7 '+r.w+'\u00D7'+r.h+' px \u00B7 comp '+BASE_W+'\u00D7'+BASE_H;
+  if(outWin&&!outWin.closed) t+=' \u00B7 window '+(outWin.innerWidth||'?')+'\u00D7'+(outWin.innerHeight||'?');
+  if(info.textContent!==t) info.textContent=t;
+  const mb=$('btnSlMatch'); if(mb) mb.style.display=(r.w!==BASE_W||r.h!==BASE_H)?'':'none';
+}
+function setCompSize(w,h){
+  w=Math.max(320,Math.round(w)); h=Math.max(240,Math.round(h));
+  S.compW=w; S.compH=h; BASE_W=w; BASE_H=h;
+  buildTargets();
+  if(outCanvas&&outWin&&!outWin.closed){ outCanvas.width=canvas.width; outCanvas.height=canvas.height; fitOutWin(); }
+  saveState(); updateOutInfo(); slSetSpace();
+  toast('Composition is now '+w+'\u00D7'+h);
+}
+function sendOutputToDisplay(d){
+  if(!d) return;
+  S.outDisplay={label:d.label, w:d.w, h:d.h};
+  saveState();
+  const feats='popup=yes,left='+Math.round(d.x||0)+',top='+Math.round(d.y||0)+',width='+Math.round(d.w)+',height='+Math.round(d.h);
+  if(outWin&&!outWin.closed){
+    let moved=false;
+    try{ outWin.moveTo(Math.round(d.x||0), Math.round(d.y||0)); outWin.resizeTo(Math.round(d.w), Math.round(d.h)); outWin.focus(); moved=true; }catch(e){}
+    if(!moved){ try{ outWin.close(); }catch(e){} outWin=null; openOutputWindow(feats); }
+  }else{
+    openOutputWindow(feats);
+  }
+  updateOutInfo(); slSetSpace();
+  toast('Output sent to '+d.label+' ('+d.w+'\u00D7'+d.h+') \u2014 double-click it there for fullscreen');
+}
 function fitOutWin(){
   if(!outWin||outWin.closed||!outCanvas) return;
   const iw=outWin.innerWidth||1280, ih=outWin.innerHeight||720;
@@ -8496,9 +8779,9 @@ function syncOutWinBtn(){
     const b=$(id); if(b) b.classList.toggle('on',on);
   }
 }
-function openOutputWindow(){
+function openOutputWindow(feats){
   if(outWin&&!outWin.closed){ outWin.focus(); return; }
-  outWin=window.open('','hm-output','popup=yes,width=1280,height=740');
+  outWin=window.open('','hm-output', feats||('popup=yes,width='+Math.min(1600,BASE_W)+',height='+(Math.min(1000,BASE_H)+40)));
   if(!outWin){ toast('Pop-up blocked - allow pop-ups for this site, then hit Output again'); outWin=null; return; }
   const d=outWin.document;
   d.title='HoloMapper - Output';
@@ -8695,7 +8978,7 @@ function wireStatic(){
   /* keyboard */
   document.addEventListener('keydown',(e)=>{
     const t=e.target;
-    if(t && (t.matches('input,textarea,select') || t.isContentEditable)) return;
+    if(t && ((t.matches&&t.matches('input,textarea,select')) || t.isContentEditable)) return;
     const k=e.key;
     if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='z'){ e.preventDefault(); if(e.shiftKey) histRedo(); else histUndo(); return; }
     if((e.ctrlKey||e.metaKey)&&k.toLowerCase()==='y'){ e.preventDefault(); histRedo(); return; }
@@ -10437,8 +10720,16 @@ function syncHandle(d){
     SYNC.tsFrom[d.from]=d.ts; SYNC.lastJson=d.json;
     const first=!SYNC.got; SYNC.got=true;
     SYNC.applying=true;
-    try{ histApply(d.json); }catch(e){}
+    try{ histApply(d.json, true); }catch(e){}
     SYNC.applying=false;
+    /* Echo suppression: remember the CANONICAL post-apply form. The
+       applied state re-serializes differently than the raw string
+       received (grown clip columns, filled defaults), so the send
+       dedupe missed it and every apply re-published a full snapshot -
+       a 35KB ping-pong after every phone interaction, each one
+       rebuilding both apps. Now an apply stays silent unless the user
+       here actually changes something. */
+    try{ const cj=stateJSON(); if(cj) SYNC.lastJson=cj; }catch(e){}
     if(first) toast('Synced \u2014 this screen is live with your other device');
     return;
   }
