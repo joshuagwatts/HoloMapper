@@ -211,6 +211,7 @@ details.sec>summary .x{color:var(--dim);font-weight:400;font-size:10px;text-tran
 #plugok{color:var(--ok);font-size:11px;margin-top:6px}
 /* ---- shadertoy .txt drop (v1.4; per-clip highlight, 2026-10-11) ---- */
 .clip.drophl{border-color:var(--play);box-shadow:0 0 14px rgba(45,212,191,.75);outline:2px solid var(--play);outline-offset:-2px}
+.clip.dragsrc{opacity:.45}
 .clip.fxdrop,.lname.fxdrop{outline:2px dashed var(--acc);outline-offset:-2px;background:rgba(45,212,191,.12)}
 .clip.msel{outline:2px solid var(--sel);outline-offset:-2px}
 .fxrack{display:flex;flex-direction:column;gap:8px}
@@ -1426,7 +1427,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.32';
+const APP_VERSION='1.9.33';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -6420,6 +6421,52 @@ function clearSelectedClips(){
   saveState(); buildDeck(); buildProps();
   toast('Cleared '+n+' clip(s)');
 }
+/* ---- drag-to-rearrange clips (v1.9.33) ----
+   Drag a clip (or the whole multi-selection) onto another cell:
+   empty target = move, occupied target = swap. Source, clip FX and
+   the effect-clip base all travel; a fired clip keeps playing from
+   its new home. Phone uses the long-press menu's Cut/Paste instead
+   (HTML5 drag has no touch path). */
+let dragClipCells=null;
+function packClipCell(i,k){
+  return {
+    src:(S.clips[i]&&S.clips[i][k]!==undefined)?S.clips[i][k]:null,
+    fx:JSON.parse(JSON.stringify((S.clipFx[i]&&S.clipFx[i][k])||[])),
+    base:(S.clipBase&&S.clipBase[i]&&S.clipBase[i][k])?JSON.parse(JSON.stringify(S.clipBase[i][k])):null
+  };
+}
+function writeClipCell(i,k,rec){
+  if(!S.clips[i]) return;
+  S.clips[i][k]=rec?rec.src:null;
+  if(S.clipFx[i]) S.clipFx[i][k]=rec?JSON.parse(JSON.stringify(rec.fx||[])):[];
+  if(S.clipBase&&S.clipBase[i]) S.clipBase[i][k]=(rec&&rec.base)?JSON.parse(JSON.stringify(rec.base)):null;
+}
+function moveClipsDrag(cells, ti, tk){
+  const cw=clipCount();
+  const srcs=cells.filter(c=>S.clips[c.i]);
+  if(!srcs.length) return;
+  const tgts=srcs.map((c,n)=>({i:ti+Math.floor((tk+n)/cw), k:(tk+n)%cw}))
+                 .filter(t=>t.i<numLayers()&&S.clips[t.i]);
+  if(!tgts.length) return;
+  const use=srcs.slice(0,tgts.length);
+  if(use.length===1&&use[0].i===tgts[0].i&&use[0].k===tgts[0].k) return;
+  const sRecs=use.map(c=>packClipCell(c.i,c.k));
+  const tRecs=tgts.map(t=>packClipCell(t.i,t.k));
+  use.forEach((c,n)=>{ sRecs[n]._fired=(S.fired[c.i]===c.k); });
+  tgts.forEach((t,n)=>{ tRecs[n]._fired=(S.fired[t.i]===t.k); });
+  const layers=new Set([...use.map(c=>c.i),...tgts.map(t=>t.i)]);
+  layers.forEach(i=>{ S.fired[i]=null; });
+  tgts.forEach((t,n)=>{ writeClipCell(t.i,t.k,sRecs[n]); if(sRecs[n]._fired) S.fired[t.i]=t.k; });
+  use.forEach((c,n)=>{
+    const disp=tRecs[n];
+    const empty=(disp.src===null||disp.src===undefined)&&!disp.base;
+    writeClipCell(c.i,c.k,empty?null:disp);
+    if(!empty&&disp._fired) S.fired[c.i]=c.k;
+  });
+  S.clipSel=tgts.map(t=>({i:t.i,k:t.k}));
+  saveState(); buildDeck();
+  toast('Moved '+tgts.length+' clip(s)');
+}
 function buildDeck(){
   ensureClipRoom(); /* v1.9.26: grow a fresh column when the last one fills */
   /* phones: never show Cloner (src 4) — strip on every build */
@@ -6602,10 +6649,11 @@ function buildDeck(){
       CTRLS['clip'+i+'.'+k]={set:((ii,kk)=>v=>{ if(v>=0.5) fireClip(ii,kk); })(i,k), label:'Fire '+LAYER_NAMES[i]+' clip '+(k+1)};
       c.addEventListener('contextmenu',(e)=>{ e.preventDefault(); showClipMenu(e.clientX,e.clientY,i,k); });
       /* v1.4: FX drop target — drag FX from browser onto clip */
-      c.addEventListener('dragover',(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; c.classList.add('fxdrop'); });
-      c.addEventListener('dragleave',()=>{ c.classList.remove('fxdrop'); });
+      c.addEventListener('dragover',(e)=>{ e.preventDefault(); if(dragClipCells){ e.dataTransfer.dropEffect='move'; c.classList.add('drophl'); } else { e.dataTransfer.dropEffect='copy'; c.classList.add('fxdrop'); } });
+      c.addEventListener('dragleave',()=>{ c.classList.remove('fxdrop'); c.classList.remove('drophl'); });
       c.addEventListener('drop',(e)=>{
-        e.preventDefault(); c.classList.remove('fxdrop');
+        e.preventDefault(); c.classList.remove('fxdrop'); c.classList.remove('drophl');
+        if(dragClipCells){ const dc=dragClipCells; dragClipCells=null; moveClipsDrag(dc,i,k); return; }
         const data=e.dataTransfer.getData('text/plain');
         if(data&&data.indexOf('fx:')===0){
           const key=data.slice(3);
@@ -6619,6 +6667,21 @@ function buildDeck(){
           toast(srcName(si)+' → '+LAYER_NAMES[i]+' clip '+(k+1));
         }
       });
+      if((src!==null&&src!==undefined||base0)&&!(window.HM_DEVICE&&HM_DEVICE.device==='phone')){
+        c.draggable=true;
+        c.title=(c.title||'')+'';
+        th.title=th.title+' \u2014 drag to move/swap';
+        c.addEventListener('dragstart',(e)=>{
+          dragClipCells=(S.clipSel&&S.clipSel.some(cc=>cc.i===i&&cc.k===k))
+            ? S.clipSel.map(cc=>({i:cc.i,k:cc.k})) : [{i,k}];
+          try{ e.dataTransfer.setData('text/hm-clip',JSON.stringify(dragClipCells)); e.dataTransfer.effectAllowed='move'; }catch(err){}
+          c.classList.add('dragsrc');
+        });
+        c.addEventListener('dragend',()=>{
+          dragClipCells=null; c.classList.remove('dragsrc');
+          document.querySelectorAll('.clip.drophl').forEach(x=>x.classList.remove('drophl'));
+        });
+      }
       grid.appendChild(c);
     }
     st.appendChild(grid);
