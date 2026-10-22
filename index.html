@@ -727,6 +727,7 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
       <button id="btnWindows" title="Show/hide panels">Windows</button>
     </span>
     <button id="btnDockReset" title="Reset panel layout to default">Reset layout</button>
+    <button id="btnOutWin" title="Pop out a clean output window - drag it to the projector and fullscreen it there">Output &#8599;</button>
     <button id="btnPerform" title="Perform mode (P)">PERFORM</button>
     <button id="btnFull" title="Fullscreen output (F)">Fullscreen</button>
   </header>
@@ -785,6 +786,7 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
         </div>
         <div id="performbar">
           <div class="pmacros" id="pmacros"></div>
+          <button id="btnOutWin2" title="Pop out a clean output window for the projector">Output &#8599;</button>
           <div class="pexit">PERFORM MODE &mdash; ESC or P to exit &mdash; F fullscreen</div>
         </div>
       </div>
@@ -822,6 +824,7 @@ html[data-device="phone"] .srcrow{min-height:48px;font-size:14px}
   <h2>HoloMapper &mdash; shortcuts</h2>
   <table>
     <tr><td class="k">F</td><td>Toggle fullscreen</td></tr>
+    <tr><td class="k">O</td><td>Pop out the clean output window (for the projector)</td></tr>
     <tr><td class="k">P / ESC</td><td>Enter / exit PERFORM mode</td></tr>
     <tr><td class="k">M</td><td>Arm / disarm MIDI learn</td></tr>
     <tr><td class="k">1 &ndash; 4</td><td>Select layer</td></tr>
@@ -1353,7 +1356,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.24';
+const APP_VERSION='1.9.25';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -7948,6 +7951,69 @@ function syncTopToggles(){
 <script>
 'use strict';
 /* ================= STATIC WIRING ================= */
+/* ================= POP-OUT OUTPUT WINDOW (v1.9.25) =================
+   A clean second window mirroring ONLY the output canvas: drag it to the
+   projector display and fullscreen it there (double-click or F inside
+   the window); the main window keeps every control. The mirror is a
+   same-frame drawImage at the end of loop() - the WebGL canvas runs with
+   preserveDrawingBuffer off, so the copy has to happen in the same task
+   as the render, which the loop guarantees. */
+let outWin=null, outCanvas=null, outCtx=null, outCursorT=null;
+function fitOutWin(){
+  if(!outWin||outWin.closed||!outCanvas) return;
+  const iw=outWin.innerWidth||1280, ih=outWin.innerHeight||720;
+  const sc=Math.min(iw/outCanvas.width, ih/outCanvas.height);
+  outCanvas.style.width=Math.max(2,Math.floor(outCanvas.width*sc))+'px';
+  outCanvas.style.height=Math.max(2,Math.floor(outCanvas.height*sc))+'px';
+}
+function syncOutWinBtn(){
+  const on=!!(outWin&&!outWin.closed);
+  for(const id of ['btnOutWin','btnOutWin2']){
+    const b=$(id); if(b) b.classList.toggle('on',on);
+  }
+}
+function openOutputWindow(){
+  if(outWin&&!outWin.closed){ outWin.focus(); return; }
+  outWin=window.open('','hm-output','popup=yes,width=1280,height=740');
+  if(!outWin){ toast('Pop-up blocked - allow pop-ups for this site, then hit Output again'); outWin=null; return; }
+  const d=outWin.document;
+  d.title='HoloMapper - Output';
+  d.body.style.cssText='margin:0;background:#000;overflow:hidden;width:100vw;height:100vh';
+  outCanvas=d.createElement('canvas');
+  outCanvas.id='oc';
+  outCanvas.width=canvas.width; outCanvas.height=canvas.height;
+  outCanvas.style.cssText='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#000';
+  d.body.appendChild(outCanvas);
+  outCtx=outCanvas.getContext('2d');
+  const hint=d.createElement('div');
+  hint.textContent='HoloMapper Output - double-click or F for fullscreen';
+  hint.style.cssText='position:absolute;left:50%;bottom:14px;transform:translateX(-50%);color:#9aa3b2;font:12px sans-serif;background:rgba(10,10,14,.55);padding:5px 12px;border-radius:6px;pointer-events:none;transition:opacity 1s';
+  d.body.appendChild(hint);
+  outWin.setTimeout(()=>{ hint.style.opacity='0'; },4500);
+  const fs=()=>{ try{ const r=d.documentElement.requestFullscreen(); if(r&&r.catch) r.catch(()=>{}); }catch(e){} };
+  outWin.addEventListener('dblclick',fs);
+  outWin.addEventListener('keydown',(e)=>{ if(e.key==='f'||e.key==='F') fs(); });
+  outWin.addEventListener('resize',fitOutWin);
+  const armCursor=()=>{
+    d.body.style.cursor='';
+    if(outCursorT) outWin.clearTimeout(outCursorT);
+    outCursorT=outWin.setTimeout(()=>{ d.body.style.cursor='none'; },2600);
+  };
+  outWin.addEventListener('mousemove',armCursor);
+  armCursor();
+  fitOutWin();
+  syncOutWinBtn();
+  toast('Output window open - drag it to the projector, then double-click it for fullscreen');
+}
+function pumpOutputWindow(){
+  if(!outWin) return;
+  if(outWin.closed){ outWin=null; outCanvas=null; outCtx=null; syncOutWinBtn(); return; }
+  if(!outCtx||!outCanvas) return;
+  if(outCanvas.width!==canvas.width||outCanvas.height!==canvas.height){
+    outCanvas.width=canvas.width; outCanvas.height=canvas.height; fitOutWin();
+  }
+  try{ outCtx.drawImage(canvas,0,0); }catch(e){}
+}
 function toggleFullscreen(){
   if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
   else document.documentElement.requestFullscreen().catch(()=>showErr('Fullscreen request was denied.'));
@@ -8083,6 +8149,8 @@ function wireStatic(){
   /* top bar */
   $('btnLearn').addEventListener('click',()=>setLearn(!learnArmed));
   $('btnAudio').addEventListener('click',toggleAudio);
+  $('btnOutWin').addEventListener('click',openOutputWindow);
+  const _ow2=$('btnOutWin2'); if(_ow2) _ow2.addEventListener('click',openOutputWindow);
   $('btnFull').addEventListener('click',toggleFullscreen);
   $('btnPerform').addEventListener('click',togglePerform);
   /* context loss */
@@ -8115,6 +8183,7 @@ function wireStatic(){
     }
     if((k==='Delete'||k==='Backspace')&&S.clipSel&&S.clipSel.length){ e.preventDefault(); clearSelectedClips(); return; }
     if(k==='f'||k==='F') toggleFullscreen();
+    else if(k==='o'||k==='O') openOutputWindow();
     else if(k==='p'||k==='P') togglePerform();
     else if(k==='m'||k==='M') setLearn(!learnArmed);
     else if(k>='1'&&k<='4') selectLayer(parseInt(k,10)-1);
@@ -9330,6 +9399,7 @@ function loop(){
     /* on phone, thumbnails yield to the main output when struggling */
     if(!isPhone||qFpsAvg>20) pumpThumbs(gt,isPhone?1:2);
   }
+  pumpOutputWindow(); /* v1.9.25: mirror to the pop-out window, same task as the render */
   frames++;
   if(now-fpsT>0.5){
     /* rolling 1s fps average + effective render scale, always honest */
