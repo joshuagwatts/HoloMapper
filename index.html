@@ -1406,7 +1406,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.27';
+const APP_VERSION='1.9.28';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -2036,7 +2036,7 @@ for(const k of ['mirror','automask','colorize','bloompost']) if(S.postBypass[k]=
    Declared early: the setParam / quantizeFire hooks read SYNC on every
    interaction. The machinery (syncSend/syncHandle) lives with the cloud
    link near the end of the file. */
-const SYNC={on:false,guest:false,got:false,applying:false,lastTs:0,lastJson:'',peerAt:0,shakeAt:0,timer:0,paramAt:{},helloFrom:'',helloAt:0};
+const SYNC={on:false,guest:false,got:false,applying:false,lastTs:0,lastJson:'',peerAt:0,shakeAt:0,timer:0,paramAt:{},helloFrom:'',helloAt:0,tsFrom:{},ownTs:0};
 const syncId=Math.random().toString(36).slice(2,10);
 /* ================= UNDO / REDO (v1.9.24) =================
    Full-state history on top of saveState's own serialization: every
@@ -2235,6 +2235,7 @@ function setMacro(i, v01, fromEl){
   document.querySelectorAll('[data-ctrl="macro'+i+'"]').forEach(elm=>{ if(elm!==fromEl) elm.value=v01; });
   document.querySelectorAll('[data-val="macro'+i+'"]').forEach(sp=>{ sp.textContent=Math.round(v01*100)+'%'; });
   saveState();
+  if(typeof syncMacroSend==='function') syncMacroSend(i,v01);
 }
 /* MIDI learn arming state */
 let learnArmed=false, pendingCtrl=null;
@@ -5523,6 +5524,7 @@ function bpmSet(b){
   const ph=beatsNow();
   S.bpm=b; beatT0=performance.now()/1000-ph*60/b;
   $('bpm').textContent=b; const mb0=$('mbpm'); if(mb0) mb0.textContent=b; saveState();
+  if(typeof syncFieldSend==='function') syncFieldSend('bpm',S.bpm);
 }
 function quantizeFireInner(i,k){
   const q=SNAP_Q[S.snap||'bar']||0;
@@ -7612,10 +7614,10 @@ function wireMasterBar(){
   if(tp) tp.addEventListener('click',()=>tapTempo());
   MBK.speed=mbMakeKnob('mbSpeedK','SPEED',{ def:(1-0.1)/1.9,
     fmt:v=>(0.1+v*1.9).toFixed(2)+'x',
-    set:v=>{ S.gspeed=0.1+v*1.9; saveState(); } });
+    set:v=>{ S.gspeed=0.1+v*1.9; saveState(); if(typeof syncFieldSend==='function') syncFieldSend('gspeed',S.gspeed); } });
   MBK.hue=mbMakeKnob('mbHueK','HUE',{ def:0,
     fmt:v=>Math.round(v*360)+'°',
-    set:v=>{ S.ghue=v; saveState(); } });
+    set:v=>{ S.ghue=v; saveState(); if(typeof syncFieldSend==='function') syncFieldSend('ghue',S.ghue); } });
   MBK.rate=mbMakeKnob('mbSRateK','RATE',{ def:PARAMS['P.srate'].def,
     fmt:v=>PARAMS['P.srate'].fmt(v),
     set:v=>setParam('P.srate',v) });
@@ -7623,11 +7625,11 @@ function wireMasterBar(){
     fmt:v=>Math.round(v*100)+'%',
     set:v=>setParam('P.master',v) });
   const st=$('mbStrobe');
-  if(st) st.addEventListener('click',()=>{ S.strobeOn=!S.strobeOn; st.classList.toggle('on',S.strobeOn); saveState(); });
+  if(st) st.addEventListener('click',()=>{ S.strobeOn=!S.strobeOn; st.classList.toggle('on',S.strobeOn); saveState(); if(typeof syncFieldSend==='function') syncFieldSend('strobeOn',S.strobeOn); });
   const bk=$('mbBlack');
   if(bk) bk.addEventListener('click',()=>toggleBlackout());
   const bt=$('mbBlType');
-  if(bt) bt.addEventListener('change',()=>{ S.bltype=bt.value; saveState(); });
+  if(bt) bt.addEventListener('change',()=>{ S.bltype=bt.value; saveState(); if(typeof syncFieldSend==='function') syncFieldSend('bltype',S.bltype); });
 }
 /* ---------- blackout ---------- */
 function toggleBlackout(){
@@ -7637,6 +7639,7 @@ function toggleBlackout(){
   const cb=$('btnCompB'); if(cb) cb.classList.toggle('onB',!!S.blackout);
   const mb=$('mbBlack'); if(mb) mb.classList.toggle('armed',!!S.blackout);
   saveState(); if(typeof broadcastState==='function') broadcastState();
+  if(typeof syncFieldSend==='function') syncFieldSend('blackout',S.blackout);
 }
 function syncTransport(){
   const b=$('btnBlackout'); if(b) b.classList.toggle('armed',!!S.blackout);
@@ -10364,6 +10367,11 @@ function syncSend(o){
   }
   try{ p2pSend(o); }catch(e){}
 }
+function syncNextTs(){
+  SYNC.ownTs=Math.max(Date.now(),(SYNC.ownTs||0)+1);
+  SYNC.lastTs=SYNC.ownTs;
+  return SYNC.ownTs;
+}
 function syncScheduleState(){
   if(!SYNC.on||SYNC.applying) return;
   if(SYNC.guest&&!SYNC.got) return;
@@ -10372,15 +10380,36 @@ function syncScheduleState(){
     if(!SYNC.on||SYNC.applying) return;
     if(SYNC.guest&&!SYNC.got) return;
     const json=stateJSON(); if(!json||json===SYNC.lastJson) return;
-    SYNC.lastJson=json; SYNC.lastTs=Date.now();
-    syncSend({kind:'sync-state',ts:SYNC.lastTs,json});
-  },450);
+    SYNC.lastJson=json;
+    syncSend({kind:'sync-state',ts:syncNextTs(),json});
+  },200);
 }
 function syncParamSend(id,v){
   const now=performance.now();
   if(now-(SYNC.paramAt[id]||0)<60) return;
   SYNC.paramAt[id]=now;
   syncSend({kind:'sync-param',id,v});
+}
+/* v1.9.28: fast path for top-level S fields and macros. The master
+   SPEED/HUE knobs, bpm, blackout/strobe toggles and the macro faders
+   used to ride ONLY the debounced state snapshot (~0.9s behind, and
+   silent during a continuous drag), while param faders stream at 60ms -
+   that gap is exactly what "faders update fast, master speed doesn't"
+   felt like. Same 60ms throttle, same wire, whitelisted fields only. */
+const SYNC_FIELDS={gspeed:'number',ghue:'number',bpm:'number',strobeOn:'boolean',blackout:'boolean',bltype:'string'};
+function syncFieldSend(k,v){
+  if(!SYNC.on||SYNC.applying) return;
+  const now=performance.now(), id='F:'+k;
+  if(now-(SYNC.paramAt[id]||0)<60) return;
+  SYNC.paramAt[id]=now;
+  syncSend({kind:'sync-field',k,v});
+}
+function syncMacroSend(i,v){
+  if(!SYNC.on||SYNC.applying) return;
+  const now=performance.now(), id='M:'+i;
+  if(now-(SYNC.paramAt[id]||0)<60) return;
+  SYNC.paramAt[id]=now;
+  syncSend({kind:'sync-macro',i,v});
 }
 function syncHandle(d){
   if(!d||d.from===syncId) return;
@@ -10392,14 +10421,20 @@ function syncHandle(d){
     if(!SYNC.guest||SYNC.got){
       SYNC.shakeAt=now;
       const json=stateJSON();
-      if(json){ SYNC.lastJson=json; SYNC.lastTs=now; syncSend({kind:'sync-state',ts:now,json}); }
+      if(json){ SYNC.lastJson=json; syncSend({kind:'sync-state',ts:syncNextTs(),json}); }
     }
     return;
   }
   if(d.kind==='sync-state'){
     SYNC.peerAt=now; SYNC.shakeAt=now;
-    if(!d.json||typeof d.ts!=='number'||d.ts<=SYNC.lastTs) return;
-    SYNC.lastTs=d.ts; SYNC.lastJson=d.json;
+    if(!d.json||typeof d.ts!=='number') return;
+    /* v1.9.28: last-writer-wins PER SENDER. One shared lastTs let a
+       fast-clocked phone poison the well: its future timestamps made
+       every later desktop state look "old" and get dropped, so the two
+       apps quietly stopped being 1:1. Each sender's stream is now
+       ordered on its own clock. */
+    if(d.ts<=(SYNC.tsFrom[d.from]||0)) return;
+    SYNC.tsFrom[d.from]=d.ts; SYNC.lastJson=d.json;
     const first=!SYNC.got; SYNC.got=true;
     SYNC.applying=true;
     try{ histApply(d.json); }catch(e){}
@@ -10418,6 +10453,28 @@ function syncHandle(d){
     SYNC.peerAt=now; SYNC.shakeAt=now;
     if(typeof d.id==='string'&&PARAMS[d.id]&&typeof d.v==='number'){
       SYNC.applying=true; setParam(d.id,d.v); SYNC.applying=false;
+    }
+    return;
+  }
+  if(d.kind==='sync-field'){
+    SYNC.peerAt=now; SYNC.shakeAt=now;
+    if(typeof d.k==='string'&&SYNC_FIELDS[d.k]&&typeof d.v===SYNC_FIELDS[d.k]){
+      SYNC.applying=true;
+      if(d.k==='bpm'){ try{ bpmSet(d.v); }catch(e){ S.bpm=d.v; } }
+      else{
+        S[d.k]=d.v;
+        if(d.k==='blackout'&&!d.v) S._frz=null;
+      }
+      try{ syncMasterBar(); }catch(e){}
+      try{ syncTransport(); }catch(e){}
+      SYNC.applying=false;
+    }
+    return;
+  }
+  if(d.kind==='sync-macro'){
+    SYNC.peerAt=now; SYNC.shakeAt=now;
+    if(typeof d.i==='number'&&S.macros[d.i]&&typeof d.v==='number'){
+      SYNC.applying=true; setMacro(d.i,d.v); SYNC.applying=false;
     }
     return;
   }
