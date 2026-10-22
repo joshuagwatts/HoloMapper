@@ -1356,7 +1356,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.25';
+const APP_VERSION='1.9.26';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1844,18 +1844,53 @@ function sanitizeMods(m){
     });
   }catch(e){ return defaultMods(); }
 }
+/* ================= ENDLESS CLIP COLUMNS (v1.9.26) =================
+   The deck starts at 8 columns and GROWS: whenever the last column
+   holds anything (a source in any deck, an effect-clip base, a clip
+   FX chain), a fresh empty column is appended to every row -
+   perpetually, no cap. One global column count across decks keeps
+   the column headers and every row in lockstep. */
+const START_COLS=8;
+function clipCount(){
+  let n=START_COLS;
+  if(typeof S!=='undefined'&&S){
+    if(Array.isArray(S.decks)) for(const dk of S.decks) if(dk&&Array.isArray(dk.clips)) for(const r of dk.clips) if(Array.isArray(r)) n=Math.max(n,r.length);
+    if(Array.isArray(S.clips)) for(const r of S.clips) if(Array.isArray(r)) n=Math.max(n,r.length);
+  }
+  return n;
+}
+function colUsed(k){
+  if(Array.isArray(S.decks)) for(const dk of S.decks){ if(!dk||!Array.isArray(dk.clips)) continue;
+    for(let i=0;i<MAX_LAYERS;i++){ const r=dk.clips[i]; if(r&&r[k]!==null&&r[k]!==undefined) return true; } }
+  for(let i=0;i<MAX_LAYERS;i++){
+    if(clipBaseAt(i,k)) return true;
+    const fx=S.clipFx&&S.clipFx[i]&&S.clipFx[i][k];
+    if(Array.isArray(fx)&&fx.length) return true;
+  }
+  return false;
+}
+function ensureClipRoom(){
+  if(!S||!Array.isArray(S.decks)||!S.decks.length) return false;
+  let n=clipCount(), grew=false;
+  if(colUsed(n-1)){ n++; grew=true; }
+  for(const dk of S.decks){ if(!dk||!Array.isArray(dk.clips)) continue;
+    for(const r of dk.clips){ if(Array.isArray(r)) while(r.length<n) r.push(null); } }
+  if(Array.isArray(S.clipFx)) for(const r of S.clipFx){ if(Array.isArray(r)) while(r.length<n) r.push([]); }
+  if(Array.isArray(S.clipBase)) for(const r of S.clipBase){ if(Array.isArray(r)) while(r.length<n) r.push(null); }
+  return grew;
+}
 function defaultClips(){
   const c=[];
   /* phones skip Cloner 3D (src 4) in defaults — heavy 3D; desktop keeps it */
   const n=(window.HM_DEVICE&&HM_DEVICE.device==='phone')?4:5;
-  for(let i=0;i<MAX_LAYERS;i++){ const r=[]; for(let k=0;k<8;k++) r.push(k<n?k:null); c.push(r); }
+  for(let i=0;i<MAX_LAYERS;i++){ const r=[]; for(let k=0;k<START_COLS;k++) r.push(k<n?k:null); c.push(r); }
   return c;
 }
 function validClips(c){
   if(!Array.isArray(c)||c.length!==MAX_LAYERS) return null;
   for(let i=0;i<MAX_LAYERS;i++){
-    if(!Array.isArray(c[i])||c[i].length!==8) return null;
-    for(let k=0;k<8;k++){ const v=c[i][k]; if(v!==null&&(typeof v!=='number'||v<0||!Number.isInteger(v))) return null; }
+    if(!Array.isArray(c[i])) return null;
+    for(let k=0;k<c[i].length;k++){ const v=c[i][k]; if(v!==null&&(typeof v!=='number'||v<0||!Number.isInteger(v))) return null; }
   }
   return c;
 }
@@ -1883,7 +1918,7 @@ function defaultState(){
     strobeOn:false, beatSync:false, bpm:120, blackout:false, knobSmooth:0,
     bltype:'black', ghue:0, gspeed:1, camFace:'user',
     layerFx:Array.from({length:MAX_LAYERS},()=>[]),
-    clipFx:Array.from({length:MAX_LAYERS},()=>Array.from({length:8},()=>[])),
+    clipFx:Array.from({length:MAX_LAYERS},()=>Array.from({length:START_COLS},()=>[])),
     compFx:[],
     macros:Array.from({length:8},(_,i)=>({label:'M'+(i+1), val:0.5})),
     midi:[], pluginCode:PLUGIN_DEFAULT, pluginUniforms:[], imports:[], mods:defaultMods()
@@ -1923,7 +1958,7 @@ if(!Array.isArray(S.videos)) S.videos=[];
 /* videos don't survive reload (blob URLs) — clear stale clip refs */
 else if(S.videos.length===0&&S.clips){
   const maxSi=5+S.imports.length-1;
-  for(let i=0;i<S.clips.length;i++)for(let k=0;k<8;k++){
+  for(let i=0;i<S.clips.length;i++)for(let k=0;k<(S.clips[i]||[]).length;k++){
     const si=S.clips[i]&&S.clips[i][k];
     if(typeof si==='number'&&si>maxSi&&si<camIdx()) S.clips[i][k]=null;
   }
@@ -1937,12 +1972,18 @@ if(!Array.isArray(S.groups)) S.groups=[];
 while(S.layers.length<MAX_LAYERS) S.layers.push({src:0, blend:0, bypass:true, solo:false, ejected:false});
 while(S.fired.length<MAX_LAYERS) S.fired.push(null);
 while(S.layerFx.length<MAX_LAYERS) S.layerFx.push([]);
-while(S.clipFx.length<MAX_LAYERS) S.clipFx.push(Array.from({length:8},()=>[]));
+while(S.clipFx.length<MAX_LAYERS) S.clipFx.push(Array.from({length:START_COLS},()=>[]));
 if(S.clips.length<MAX_LAYERS){ const dc=defaultClips(); while(S.clips.length<MAX_LAYERS) S.clips.push(dc[S.clips.length]); }
-S.decks.forEach(dk=>{ while(dk.clips.length<MAX_LAYERS) dk.clips.push(Array.from({length:8},()=>null)); });
+S.decks.forEach(dk=>{ while(dk.clips.length<MAX_LAYERS) dk.clips.push(Array.from({length:START_COLS},()=>null)); });
 /* content wave: normalize postBypass for states saved before the new FX existed */
 if(!S.postBypass||typeof S.postBypass!=='object') S.postBypass={};
 for(const k of ['mirror','automask','colorize','bloompost']) if(S.postBypass[k]===undefined) S.postBypass[k]=true;
+/* ================= APP SYNC GLOBALS (v1.9.26) =================
+   Declared early: the setParam / quantizeFire hooks read SYNC on every
+   interaction. The machinery (syncSend/syncHandle) lives with the cloud
+   link near the end of the file. */
+const SYNC={on:false,guest:false,got:false,applying:false,lastTs:0,lastJson:'',peerAt:0,shakeAt:0,timer:0,paramAt:{},helloFrom:'',helloAt:0};
+const syncId=Math.random().toString(36).slice(2,10);
 /* ================= UNDO / REDO (v1.9.24) =================
    Full-state history on top of saveState's own serialization: every
    persisted state becomes an undo step (the 400ms debounce coalesces
@@ -2034,7 +2075,7 @@ const saveState = debounce(()=>{
   try{
     /* strip non-serializable (video elements, blob URLs die on reload anyway) */
     const json=stateJSON();
-    if(json){ localStorage.setItem(LS_STATE, json); histNote(json); }
+    if(json){ localStorage.setItem(LS_STATE, json); histNote(json); if(typeof syncScheduleState==='function') syncScheduleState(); }
     localStorage.setItem(LS_MIDI, JSON.stringify(S.midi));
   }catch(e){/* storage full / private mode — keep going */}
 },400);
@@ -2132,6 +2173,7 @@ function setParam(id, v01, fromEl){
   const hooks=PARAM_HOOKS[id];
   if(hooks) for(const fn of hooks) fn();
   saveState();
+  if(SYNC.on&&!SYNC.applying&&typeof syncParamSend==='function') syncParamSend(id,v01);
 }
 function setMacro(i, v01, fromEl){
   v01=clamp(v01,0,1);
@@ -5010,7 +5052,7 @@ function bpmSet(b){
   S.bpm=b; beatT0=performance.now()/1000-ph*60/b;
   $('bpm').textContent=b; const mb0=$('mbpm'); if(mb0) mb0.textContent=b; saveState();
 }
-function quantizeFire(i,k){
+function quantizeFireInner(i,k){
   const q=SNAP_Q[S.snap||'bar']||0;
   const now=performance.now()/1000;
   if(!q){ fireClipNow(i,k); return; }
@@ -5020,6 +5062,10 @@ function quantizeFire(i,k){
   pendingFires=pendingFires.filter(p=>!(p.i===i&&p.k===k));
   pendingFires.push({i,k,at});
   syncDeckSel();
+}
+function quantizeFire(i,k){
+  quantizeFireInner(i,k);
+  if(SYNC.on&&!SYNC.applying&&typeof syncSend==='function') syncSend({kind:'sync-fire',l:i,c:k});
 }
 function processPending(){
   const now=performance.now()/1000;
@@ -5077,7 +5123,7 @@ function buildDeckTabs(){
   const add=el('button','decktab add','+');
   add.title='New empty deck';
   add.addEventListener('click',()=>{
-    const empty=[]; for(let i=0;i<MAX_LAYERS;i++){ const r=[]; for(let k=0;k<8;k++) r.push(null); empty.push(r); }
+    const empty=[]; for(let i=0;i<MAX_LAYERS;i++){ const r=[]; for(let k=0;k<START_COLS;k++) r.push(null); empty.push(r); }
     S.decks.push({name:'DECK '+(S.decks.length+1), clips:empty});
     saveState(); buildDeckTabs();
   });
@@ -5099,7 +5145,7 @@ function autopilotTick(){
   const cur=Math.floor(beatsNow()/q+1e-4);
   if(cur!==apLastQ){
     apLastQ=cur;
-    const k=(S.firedCol===null||S.firedCol===undefined)?0:(S.firedCol+1)%8;
+    const k=(S.firedCol===null||S.firedCol===undefined)?0:(S.firedCol+1)%clipCount();
     for(let i=0;i<numLayers();i++){ const src=S.clips[i][k]; if(src!==null&&src!==undefined) fireClipNow(i,k); }
     S.firedCol=k; syncDeckSel();
   }
@@ -5474,7 +5520,7 @@ function fireClipNow(i,k){
 }
 function buildColHead(){
   const host=$('coltabs'); host.innerHTML='';
-  for(let k=0;k<8;k++){
+  for(let k=0;k<clipCount();k++){
     const t=el('button','coltab'+(S.firedCol===k?' conn':''),'C'+(k+1));
     t.title='Fire column '+(k+1)+' — one clip per layer (quantized to Beat Snap)';
     t.setAttribute('data-ctrl','col'+k);
@@ -5652,7 +5698,7 @@ function pasteClips(ti,tk){
   if(!clipClipboard||!clipClipboard.clips.length) return;
   /* paste starting at target, wrapping rows */
   clipClipboard.clips.forEach((cc,n)=>{
-    const di=ti+Math.floor((tk+n)/8), dk=(tk+n)%8;
+    const cw=clipCount(); const di=ti+Math.floor((tk+n)/cw), dk=(tk+n)%cw;
     if(di<numLayers()&&S.clips[di]){
       S.clips[di][dk]=cc.src;
       if(S.clipFx[di]) S.clipFx[di][dk]=JSON.parse(JSON.stringify(cc.fx));
@@ -5678,9 +5724,10 @@ function clearSelectedClips(){
   toast('Cleared '+n+' clip(s)');
 }
 function buildDeck(){
+  ensureClipRoom(); /* v1.9.26: grow a fresh column when the last one fills */
   /* phones: never show Cloner (src 4) — strip on every build */
   if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
-    for(let i=0;i<numLayers();i++) for(let k=0;k<8;k++){
+    for(let i=0;i<numLayers();i++) for(let k=0;k<(S.clips[i]||[]).length;k++){
       if(S.clips[i]&&S.clips[i][k]===4) S.clips[i][k]=null;
     }
   }
@@ -5784,8 +5831,9 @@ function buildDeck(){
     gut.appendChild(r1);
     st.appendChild(gut);
     const grid=el('div','clipgrid');
-    if(!S.clips[i]) S.clips[i]=Array.from({length:8},()=>null);
-    for(let k=0;k<8;k++){
+    grid.style.gridTemplateColumns='repeat('+clipCount()+',minmax(0,1fr))';
+    if(!S.clips[i]) S.clips[i]=Array.from({length:START_COLS},()=>null);
+    for(let k=0;k<clipCount();k++){
       const src=S.clips[i][k];
       const isMulti=S.clipSel&&S.clipSel.some(cc=>cc.i===i&&cc.k===k);
       const c=el('div','clip'+(src===null||src===undefined?' empty':'')+((S.fired[i]===k)?' fired':'')+((S.sel&&S.sel.kind==='clip'&&S.sel.i===i&&S.sel.c===k)?' selc':'')+(isMulti?' msel':''));
@@ -6747,11 +6795,11 @@ function fxInstLabel(inst){
 function ensureFxChains(){
   if(!Array.isArray(S.layerFx)) S.layerFx=[[],[],[],[]];
   while(S.layerFx.length<4) S.layerFx.push([]);
-  if(!Array.isArray(S.clipFx)) S.clipFx=[[],[],[],[]].map(()=>Array.from({length:8},()=>[]));
+  if(!Array.isArray(S.clipFx)) S.clipFx=[[],[],[],[]].map(()=>Array.from({length:clipCount()},()=>[]));
   if(!Array.isArray(S.compFx)) S.compFx=[];
-  if(!Array.isArray(S.clipBase)) S.clipBase=[[],[],[],[]].map(()=>Array.from({length:8},()=>null));
-  while(S.clipBase.length<4) S.clipBase.push(Array.from({length:8},()=>null));
-  S.clipBase.forEach((row,i)=>{ if(!Array.isArray(row)) S.clipBase[i]=Array.from({length:8},()=>null); });
+  if(!Array.isArray(S.clipBase)) S.clipBase=[[],[],[],[]].map(()=>Array.from({length:clipCount()},()=>null));
+  while(S.clipBase.length<4) S.clipBase.push(Array.from({length:clipCount()},()=>null));
+  S.clipBase.forEach((row,i)=>{ if(!Array.isArray(row)) S.clipBase[i]=Array.from({length:clipCount()},()=>null); });
 }
 /* An EFFECT CLIP: an empty cell carrying a base FX instance. When fired, the
    layer stops rendering a source and instead runs this effect (plus its
@@ -9657,7 +9705,7 @@ async function p2pStart(){
       /* trystero 0.25 API: makeAction returns {send, onMessage}; peer
          callbacks are assigned properties, not methods */
       const act=room.makeAction('hm');
-      act.onMessage=(data,meta)=>{ if(data&&data.mid&&p2pDupe(data.mid)) return; prmHandle(data); };
+      act.onMessage=(data,meta)=>{ if(data&&typeof data.kind==='string'&&data.kind.indexOf('sync')===0){ syncHandle(data); return; } if(data&&data.mid&&p2pDupe(data.mid)) return; prmHandle(data); };
       p2pRooms.push(room);
       p2pSendFns.push((o)=>{ try{ const r=act.send(o); if(r&&r.catch) r.catch(()=>{}); }catch(e){} });
       let peersHere=0;
@@ -9684,7 +9732,9 @@ function p2pStop(){
   p2pLink={mqtt:'off', nostr:'off', torrent:'off'};
 }
 function p2pSend(o){ p2pSendFns.forEach(f=>{ try{ f(o); }catch(e){} }); }
-
+</script>
+<script src="vendor/paho-mqtt-min.js"></script>
+<script>
 /* ================= CLOUD RELAY (primary phone link) =================
    Console + phone both open a websocket to a public MQTT relay and meet
    on topics named by the pairing code. No WebRTC, nothing to run — if a
@@ -9706,6 +9756,7 @@ function cloudBrokers(){
   return CLOUD_BROKERS.map(b=>[b[0],b[1],b[2],true]);
 }
 let cloudClient=null, cloudBroker='', cloudPeerOn=false, cloudConnecting=false;
+let cloudIdx=0, cloudConnectedAt=0, cloudStartIdx=0, cloudHopping=false;
 function cloudTopic(suffix){ return 'holomapper/v1/'+p2pCode+'/'+suffix; }
 function cloudSend(o){
   if(!cloudClient) return;
@@ -9725,17 +9776,22 @@ function cloudStop(){
     }catch(e){}
     cloudClient=null;
   }
-  cloudPeerOn=false; cloudBroker=''; cloudConnecting=false;
+  cloudPeerOn=false; cloudBroker=''; cloudConnecting=false; SYNC.on=false;
 }
 /* Sequential rendezvous -- must match remote.html: walk the broker list in
    order, stick to the first that answers. Racing brokers per-device put
    console and phone on different brokers, where they can never meet. */
 function cloudStart(){
-  if(typeof Paho==='undefined'||!p2pCode||cloudClient||cloudConnecting) return;
+  if(typeof Paho==='undefined'){ /* vendored paho tag sits late in the file:
+    a boot-time caller (guest link / warm start) can beat it. Retry instead
+    of dying silently - this was the 'relay live, finding console' trap:
+    the engine simply never came online. */
+    setTimeout(()=>{ if(p2pCode&&!cloudClient&&!cloudConnecting) cloudStart(); },1200); return; }
+  if(!p2pCode||cloudClient||cloudConnecting) return;
   if(typeof Paho!=='undefined' && !Paho.MQTT) Paho.MQTT={Client:Paho.Client, Message:Paho.Message};
   cloudConnecting=true;
   const brokers=cloudBrokers();
-  let idx=0;
+  let idx=cloudStartIdx; cloudStartIdx=0;
   const tryNext=()=>{
     if(cloudClient){ cloudConnecting=false; return; }
     if(idx>=brokers.length){
@@ -9744,6 +9800,7 @@ function cloudStart(){
       return;
     }
     const [host,port,path,ssl]=brokers[idx++];
+    cloudIdx=idx-1;
     let c;
     try{ c=new Paho.MQTT.Client(host,port,path,'hm-eng-'+p2pCode+'-'+Math.random().toString(36).slice(2,9)); }
     catch(e){ tryNext(); return; }
@@ -9753,13 +9810,18 @@ function cloudStart(){
     };
     c.onMessageArrived=(m)=>{
       let d; try{ d=JSON.parse(m.payloadString); }catch(e){ return; }
+      if(m.destinationName.endsWith('/sync')){ syncHandle(d); return; }
+      if(m.destinationName.indexOf('/presence/')>=0&&!m.destinationName.endsWith('/presence/remote')){
+        if(d&&d.app&&d.id!==syncId&&d.online){ SYNC.peerAt=Date.now(); cloudPeerOn=true; renderSrvList(); }
+        return;
+      }
       if(m.destinationName.endsWith('/presence/remote')){
-        if(d&&d.role==='remote'){ cloudPeerOn=!!d.online; if(cloudPeerOn) broadcastState(); renderSrvList(); }
+        if(d&&d.role==='remote'){ cloudPeerOn=!!d.online; if(cloudPeerOn){ SYNC.shakeAt=Date.now(); broadcastState(); } renderSrvList(); }
         return;
       }
       cloudPeerOn=true;
       if(d&&d.type==='ping'){ renderSrvList(); return; }
-      if(d&&d.type==='hello'){ broadcastState(); return; }
+      if(d&&d.type==='hello'){ SYNC.shakeAt=Date.now(); broadcastState(); return; }
       if(d&&d.mid&&p2pDupe(d.mid)) return;
       prmHandle(d);
     };
@@ -9770,9 +9832,16 @@ function cloudStart(){
         settled=true; cloudConnecting=false; cloudClient=c; cloudBroker=host;
         c.subscribe(cloudTopic('up'));
         c.subscribe(cloudTopic('presence/remote'));
+        c.subscribe(cloudTopic('sync'));
+        c.subscribe(cloudTopic('presence/+'));
         const pres=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'engine',online:true}));
         pres.destinationName=cloudTopic('presence/engine'); pres.retained=true;
         c.send(pres);
+        const apres=new Paho.MQTT.Message(JSON.stringify({type:'peer',app:1,online:true,id:syncId}));
+        apres.destinationName=cloudTopic('presence/'+syncId); apres.retained=true;
+        c.send(apres);
+        cloudConnectedAt=Date.now(); SYNC.on=true;
+        syncSend({kind:'sync-hello'});
         prmStatus('cloud relay live ('+host+')');
         renderSrvList();
       },
@@ -9781,8 +9850,114 @@ function cloudStart(){
   };
   tryNext();
 }
+/* ================= APP-TO-APP SYNC (v1.9.26) =================
+   The phone opens the REAL app (the pair QR now carries ?sync=CODE) -
+   no separate simplified remote. Both instances run this same code:
+   clip fires and knob moves stream as small events over the relay;
+   full state snapshots (the undo system's own serialization) keep
+   decks, edits and presets identical. Last-writer-wins by timestamp.
+   A GUEST (arrived via the sync link) never publishes state until it
+   has received the host's, so a fresh phone can't stomp the deck. */
+let syncSendSeq=0;
+function syncSend(o){
+  if(!o) return;
+  o.from=syncId; o.mid=syncId+'-'+(++syncSendSeq);
+  if(cloudClient){
+    try{ const m=new Paho.MQTT.Message(JSON.stringify(o)); m.destinationName=cloudTopic('sync'); cloudClient.send(m); }catch(e){}
+  }
+  try{ p2pSend(o); }catch(e){}
+}
+function syncScheduleState(){
+  if(!SYNC.on||SYNC.applying) return;
+  if(SYNC.guest&&!SYNC.got) return;
+  clearTimeout(SYNC.timer);
+  SYNC.timer=setTimeout(()=>{
+    if(!SYNC.on||SYNC.applying) return;
+    if(SYNC.guest&&!SYNC.got) return;
+    const json=stateJSON(); if(!json||json===SYNC.lastJson) return;
+    SYNC.lastJson=json; SYNC.lastTs=Date.now();
+    syncSend({kind:'sync-state',ts:SYNC.lastTs,json});
+  },450);
+}
+function syncParamSend(id,v){
+  const now=performance.now();
+  if(now-(SYNC.paramAt[id]||0)<60) return;
+  SYNC.paramAt[id]=now;
+  syncSend({kind:'sync-param',id,v});
+}
+function syncHandle(d){
+  if(!d||d.from===syncId) return;
+  const now=Date.now();
+  if(d.kind==='sync-hello'){
+    SYNC.peerAt=now;
+    if(SYNC.helloFrom===d.from&&now-SYNC.helloAt<3000) return;
+    SYNC.helloFrom=d.from; SYNC.helloAt=now;
+    if(!SYNC.guest||SYNC.got){
+      SYNC.shakeAt=now;
+      const json=stateJSON();
+      if(json){ SYNC.lastJson=json; SYNC.lastTs=now; syncSend({kind:'sync-state',ts:now,json}); }
+    }
+    return;
+  }
+  if(d.kind==='sync-state'){
+    SYNC.peerAt=now; SYNC.shakeAt=now;
+    if(!d.json||typeof d.ts!=='number'||d.ts<=SYNC.lastTs) return;
+    SYNC.lastTs=d.ts; SYNC.lastJson=d.json;
+    const first=!SYNC.got; SYNC.got=true;
+    SYNC.applying=true;
+    try{ histApply(d.json); }catch(e){}
+    SYNC.applying=false;
+    if(first) toast('Synced \u2014 this screen is live with your other device');
+    return;
+  }
+  if(d.kind==='sync-fire'){
+    SYNC.peerAt=now; SYNC.shakeAt=now;
+    if(typeof d.l==='number'&&typeof d.c==='number'&&S.fired[d.l]!==d.c){
+      SYNC.applying=true; quantizeFire(d.l,d.c); SYNC.applying=false;
+    }
+    return;
+  }
+  if(d.kind==='sync-param'){
+    SYNC.peerAt=now; SYNC.shakeAt=now;
+    if(typeof d.id==='string'&&PARAMS[d.id]&&typeof d.v==='number'){
+      SYNC.applying=true; setParam(d.id,d.v); SYNC.applying=false;
+    }
+    return;
+  }
+}
+/* Broker rendezvous watcher: being CONNECTED to a relay was never
+   enough - if no peer shows up on THIS broker, the two sides can sit
+   parked on different brokers forever (the old 'relay live - finding
+   console...' trap). A searching instance now hops to the next broker
+   and looks there; any handshake (state, fire, param, peer presence)
+   pins it. A host that has ever shaken hands stays put. */
+function cloudWatchTick(){
+  if(!cloudClient||!p2pCode||!SYNC.on||cloudHopping) return;
+  const now=Date.now();
+  if(!cloudConnectedAt) return;
+  if(SYNC.shakeAt>=cloudConnectedAt) return;
+  /* presence does NOT pin us here: a retained presence message can be a
+     GHOST (a long-gone instance whose broker kept its online flag) -
+     keying the hop on presence alone parked the guest next to a ghost
+     forever (caught by hm_hopdiag: peerAt fresh, peerOn true, nobody
+     home). Only a real handshake (sync-state / fire / param / a live
+     hello answered) sets shakeAt, and that is what pins us. */
+  const fuse=SYNC.guest?10000:25000;
+  if(now-cloudConnectedAt<fuse) return;
+  if(!SYNC.guest&&SYNC.shakeAt>0) return;
+  const brokers=cloudBrokers(); if(brokers.length<2) return;
+  cloudStartIdx=(cloudIdx+1)%brokers.length;
+  prmStatus('no peer on this relay - trying the next one\u2026');
+  cloudHopping=true;
+  const old=cloudClient; cloudClient=null; cloudConnecting=false; SYNC.on=false;
+  try{ old.disconnect(); }catch(e){}
+  setTimeout(()=>{ cloudHopping=false; if(p2pCode&&!cloudClient) cloudStart(); },700);
+}
+setInterval(cloudWatchTick,2500);
 function p2pRemoteUrl(){
-  return p2pCode ? 'https://joshuagwatts.github.io/HoloMapper/remote.html?v='+APP_VERSION+'#r='+p2pCode : '';
+  if(!p2pCode) return '';
+  try{ const u=new URL(location.href); u.search='?sync='+p2pCode; u.hash=''; return u.toString(); }
+  catch(e){ return 'https://joshuagwatts.github.io/HoloMapper/?sync='+p2pCode; }
 }
 function broadcastState(){
   const st={type:'state',
@@ -9819,7 +9994,7 @@ function renderPair(){
   const url=p2pRemoteUrl()||prmRemoteUrl;
   const has=!!url;
   $('pairstat').innerHTML=has
-    ? 'Scan with your phone camera — the remote opens already connected:'+(p2pCode?'<br>Code: <b>'+p2pCode+'</b><br><span class="dim">'+p2pStatusText()+'</span><br><span class="dim">You can close this window — the link stays live until you Disconnect.</span>':'')
+    ? 'Scan with your phone — HoloMapper opens there, the full app, synced with this screen:'+(p2pCode?'<br>Code: <b>'+p2pCode+'</b><br><span class="dim">'+p2pStatusText()+'</span><br><span class="dim">You can close this window — the link stays live until you Disconnect.</span>':'')
     : 'Starting P2P pairing…';
   $('pairurl').textContent=url||'';
   const qr=$('pairqr'); qr.innerHTML='';
@@ -9857,7 +10032,9 @@ $('btnPairDisc').addEventListener('click',()=>{ p2pStop(); p2pCode=''; try{ loca
 if(location.protocol==='http:'&&location.port==='8090'){ setPrmOn(true); }
 /* warm start: a saved pairing code means the phone may come back — have the
    rooms listening before the Server window is even opened */
-if(p2pLoadCode()){ p2pCode=p2pLoadCode(); p2pStart(); }
+const _syncQ=new URLSearchParams(location.search).get('sync');
+if(_syncQ&&_syncQ.length>=4){ SYNC.guest=true; p2pCode=_syncQ; p2pSaveCode(_syncQ); p2pStart(); toast('Linking to your other screen\u2026'); }
+else if(p2pLoadCode()){ p2pCode=p2pLoadCode(); p2pStart(); }
 $('btnPairCopy').addEventListener('click',()=>{
   const u=p2pRemoteUrl()||prmRemoteUrl;
   if(!u) return;
@@ -9866,7 +10043,6 @@ $('btnPairCopy').addEventListener('click',()=>{
 $('pair').addEventListener('click',(e)=>{ if(e.target===$('pair')) togglePair(false); });
 setInterval(broadcastState,500);
 </script>
-<script src="vendor/paho-mqtt-min.js"></script>
 
 <style>
 #clipmenu{position:fixed;z-index:200;background:#171a21;border:1px solid var(--line);border-radius:10px;padding:6px;min-width:200px;max-width:78vw;max-height:72vh;overflow-y:auto;box-shadow:0 12px 32px rgba(0,0,0,.55);flex-direction:column;gap:2px}
