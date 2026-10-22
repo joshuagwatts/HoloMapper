@@ -1426,7 +1426,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.31';
+const APP_VERSION='1.9.32';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -6792,18 +6792,22 @@ function hideClipMenu(){ const m=$('clipmenu'); if(m) m.style.display='none'; }
 function shUniformRows(sec,sidx,uns){
   for(const u of uns){
     const base='SH'+sidx+'.'+u.name;
+    const short=u.label||shPretty(u.name);
     const cnt=u.count||1;
     if(cnt>1&&(u.type==='float'||u.type==='int')){
-      for(let e=0;e<cnt;e++) paramRow(sec, base+'_'+e, u.name+'['+e+']', u.type==='int'?0.1:undefined);
+      for(let e=0;e<cnt;e++) paramRow(sec, base+'_'+e, short+'['+e+']', u.type==='int'?0.1:undefined);
     }else if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
       const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw';
-      for(let c=0;c<ncomp;c++) paramRow(sec,base+'.'+axes[c],u.name+'.'+axes[c]);
+      for(let c=0;c<ncomp;c++) paramRow(sec,base+'.'+axes[c],short+'.'+axes[c]);
     }else if(u.type==='bool'){
-      toggleRow(sec,base,u.name);
+      toggleRow(sec,base,short);
+    }else if(PARAMS[base]&&PARAMS[base].nopts>=2){
+      const p=PARAMS[base];
+      discreteRow(sec, base, short, p.modeNames||Array.from({length:p.nopts},(_,e)=>'Mode '+(e+1)));
     }else if(u.type==='int'){
-      paramRow(sec,base,u.name,0.1);
+      paramRow(sec,base,short,0.1);
     }else{
-      paramRow(sec,base,u.name);
+      paramRow(sec,base,short);
     }
   }
 }
@@ -8061,6 +8065,7 @@ function compilePlugin(fromInit){
      scanner, exactly like imports). */
   S.pluginUniforms=scanShaderUniforms(conv.code);
   for(const u of S.pluginUniforms){ if(conv.defs[u.name]!==undefined) u.init=conv.defs[u.name]; }
+  shApplyMeta(S.pluginUniforms, code);
   registerPluginParams();
   { const _pe=$('plugerr'); if(_pe) _pe.textContent='';
     const _po=$('plugok'); if(_po) _po.textContent='Compiled OK'; }
@@ -8232,7 +8237,7 @@ function scanShaderUniforms(code){
 }
 function normUniform(u){
   if(typeof u==='string') return {name:u, type:'float', init:null, count:1};
-  if(u&&typeof u.name==='string') return {name:u.name, type:u.type||'float', init:u.init||null, count:u.count||1};
+  if(u&&typeof u.name==='string') return {name:u.name, type:u.type||'float', init:u.init||null, count:u.count||1, label:u.label||null, modes:u.modes||0, modeNames:u.modeNames||null};
   return null;
 }
 /* Raw numeric value of a descriptor's initializer (component comp for
@@ -8288,10 +8293,93 @@ function shDefVal(u, comp){
    one array element) with its inferred range. Idempotent: the first
    registration wins, so re-imports never move a knob's range under a
    saved slider position. */
+/* ---- param naming + mode detection (v1.9.32) ----
+   The old shadertoy.dll-era loader felt smart because it NAMED knobs
+   well and exposed switch-like params as mode selectors. Recreate both:
+   - labels come from a trailing // comment on the declaration when the
+     author wrote one, else a prettified form of the uniform name;
+   - a param used as a branch switch (== / >= / < against integer
+     literals, or in a switch) becomes a discrete MODE knob - and a
+     comment like `// modes: Swirl, Grid, Tunnel` names the steps. */
+function shPretty(name){
+  let s=String(name||'').replace(/^u_/,'').replace(/^i(?=[A-Z])/,'');
+  s=s.replace(/_/g,' ').replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/\s+/g,' ').trim();
+  if(!s) s=String(name||'param');
+  return s.split(' ').map(w=>{
+    if(/^\d+$/.test(w)) return w;
+    if(w.length>1&&w===w.toUpperCase()&&/[A-Z]/.test(w)) return w.charAt(0)+w.slice(1).toLowerCase();
+    return w.charAt(0).toUpperCase()+w.slice(1);
+  }).join(' ');
+}
+function shParamMeta(code){
+  const meta={};
+  for(const line of String(code||'').split('\n')){
+    const m=line.match(/(?:uniform|const)\s+(?:float|int|bool|vec[234])\s+([^;]*?);\s*\/\/\s*(.+)$/);
+    if(!m) continue;
+    const comment=m[2].trim();
+    const names=m[1].split(',').map(s=>{ const nm=s.trim().match(/^([A-Za-z_]\w*)/); return nm?nm[1]:null; }).filter(Boolean);
+    for(const nm of names){
+      const e=meta[nm]||(meta[nm]={});
+      const mm=comment.match(/modes?\s*:\s*(.+)$/i);
+      if(mm){
+        const opts=mm[1].split(/[,|]/).map(s=>s.trim().slice(0,20)).filter(Boolean);
+        if(opts.length>=2){ e.modeNames=opts; e.modes=opts.length; }
+      }
+      const lab=comment.replace(/modes?\s*:.*$/i,'').replace(/[\s\-:]+$/,'').trim();
+      if(lab&&!e.label) e.label=lab.slice(0,32);
+    }
+  }
+  return meta;
+}
+function shDetectModes(clean, name, type){
+  if(type!=='float'&&type!=='int') return 0;
+  const esc=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const sw=new RegExp('switch\\s*\\(\\s*(?:int\\s*\\(\\s*)?'+esc+'\\b');
+  const sm=clean.match(sw);
+  if(sm){
+    const seg=clean.slice(sm.index, sm.index+600);
+    const cases=new Set(); let cm; const cre=/case\s+(\d+)\s*:/g;
+    while((cm=cre.exec(seg))) cases.add(parseInt(cm[1],10));
+    if(cases.size>=2&&cases.size<=16) return cases.size;
+  }
+  const vals=new Set();
+  const re=new RegExp('(?:'+esc+'\\s*(?:==|>=|<=|>|<)\\s*(-?\\d+)(?:\\.0+)?\\b|(-?\\d+)(?:\\.0+)?\\s*(?:==|>=|<=|>|<)\\s*'+esc+')','g');
+  let m; while((m=re.exec(clean))){ const v=parseInt(m[1]!==undefined?m[1]:m[2],10); if(!isNaN(v)) vals.add(v); }
+  const hint=/mode|style|type|shape|variant|pattern|algo|kind/i.test(name);
+  if(vals.size>=2){ const n=Math.max(vals.size, Math.max(...vals)+1); if(n>=2&&n<=16) return n; }
+  if(hint&&vals.size>=1){ const n=Math.max(...vals)+1; if(n>=2&&n<=16) return n; }
+  return 0;
+}
+function shApplyMeta(uniforms, code){
+  if(!uniforms||!uniforms.length||!code) return;
+  const meta=shParamMeta(code), clean=stripGlslComments(code);
+  for(const u of uniforms){
+    const m=meta[u.name];
+    if(m){
+      if(m.label) u.label=m.label;
+      if(m.modeNames&&m.modeNames.length>=2){ u.modes=m.modeNames.length; u.modeNames=m.modeNames; }
+    }
+    if(!u.modes){
+      const n=shDetectModes(clean, u.name, u.type);
+      if(n>=2) u.modes=n;
+    }
+  }
+}
 function registerScalarParam(id, lab, u, comp){
-  const d=shDefVal(u,comp);
+  let d=shDefVal(u,comp);
   if(!PARAMS[id]){
-    if(u.type==='bool'){
+    const mn=(comp===0&&(u.type==='float'||u.type==='int')&&u.modes>=2)?Math.min(16,u.modes):0;
+    if(mn){
+      /* mode param: the knob STEPS through discrete values, and the
+         shader receives the integer index - the fun switches the old
+         loader used to surface. Step names come from a modes: comment
+         when the author wrote one. */
+      const names=(u.modeNames&&u.modeNames.length===mn)?u.modeNames:null;
+      const raw=shInitRaw(u,0), iv=(raw===null)?0:Math.round(raw);
+      d=Math.max(0,Math.min(mn-1,iv))/(mn-1);
+      defParam(id, lab, d, v=>Math.round(v*(mn-1)), v=>names?names[Math.max(0,Math.min(mn-1,Math.round(v*(mn-1))))]:('Mode '+(Math.round(v*(mn-1))+1)));
+      PARAMS[id].nopts=mn; if(names) PARAMS[id].modeNames=names;
+    }else if(u.type==='bool'){
       defParam(id, lab, d, v=>v>=0.5?1:0, v=>v>=0.5?'on':'off');
     }else if(u.type==='int'){
       const raw=shInitRaw(u,comp), [lo,hi]=shIntRange(raw===null?0:Math.round(raw));
@@ -8309,7 +8397,7 @@ function registerScalarParam(id, lab, u, comp){
 function registerUniformParams(sidx, label, uniforms){
   for(const u0 of (uniforms||[])){
     const u=normUniform(u0); if(!u) continue;
-    const base='SH'+sidx+'.'+u.name, lab=label+' \u00b7 '+u.name;
+    const base='SH'+sidx+'.'+u.name, lab=label+' \u00b7 '+(u.label||shPretty(u.name));
     const cnt=u.count||1;
     if(cnt>1&&(u.type==='float'||u.type==='int')){
       for(let e=0;e<cnt;e++) registerScalarParam(base+'_'+e, lab+'['+e+']', u, e);
@@ -8536,6 +8624,7 @@ function importShader(name, code){
   if(!pr) return -1;
   const uniforms=scanShaderUniforms(code);
   for(const u of uniforms){ if(defs[u.name]!==undefined) u.init=defs[u.name]; }
+  shApplyMeta(uniforms, raw);
   S.imports.push({name:clean, code:code, uniforms:uniforms});
   PROG.imports.push(pr);
   registerImportParams(5+S.imports.length-1);
