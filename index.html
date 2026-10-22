@@ -832,7 +832,7 @@ button.slon{flex:none;padding:2px 8px;font-size:11px}
             <input id="mbSpdVal" class="mbnum" type="number" step="0.05" title="Exact time scale (x) - type a value and Enter">
           </div>
           <div class="mbknob" id="mbHueK"></div>
-          <div class="mbgrp"><button id="mbStrobe" title="Master strobe">STROBE</button><div class="mbknob" id="mbSRateK"></div></div>
+          <div class="mbgrp"><button id="mbStrobe" title="Master strobe">STROBE</button><div class="mbknob" id="mbSRateK"></div><button id="mbStrobeMode" title="Strobe rate mode: Hz (free) or BPM (note divisions of the beat clock)">HZ</button></div>
           <div class="mbgrp"><button id="mbBlack" title="Blackout (Space)">BLACKOUT</button><select id="mbBlType" title="Blackout type"><option value="black">Black</option><option value="white">White</option><option value="freeze">Freeze</option></select></div>
           <div class="mbknob" id="mbMasterK"></div>
         </div>
@@ -1435,7 +1435,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.35';
+const APP_VERSION='1.9.36';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1866,7 +1866,7 @@ defParam('P.sat',   'Saturation',   0.5, v=>v*2,            v=>(v*2).toFixed(2))
 defParam('P.vig',   'Vignette',     0.28,v=>v*0.9,          v=>Math.round(v*90)+'%');
 defParam('P.grain', 'Grain',        0.2, v=>v*0.25,         v=>Math.round(v*25)+'%');
 defParam('P.aamt',  'Audio Amount', 0.8);
-defParam('P.srate', 'Strobe Rate',  1/3, v=>1+v*9,          v=>(1+v*9).toFixed(1)+'Hz');
+defParam('P.srate', 'Strobe Rate',  0.434, v=>0.5*Math.pow(120,v), v=>{ const hz=0.5*Math.pow(120,v); return (hz<10?hz.toFixed(2):hz.toFixed(1))+'Hz'; });
 defParam('P.samt',  'Strobe Amt',   0.5, v=>v*0.85,         v=>Math.round(v*85)+'%');
 defParam('P.master','Master',       1,   v=>v,              v=>Math.round(v*100)+'%');
 /* ---- content wave: Mirror / Auto Mask / Colorize / Post Bloom ---- */
@@ -1995,7 +1995,7 @@ function defaultState(){
     deckIdx:0, autopilot:false,
     params:params, assigns:{}, mods:{},
     postBypass:{feedback:false, kaleido:true, glitch:true, mirror:true, automask:true, colorize:true, bloompost:true},
-    strobeOn:false, beatSync:false, bpm:120, blackout:false, knobSmooth:0,
+    strobeOn:false, strobeMode:'hz', strobeDiv:2, beatSync:false, bpm:120, blackout:false, knobSmooth:0,
     compW:0, compH:0, outDisplay:null,
     bltype:'black', ghue:0, gspeed:1, gspeedMin:0.1, gspeedMax:2, camFace:'user',
     layerFx:Array.from({length:MAX_LAYERS},()=>[]),
@@ -5149,11 +5149,24 @@ function renderBloomPost(inTex){
    any other rate it's the closest EVEN pattern the display can show
    instead of an aliased shimmer. Max honest rate is fps/2. */
 let _fpsEMA=60, _strobeFr=0, _strobeLvl=1, _strobeLastT=0;
+const STROBE_DIVS=['1/1','1/2','1/4','1/8','1/16','1/32','1/64'];
+const STROBE_DIV_BEATS=[4,2,1,0.5,0.25,0.125,0.0625];
+function strobeDivIdx(){ return Math.max(0,Math.min(6,(S.strobeDiv===undefined)?2:S.strobeDiv)); }
 function hmStrobeTick(now){
   const dt=now-_strobeLastT; _strobeLastT=now;
   if(dt>0.001&&dt<0.5){ const f=1/dt; _fpsEMA+=(f-_fpsEMA)*0.06; }
   _strobeFr++;
   if(!S.strobeOn){ _strobeLvl=1; return; }
+  if(S.strobeMode==='bpm'){
+    /* v1.9.36: musical strobe - the flash cycle is a note division of
+       the shared beat clock (beatsNow), so strobes land ON the beat
+       grid with the clip fires: 1/4 = one flash per beat, 1/64 =
+       sixteen per beat, 50% duty, frame-locked by construction. */
+    const cyc=STROBE_DIV_BEATS[strobeDivIdx()];
+    const ph=((beatsNow()/cyc)%1+1)%1;
+    _strobeLvl=(ph<0.5)?1:0;
+    return;
+  }
   const hz=PARAMS['P.srate'].map(eff('P.srate'));
   const half=Math.max(1,Math.round(_fpsEMA/(2*Math.max(0.5,hz))));
   _strobeLvl=(Math.floor(_strobeFr/half)%2===0)?1:0;
@@ -7984,7 +7997,8 @@ function syncMasterBar(){
   if(MBK.speed) MBK.speed.set(gsToKnob(S.gspeed===undefined?1:S.gspeed),false);
   if(MBK.paintScale) MBK.paintScale();
   if(MBK.hue) MBK.hue.set(S.ghue||0,false);
-  if(MBK.rate) MBK.rate.set((S.params['P.srate']!==undefined)?S.params['P.srate']:PARAMS['P.srate'].def,false);
+  if(MBK.rate) MBK.rate.set(S.strobeMode==='bpm'?strobeDivIdx()/6:((S.params['P.srate']!==undefined)?S.params['P.srate']:PARAMS['P.srate'].def),false);
+  const smb=$('mbStrobeMode'); if(smb) smb.textContent=(S.strobeMode==='bpm')?'BPM':'HZ';
   if(MBK.out) MBK.out.set((S.params['P.master']!==undefined)?S.params['P.master']:1,false);
   const st=$('mbStrobe'); if(st) st.classList.toggle('on',!!S.strobeOn);
   const bk=$('mbBlack'); if(bk) bk.classList.toggle('armed',!!S.blackout);
@@ -8022,8 +8036,16 @@ function wireMasterBar(){
     fmt:v=>Math.round(v*360)+'°',
     set:v=>{ S.ghue=v; saveState(); if(typeof syncFieldSend==='function') syncFieldSend('ghue',S.ghue); } });
   MBK.rate=mbMakeKnob('mbSRateK','RATE',{ def:PARAMS['P.srate'].def,
-    fmt:v=>PARAMS['P.srate'].fmt(v),
-    set:v=>setParam('P.srate',v) });
+    fmt:v=>(S.strobeMode==='bpm')?STROBE_DIVS[Math.max(0,Math.min(6,Math.round(v*6)))]:PARAMS['P.srate'].fmt(v),
+    set:v=>{
+      if(S.strobeMode==='bpm'){
+        const idx=Math.max(0,Math.min(6,Math.round(v*6)));
+        if(idx!==S.strobeDiv){ S.strobeDiv=idx; saveState(); }
+        MBK.rate.set(idx/6,false);
+      } else setParam('P.srate',v);
+    } });
+  { const smb=$('mbStrobeMode');
+    if(smb) smb.addEventListener('click',()=>{ S.strobeMode=(S.strobeMode==='bpm')?'hz':'bpm'; saveState(); syncMasterBar(); toast('Strobe: '+(S.strobeMode==='bpm'?'BPM divisions':'Hz')); }); }
   MBK.out=mbMakeKnob('mbMasterK','OUT',{ def:1,
     fmt:v=>Math.round(v*100)+'%',
     set:v=>setParam('P.master',v) });
@@ -8981,7 +9003,7 @@ function snapshot(){
     params:S.params, assigns:S.assigns, layers:S.layers,
     clips:S.clips, fired:S.fired,
     decks:S.decks, deckIdx:S.deckIdx, autopilot:S.autopilot,
-    postBypass:S.postBypass, strobeOn:S.strobeOn, beatSync:S.beatSync,
+    postBypass:S.postBypass, strobeOn:S.strobeOn, strobeMode:S.strobeMode, strobeDiv:S.strobeDiv, beatSync:S.beatSync,
     bpm:S.bpm, snap:S.snap||'bar', macros:S.macros, pluginCode:S.pluginCode, pluginUniforms:S.pluginUniforms, imports:S.imports, midi:S.midi,
     bltype:S.bltype||'black', ghue:S.ghue||0, gspeed:(S.gspeed===undefined?1:S.gspeed), gspeedMin:S.gspeedMin, gspeedMax:S.gspeedMax,
     mods:S.mods, graphs:S.graphs, slices:S.slices
@@ -9017,7 +9039,7 @@ function applySnapshot(snap){
   }
   if(Array.isArray(snap.slices)&&snap.slices.length) S.slices=JSON.parse(JSON.stringify(snap.slices));
   S.postBypass=Object.assign({}, d.postBypass, snap.postBypass||{});
-  S.strobeOn=!!snap.strobeOn; S.beatSync=!!snap.beatSync; S.bpm=snap.bpm||120;
+  S.strobeOn=!!snap.strobeOn; if(snap.strobeMode) S.strobeMode=snap.strobeMode; if(snap.strobeDiv!==undefined) S.strobeDiv=snap.strobeDiv; S.beatSync=!!snap.beatSync; S.bpm=snap.bpm||120;
   S.snap=snap.snap||'bar'; S.firedCol=null;
   S.macros=(snap.macros||d.macros).map((m,i)=>({label:(m&&m.label)||('M'+(i+1)), val:clamp(+((m&&m.val)||0),0,1)}));
   while(S.macros.length<8) S.macros.push({label:'M'+(S.macros.length+1), val:0.5});
@@ -11272,6 +11294,7 @@ setInterval(broadcastState,500);
 #masterbar{display:flex;flex-wrap:nowrap;gap:12px;align-items:center;padding:5px 10px;background:#14161c;border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 #masterbar::-webkit-scrollbar{display:none}
 #masterbar .mblab{font-size:10px;letter-spacing:.14em;color:var(--dim);font-weight:700;white-space:nowrap}
+#masterbar #mbStrobeMode{background:#0a0b0e;color:var(--dim);border:1px solid var(--line);border-radius:4px;font-size:10px;font-weight:700;padding:3px 6px;cursor:pointer}
 #masterbar .mbnum{width:54px;background:#0a0b0e;color:var(--ink,#e8eaf0);border:1px solid var(--line);border-radius:4px;font-size:11px;padding:2px 4px}
 #masterbar .mbx{color:var(--dim);font-size:11px}
 #masterbar .mbgrp{display:flex;align-items:center;gap:6px;flex:none}
