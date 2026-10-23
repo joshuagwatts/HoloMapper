@@ -515,7 +515,14 @@ html[data-device="phone"] .dockdiv{display:none}
 html[data-device="phone"] .dockhdiv{display:none}
 html[data-device="phone"] .dockpanel{min-height:0}
 html[data-device="phone"] .dockbody{overflow:visible}
-html[data-device="phone"] header#topbar{flex-wrap:wrap;height:auto;min-height:44px}
+/* v1.9.42: the phone top bar wrapped into a ~300px wall of buttons
+   (worse once the desktop bar learned to wrap in 1.9.41) and pushed the
+   deck a full screen down. On phone it is ONE swipeable strip instead:
+   fixed height, sideways scroll, every control still reachable. */
+html[data-device="phone"] header#topbar{flex-wrap:nowrap;height:52px;min-height:52px;max-height:52px;
+  overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+html[data-device="phone"] header#topbar::-webkit-scrollbar{display:none}
+html[data-device="phone"] header#topbar>*{flex-shrink:0}
 html[data-device="phone"] .clipgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:10px}
 /* phone layer strip: clips scroll row left, fader right */
 html[data-device="phone"] .lstrip{display:grid;grid-template-columns:minmax(0,1fr) 56px;grid-template-rows:auto auto;height:auto;min-height:0}
@@ -1441,7 +1448,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.41';
+const APP_VERSION='1.9.42';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
