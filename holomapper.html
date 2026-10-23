@@ -81,11 +81,16 @@ html,body{height:100%}
 body{background:var(--bg);color:var(--txt);
   font:11px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
   overflow:hidden;user-select:none}
-#app{display:grid;grid-template-rows:34px minmax(0,1fr);height:100vh}
+#app{display:grid;grid-template-rows:auto minmax(0,1fr);height:100vh}
 /* ---- top bar: thin menu strip ---- */
 #topbar{display:flex;align-items:center;gap:6px;padding:0 8px;
   background:var(--panel);border-bottom:1px solid var(--line);
-  white-space:nowrap;overflow:hidden;font-size:11px}
+  white-space:nowrap;overflow:hidden;font-size:11px;
+  /* v1.9.41: the bar carries ~1800px of controls; nowrap + a fixed
+     34px row clipped the right-hand end (Output / Slices / PERFORM /
+     Fullscreen) off regular laptop screens entirely. It wraps to a
+     second row instead - every button stays viewable. */
+  flex-wrap:wrap;min-height:34px;row-gap:2px;padding-top:2px;padding-bottom:2px}
 body.learn #topbar{box-shadow:inset 0 0 0 2px var(--midi)}
 .brand{font-weight:800;font-size:12px;letter-spacing:.06em;color:var(--txt)}
 .vtag{font-size:9px;color:var(--dim);border:1px solid var(--line);border-radius:2px;padding:0 4px}
@@ -1436,7 +1441,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.40';
+const APP_VERSION='1.9.41';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -9976,7 +9981,7 @@ const SRC_COPYEXACT=`#version 300 es
 precision highp float;
 out vec4 O;
 uniform sampler2D u_tex;
-void main(){ O=vec4(texelFetch(u_tex,ivec2(gl_FragCoord.xy),0).rgb,1.0); }`;
+void main(){ O=texelFetch(u_tex,ivec2(gl_FragCoord.xy),0); }`;
 const SRC_BLEND2=`#version 300 es
 precision highp float;
 out vec4 O; in vec2 v_uv;
