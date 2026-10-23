@@ -407,6 +407,8 @@ body.perform #performbar{display:block}
 .pmacro .ml{font-size:10px;font-weight:700;color:var(--play);margin-bottom:2px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pexit{color:var(--dim);font-size:10px;text-align:center;margin-top:4px}
+body.perform .pexit{transition:opacity .6s}
+body.perform.pidle .pexit{opacity:0}
 /* ============ property tabs ============ */
 #ptabbar{flex:none;display:flex;gap:2px;background:var(--panel);border-bottom:1px solid var(--line);padding:4px 8px 0}
 #ptabbar button{border-bottom:none;border-radius:var(--r) var(--r) 0 0;color:var(--dim);font-weight:700;
@@ -523,6 +525,11 @@ html[data-device="phone"] header#topbar{flex-wrap:nowrap;height:52px;min-height:
   overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 html[data-device="phone"] header#topbar::-webkit-scrollbar{display:none}
 html[data-device="phone"] header#topbar>*{flex-shrink:0}
+/* v1.9.45: the master bar was a 968px nowrap strip in a 360px panel -
+   strobe / hue / out were cut off with no way to reach them. On phone
+   it wraps: every master control visible, nothing hidden sideways. */
+html[data-device="phone"] #masterbar{flex-wrap:wrap;overflow-x:visible}
+html[data-device="phone"] .dockpanel[data-panel="transport"] .dockbody{min-height:0;height:auto}
 html[data-device="phone"] .clipgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:10px}
 /* phone layer strip: clips scroll row left, fader right */
 html[data-device="phone"] .lstrip{display:grid;grid-template-columns:minmax(0,1fr) 56px;grid-template-rows:auto auto;height:auto;min-height:0}
@@ -1448,7 +1455,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.43';
+const APP_VERSION='1.9.45';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -2090,10 +2097,55 @@ const syncId=Math.random().toString(36).slice(2,10);
    preset path rebuilds - plus FX chains and quality targets, which
    snapshots don't cover. S.videos (live <video> elements) never
    serialize and are preserved across restores. */
+/* v1.9.45: media PRESENCE syncs even though media files can't (blob
+   URLs are per-device). Every snapshot carries a manifest of names,
+   kinds and transforms; a device without the file materializes a STUB
+   (a name slate) at the same index, so the clips exist, list in the
+   browser, and FIRE from either screen - the device holding the file
+   renders the real thing. Importing the same filename revives a stub
+   in place, transforms included. */
+function mediaManifest(){
+  return (S.videos||[]).map(v=>({ name:v.name||'media', kind:v.kind||'video',
+    tx:v.tx||0, ty:v.ty||0, ts:(v.ts!==undefined?v.ts:1), tr:v.tr||0,
+    tsx:(v.tsx!==undefined?v.tsx:1), tsy:(v.tsy!==undefined?v.tsy:1) }));
+}
+function makeMediaStub(m){
+  const cv=document.createElement('canvas'); cv.width=640; cv.height=360;
+  const g=cv.getContext('2d');
+  g.fillStyle='#14161c'; g.fillRect(0,0,640,360);
+  g.fillStyle='#e8eaf0'; g.font='bold 34px sans-serif'; g.textAlign='center';
+  const nm=(m.name||'media');
+  g.fillText(nm.length>26?nm.slice(0,25)+'\u2026':nm, 320, 168);
+  g.fillStyle='#7d8595'; g.font='20px sans-serif';
+  g.fillText('media lives on the other screen', 320, 210);
+  g.fillText('firing works from here', 320, 240);
+  return { name:m.name||'media', kind:m.kind||'video', stub:true, el:cv,
+    tx:m.tx||0, ty:m.ty||0, ts:(m.ts!==undefined?m.ts:1), tr:m.tr||0,
+    tsx:(m.tsx!==undefined?m.tsx:1), tsy:(m.tsy!==undefined?m.tsy:1) };
+}
+function applyMediaManifest(list){
+  if(!Array.isArray(list)) return;
+  list.forEach((m,idx)=>{
+    if(!m||!m.name) return;
+    const xf=(dst)=>{ dst.tx=m.tx||0; dst.ty=m.ty||0; dst.ts=(m.ts!==undefined?m.ts:1); dst.tr=m.tr||0; dst.tsx=(m.tsx!==undefined?m.tsx:1); dst.tsy=(m.tsy!==undefined?m.tsy:1); };
+    const cur=S.videos[idx];
+    if(cur&&cur.name===m.name){ xf(cur); return; }
+    if(cur&&!cur.stub){
+      /* a real local file sits at this index - never clobber it;
+         park the stub at the end if the name is unknown here */
+      if(!S.videos.some(x=>x.name===m.name)) S.videos.push(makeMediaStub(m));
+      return;
+    }
+    while(S.videos.length<idx) S.videos.push(makeMediaStub({name:'(missing)',kind:'video'}));
+    S.videos[idx]=makeMediaStub(m);
+  });
+  while(S.videos.length>list.length&&S.videos[S.videos.length-1].stub) S.videos.pop();
+}
 function stateJSON(){
   try{
     const sc=Object.assign({},S);
     delete sc.videos;
+    sc.mediaList=mediaManifest();
     /* runtime accumulators, not state: they advance every frame, so
        serializing them makes every snapshot unique and defeats the
        history dedupe (and they restart cleanly - renderLayerInto
@@ -2147,6 +2199,7 @@ function histApply(json, fromSync){
     for(const k of Object.keys(S)) delete S[k];
     Object.assign(S,parsed);
     S.videos=vids;
+    applyMediaManifest(parsed.mediaList);
     if(vol.layerTime) S.layerTime=vol.layerTime;
     if(vol.impTime) S.impTime=vol.impTime;
     if(vol._frz) S._frz=vol._frz;
@@ -3174,12 +3227,14 @@ in vec2 v_uv;
 uniform sampler2D u_tex;
 uniform vec2 u_pos;    /* v1.9.43: per-media transform */
 uniform float u_scale;
+uniform vec2 u_sxy;    /* v1.9.44: independent X / Y scale */
 uniform float u_rot;
 void main(){
   vec2 q = v_uv - vec2(0.5) - u_pos;
   float c = cos(u_rot), s = sin(u_rot);
   q = mat2(c, s, -s, c) * q;
-  q = q / max(u_scale, 0.001) + vec2(0.5);
+  vec2 es = vec2(max(u_scale*u_sxy.x, 0.001), max(u_scale*u_sxy.y, 0.001));
+  q = q / es + vec2(0.5);
   if(q.x<0.0||q.x>1.0||q.y<0.0||q.y>1.0){ O = vec4(0.0); return; }
   O = texture(u_tex, q);
 }
@@ -4466,7 +4521,9 @@ function renderVideo(i,sidx,t,T){
   const vi=videoIdx(sidx), v=S.videos[vi];
   if(!v||!v.el) return;
   const isImg=(v.kind==='image');
-  if(isImg){
+  const isStill=isImg||!!v.stub;
+  if(v.stub){ /* name slate: fall through to the upload */
+  }else if(isImg){
     if(!v.el.complete||!v.el.naturalWidth) return; /* still decoding */
   }else{
     /* master speed applies to video clips too: it IS their playback rate */
@@ -4486,13 +4543,14 @@ function renderVideo(i,sidx,t,T){
      v1.9.39: the draw uses PROG.media, which preserves the alpha
      channel - a logo PNG's transparency reaches the layer target and
      the combine composites it over the layers below */
-  if(!isImg||v.animated||!v._up){
-    /* v1.9.43: image elements are top-row-first and the quad expects
-       bottom-row-first - flip at upload or logos render upside down
-       (same fix as the webcam path). Videos arrive upright already. */
-    if(isImg) gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+  if(!isStill||v.animated||!v._up){
+    /* v1.9.43/44: image AND video elements are top-row-first and the
+       quad expects bottom-row-first - flip at upload or the media
+       renders upside down (same fix as the webcam path; verified on
+       real files by Joshua: both kinds were upside down). */
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,v.el);
-    if(isImg) gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
     v._up=true;
   }
   gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
@@ -4502,6 +4560,7 @@ function renderVideo(i,sidx,t,T){
   if(P===PROG.media){
     gl.uniform2f(U(P,'u_pos'), v.tx||0, v.ty||0);
     gl.uniform1f(U(P,'u_scale'), (v.ts!==undefined&&v.ts>0)?v.ts:1);
+    gl.uniform2f(U(P,'u_sxy'), (v.tsx!==undefined&&v.tsx>0)?v.tsx:1, (v.tsy!==undefined&&v.tsy>0)?v.tsy:1);
     gl.uniform1f(U(P,'u_rot'), v.tr||0);
   }
   quadDraw();
@@ -7171,7 +7230,7 @@ function buildClipParamSection(host,i,src){
        but per source file, the way he asked: 'attached to all of them') */
     const v=S.videos[videoIdx(src)];
     if(!v) return;
-    if(v.tx===undefined){ v.tx=0; v.ty=0; v.ts=1; v.tr=0; }
+    if(v.tx===undefined){ v.tx=0; v.ty=0; v.ts=1; v.tr=0; v.tsx=1; v.tsy=1; }
     sec.appendChild(el('div','plab','Media Transform'));
     const mkSlider=(label,min,max,step,get,set,fmt)=>{
       const row=el('div','trow');
@@ -7186,9 +7245,11 @@ function buildClipParamSection(host,i,src){
     mkSlider('Pos X',-50,50,0.5,()=>Math.round(v.tx*100),x=>{ v.tx=x/100; },x=>x.toFixed(0)+'%');
     mkSlider('Pos Y',-50,50,0.5,()=>Math.round(v.ty*100),x=>{ v.ty=x/100; },x=>x.toFixed(0)+'%');
     mkSlider('Scale',5,400,1,()=>Math.round(v.ts*100),x=>{ v.ts=x/100; },x=>x.toFixed(0)+'%');
+    mkSlider('Scale X',5,400,1,()=>Math.round((v.tsx||1)*100),x=>{ v.tsx=x/100; },x=>x.toFixed(0)+'%');
+    mkSlider('Scale Y',5,400,1,()=>Math.round((v.tsy||1)*100),x=>{ v.tsy=x/100; },x=>x.toFixed(0)+'%');
     mkSlider('Rotate',-180,180,1,()=>Math.round(v.tr*180/Math.PI),x=>{ v.tr=x*Math.PI/180; },x=>x.toFixed(0)+'\u00B0');
     const br=el('button',null,'Reset transform');
-    br.addEventListener('click',()=>{ v.tx=0; v.ty=0; v.ts=1; v.tr=0; buildProps(); if(typeof buildClipInspector==='function') buildClipInspector(); });
+    br.addEventListener('click',()=>{ v.tx=0; v.ty=0; v.ts=1; v.tr=0; v.tsx=1; v.tsy=1; buildProps(); if(typeof buildClipInspector==='function') buildClipInspector(); });
     sec.appendChild(br);
     sec.appendChild(mkHint('Attached to "'+(v.name||'media')+'" - every clip using this file gets this transform.'));
   }else if(src>=5&&src<camIdx()){
@@ -8616,26 +8677,35 @@ function importImage(file, onIdx){
   const url=URL.createObjectURL(file);
   const img=new Image();
   img.onload=()=>{
-    S.videos.push({name:file.name.replace(/\.[^.]+$/,''), url, el:img, kind:'image', animated:/\.gif$/i.test(file.name||'')});
+    const nm=file.name.replace(/\.[^.]+$/,'');
+    const entry={name:nm, url, el:img, kind:'image', animated:/\.gif$/i.test(file.name||'')};
+    const si=S.videos.findIndex(x=>x.stub&&x.name===nm);
+    if(si>=0){ const st=S.videos[si]; entry.tx=st.tx; entry.ty=st.ty; entry.ts=st.ts; entry.tr=st.tr; entry.tsx=st.tsx; entry.tsy=st.tsy; S.videos[si]=entry; }
+    else S.videos.push(entry);
     saveState(); buildSrcBrowser();
     toast('Image imported: '+file.name);
-    if(onIdx) onIdx(5+S.imports.length+S.videos.length-1);
+    if(onIdx) onIdx(5+S.imports.length+(si>=0?si:S.videos.length-1));
   };
   img.onerror=()=>{ shtoast('Could not load image: '+file.name, true); if(onIdx) onIdx(-1); };
   img.src=url;
 }
 function importMedia(file, onIdx){
   if(isImageFile(file)) importImage(file, onIdx);
-  else{ importVideo(file); if(onIdx) onIdx(5+S.imports.length+S.videos.length-1); }
+  else{ const vi2=importVideo(file); if(onIdx) onIdx(5+S.imports.length+vi2); }
 }
 function importVideo(file){
   const url=URL.createObjectURL(file);
   const el=document.createElement('video');
   el.src=url; el.loop=true; el.muted=true; el.playsInline=true;
   el.play().catch(()=>{});
-  S.videos.push({name:file.name.replace(/\.[^.]+$/,''), url, el});
+  const nm=file.name.replace(/\.[^.]+$/,'');
+  const entry={name:nm, url, el};
+  const si=S.videos.findIndex(x=>x.stub&&x.name===nm);
+  if(si>=0){ const st=S.videos[si]; entry.tx=st.tx; entry.ty=st.ty; entry.ts=st.ts; entry.tr=st.tr; entry.tsx=st.tsx; entry.tsy=st.tsy; S.videos[si]=entry; }
+  else S.videos.push(entry);
   saveState(); buildSrcBrowser();
   toast('Video imported: '+file.name);
+  return si>=0?si:S.videos.length-1;
 }
 /* Reserved uniforms: never knobbed, never scanned as custom.
    Only the engine's own uniforms are reserved — user shaders can use
@@ -9576,8 +9646,23 @@ function syncOutWinBtn(){
     const b=$(id); if(b) b.classList.toggle('on',on);
   }
 }
+/* v1.9.45: warm display detection on the session's first gesture, so
+   by the time Output is clicked the target is already known and the
+   open can aim + fullscreen inside that same click. */
+const _warmDisplays=()=>{ try{ detectDisplays(); }catch(e){} };
+window.addEventListener('pointerdown',_warmDisplays,{once:true});
+window.addEventListener('keydown',_warmDisplays,{once:true});
 function openOutputWindow(feats){
-  if(outWin&&!outWin.closed){ outWin.focus(); placeOutputWindow(); return; }
+  if(outWin&&!outWin.closed){ outWin.focus();
+    /* v1.9.44: this click is a live gesture - if the window is placed
+       but not fullscreen yet, grab fullscreen NOW (synchronously) */
+    try{
+      if(!outWin.document.fullscreenElement){
+        const p=outWin.document.documentElement.requestFullscreen();
+        if(p&&p.catch) p.catch(()=>{});
+      }
+    }catch(e){}
+    placeOutputWindow(); return; }
   /* Open synchronously (popup blockers eat async opens) on the best-known
      target; display detection then refines the placement by itself -
      the window lands on the second screen without being dragged. */
@@ -9587,6 +9672,13 @@ function openOutputWindow(feats){
     if(r&&(DISPLAYS.length||(S.outDisplay&&S.outDisplay.aw!==undefined))){
       feats='popup=yes,left='+Math.round(r.x)+',top='+Math.round(r.y)+',width='+Math.round(r.w)+',height='+Math.round(r.h);
       aimed=true;
+    }else{
+      /* v1.9.45: no target known yet - still open as a real popup
+         WINDOW (explicit size/position), never a tabbed browser
+         window with tabs and an address bar around the picture.
+         Placement + fullscreen refine it a moment later. */
+      const aw=(window.screen&&screen.availWidth)||1280, ah=(window.screen&&screen.availHeight)||800;
+      feats='popup=yes,width=960,height=540,left='+Math.max(0,Math.round((aw-960)/2))+',top='+Math.max(0,Math.round((ah-540)/2));
     }
   }
   outWin=window.open('','hm-output', feats||('popup=yes,width='+Math.min(1600,BASE_W)+',height='+(Math.min(1000,BASE_H)+40)));
@@ -9648,7 +9740,15 @@ function toggleFullscreen(){
   if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
   else document.documentElement.requestFullscreen().catch(()=>showErr('Fullscreen request was denied.'));
 }
-function togglePerform(){ document.body.classList.toggle('perform'); if(typeof closeClipInspector==='function') closeClipInspector(); }
+function togglePerform(){ document.body.classList.toggle('perform'); document.body.classList.remove('pidle'); armPfIdle(); if(typeof closeClipInspector==='function') closeClipInspector(); }
+/* v1.9.44: in PERFORM the exit hint fades out after 3s idle - the
+   performance view is video only; any mouse move brings it back */
+let pfIdleT=null;
+function armPfIdle(){
+  if(pfIdleT) clearTimeout(pfIdleT);
+  pfIdleT=setTimeout(()=>{ if(document.body.classList.contains('perform')) document.body.classList.add('pidle'); },3000);
+}
+document.addEventListener('mousemove',()=>{ document.body.classList.remove('pidle'); armPfIdle(); });
 function toggleHelp(force){
   const h=$('help');
   const show=(force!==undefined)?force:!h.classList.contains('show');
