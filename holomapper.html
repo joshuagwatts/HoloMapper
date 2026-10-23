@@ -1457,7 +1457,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.50';
+const APP_VERSION='1.9.51';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -7223,8 +7223,8 @@ function showClipMenu(x,y,i,k,opts){
   m._swallowNext=!!(opts&&opts.fromTouch);
   const cur=S.clips[i][k];
   /* v1.9.19: the add-anything menu - shader file, source, or effect */
-  const bImp=el('button','cmimp','+ Shader from .txt file…');
-  bImp.title='Import a .txt/.glsl shader and put it straight on this clip';
+  const bImp=el('button','cmimp','+ Add file… (video, image, or shader)');
+  bImp.title='Import a file - a video, an image/logo, or a shader (.txt/.glsl) - and put it straight on this clip';
   bImp.addEventListener('click',()=>{
     hideClipMenu();
     const inp=document.createElement('input');
@@ -9605,7 +9605,7 @@ async function loadShaderFilesOnto(files, i, k){
   const media=arr.filter(f=>isMediaFile(f));
   if(media.length){
     for(const mf of media){
-      importMedia(mf,(si)=>{ if(si>=0){ S.clips[i][k]=si; saveState(); buildDeck(); } });
+      importMedia(mf,(si)=>{ if(si>=0){ S.clips[i][k]=si; saveState(); buildDeck(); selectClip(i,k); fireClip(i,k); } });
     }
     saveState(); buildDeck(); buildSrcBrowser();
     toast(media.length+' media file(s) → '+LAYER_NAMES[i]+' clip '+(k+1));
