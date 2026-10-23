@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache">
+<title>HoloMapper - Output</title>
+<style>
+  html,body{margin:0;background:#000;overflow:hidden;width:100vw;height:100vh}
+  canvas{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#000;display:block}
+</style>
+</head>
+<body>
+<canvas id="oc" width="1280" height="720"></canvas>
+<script>
+(function(){
+  var cv=document.getElementById('oc');
+  window.__hmCanvas=cv;
+  window.__hmFsAttempts=0;
+  window.__hmFsLabel='';
+  window.__hmPlaced=false;
+  try{
+    var h=new URLSearchParams(location.hash.slice(1));
+    window.__hmFsLabel=h.get('label')||'';
+    window.__hmPlaced=h.get('placed')==='1';
+  }catch(e){}
+  function fit(){
+    var iw=window.innerWidth||1280, ih=window.innerHeight||720;
+    if(!cv.width||!cv.height) return;
+    var sc=Math.min(iw/cv.width, ih/cv.height);
+    cv.style.width=Math.max(2,Math.floor(cv.width*sc))+'px';
+    cv.style.height=Math.max(2,Math.floor(cv.height*sc))+'px';
+  }
+  window.__hmFit=fit;
+  window.addEventListener('resize',fit);
+  fit();
+  function matched(){
+    (async function(){
+      var scr=null;
+      try{
+        if(window.getScreenDetails){
+          var sd=await window.getScreenDetails();
+          scr=(sd.screens||[]).find(function(s){ return (s.label||'')===window.__hmFsLabel; })||sd.currentScreen||null;
+        }
+      }catch(e){}
+      if(!scr||document.fullscreenElement) return;
+      try{ var p=document.documentElement.requestFullscreen({screen:scr}); if(p&&p.catch) p.catch(function(){}); }catch(e){}
+    })();
+  }
+  function plain(){
+    try{
+      var p=document.documentElement.requestFullscreen();
+      if(p&&p.catch) p.catch(function(){ matched(); });
+    }catch(e){ matched(); }
+  }
+  /* Fullscreen is asked for from INSIDE this window: the transient
+     activation a browser grants a freshly opened popup lives here,
+     not in the opener - opener-issued requests were being refused. */
+  window.__hmTryFs=function(){
+    if(document.fullscreenElement) return;
+    window.__hmFsAttempts++;
+    plain();
+  };
+  if(window.__hmPlaced){
+    window.__hmTryFs();
+    setTimeout(function(){ if(!document.fullscreenElement) window.__hmTryFs(); },250);
+    setTimeout(function(){ if(!document.fullscreenElement) window.__hmTryFs(); },900);
+  }
+  window.addEventListener('focus',function(){ if(window.__hmPlaced&&!document.fullscreenElement) window.__hmTryFs(); });
+  window.addEventListener('click',function(){ if(!document.fullscreenElement) window.__hmTryFs(); });
+  window.addEventListener('dblclick',function(){ window.__hmTryFs(); });
+  window.addEventListener('keydown',function(e){ if(e.key==='f'||e.key==='F') window.__hmTryFs(); });
+  var ct=null;
+  function armCursor(){
+    document.body.style.cursor='';
+    if(ct) clearTimeout(ct);
+    ct=setTimeout(function(){ document.body.style.cursor='none'; },2600);
+  }
+  window.addEventListener('mousemove',armCursor);
+  armCursor();
+  window.__hmReady=true;
+})();
+</script>
+</body>
+</html>

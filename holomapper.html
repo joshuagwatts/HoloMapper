@@ -528,7 +528,9 @@ html[data-device="phone"] header#topbar>*{flex-shrink:0}
 /* v1.9.45: the master bar was a 968px nowrap strip in a 360px panel -
    strobe / hue / out were cut off with no way to reach them. On phone
    it wraps: every master control visible, nothing hidden sideways. */
-html[data-device="phone"] #masterbar{flex-wrap:wrap;overflow-x:visible}
+html[data-device="phone"] #masterbar{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;scrollbar-width:none}
+html[data-device="phone"] #masterbar::-webkit-scrollbar{display:none}
+html[data-device="phone"] #masterbar>*{flex-shrink:0}
 html[data-device="phone"] .dockpanel[data-panel="transport"] .dockbody{min-height:0;height:auto}
 html[data-device="phone"] .clipgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:10px}
 /* phone layer strip: clips scroll row left, fader right */
@@ -1455,7 +1457,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.46';
+const APP_VERSION='1.9.47';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -9700,6 +9702,7 @@ function placeOutputWindow(){
 function tryOutFullscreen(){
   if(!outWin||outWin.closed||outWin.__hmFsTried) return;
   outWin.__hmFsTried=true;
+  if(outWin.__hmTryFs){ try{ outWin.__hmTryFs(); }catch(e){} return; }
   const w=outWin, label=w.__hmTargetLabel||'';
   const el=w.document.documentElement;
   const screenMatched=async()=>{
@@ -9770,6 +9773,7 @@ function sendOutputToDisplay(d){
 }
 function fitOutWin(){
   if(!outWin||outWin.closed||!outCanvas) return;
+  if(outWin.__hmFit){ try{ outWin.__hmFit(); return; }catch(e){} }
   const iw=outWin.innerWidth||1280, ih=outWin.innerHeight||720;
   const sc=Math.min(iw/outCanvas.width, ih/outCanvas.height);
   outCanvas.style.width=Math.max(2,Math.floor(outCanvas.width*sc))+'px';
@@ -9816,7 +9820,10 @@ function openOutputWindow(feats){
       feats='popup=yes,width=960,height=540,left='+Math.max(0,Math.round((aw-960)/2))+',top='+Math.max(0,Math.round((ah-540)/2));
     }
   }
-  outWin=window.open('','hm-output', feats||('popup=yes,width='+Math.min(1600,BASE_W)+',height='+(Math.min(1000,BASE_H)+40)));
+  lastOutFeats=feats||('popup=yes,width='+Math.min(1600,BASE_W)+',height='+(Math.min(1000,BASE_H)+40));
+  let outUrl='';
+  try{ outUrl=new URL('output.html', location.href).href+'#label='+encodeURIComponent((S.outDisplay&&S.outDisplay.label)||'')+'&placed='+(aimed?1:0); }catch(e){}
+  outWin=window.open(outUrl,'hm-output', feats||('popup=yes,width='+Math.min(1600,BASE_W)+',height='+(Math.min(1000,BASE_H)+40)));
   if(!outWin){ toast('Pop-up blocked - allow pop-ups for this site, then hit Output again'); outWin=null; return; }
   outWin.__hmTargetLabel=(S.outDisplay&&S.outDisplay.label)||'';
   outWin.__hmFsTried=false;
@@ -9830,6 +9837,51 @@ function openOutputWindow(feats){
     try{ const p=outWin.document.documentElement.requestFullscreen(); if(p&&p.catch) p.catch(()=>{}); }catch(e){}
     outWin.__hmFsTried=true;
   }
+  adoptT0=Date.now();
+  try{ outWin.addEventListener('load',()=>setTimeout(()=>{ if(outWin&&!outWin.closed&&!outCanvas&&!outWin.__hmReady) adoptOutputDoc(999); },300)); }catch(e){}
+  adoptOutputDoc(0);
+}
+/* v1.9.47: the output window is a REAL page (output.html) whose own
+   script asks for fullscreen from inside the popup - the activation a
+   browser grants a fresh popup lives in the popup, not the opener, and
+   the opener-issued attempts kept getting refused on Joshua's machine.
+   Adopt its canvas when it reports ready; if the page never loads,
+   build the document by hand (the pre-1.9.47 path) as a fallback. */
+let lastOutFeats='', adoptT0=0;
+function adoptOutputDoc(tries){
+  if(!outWin||outWin.closed) return;
+  let ready=false;
+  try{ ready=!!(outWin.__hmReady&&outWin.__hmCanvas); }catch(e){}
+  if(ready){
+    outCanvas=outWin.__hmCanvas;
+    outCtx=outCanvas.getContext('2d');
+    outCanvas.width=canvas.width; outCanvas.height=canvas.height;
+    fitOutWin();
+    syncOutWinBtn();
+    detectDisplays().then(()=>{
+      if(!outWin||outWin.closed) return;
+      if(placeOutputWindow()) toast('Output on '+(((S.outDisplay||{}).label)||'the second display')+' - filling the screen');
+      else toast('Output window open');
+    });
+    return;
+  }
+  if(tries>=40||Date.now()-adoptT0>6000){
+    /* output.html never became ready. If its document is still
+       reachable (stayed on about:blank), build the doc by hand; if
+       the failed navigation left an unreachable error page, close it
+       and reopen a blank window we CAN build in. */
+    let acc=false;
+    try{ acc=!!(outWin.document&&outWin.document.body); }catch(e){}
+    if(acc){ buildOutputDocFallback(); return; }
+    /* unreachable error page: a fresh open needs a user gesture, so
+       ask for the one thing that fixes it - another click on Output */
+    toast('Output page could not load - hit Output again', true);
+    return;
+  }
+  setTimeout(()=>adoptOutputDoc(tries+1),120);
+}
+function buildOutputDocFallback(){
+  if(!outWin||outWin.closed) return;
   const d=outWin.document;
   d.title='HoloMapper - Output';
   d.body.style.cssText='margin:0;background:#000;overflow:hidden;width:100vw;height:100vh';
@@ -9839,9 +9891,6 @@ function openOutputWindow(feats){
   outCanvas.style.cssText='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#000';
   d.body.appendChild(outCanvas);
   outCtx=outCanvas.getContext('2d');
-  /* v1.9.43: NO hint pill (or any other element) in the output window -
-     the picture is the whole window, clean and pristine. Fullscreen is
-     one click / F / double-click away, and attempted automatically. */
   const fs=()=>{ outWin.__hmFsTried=false; tryOutFullscreen(); };
   outWin.addEventListener('click',()=>{ if(!d.fullscreenElement) fs(); });
   outWin.addEventListener('dblclick',fs);
