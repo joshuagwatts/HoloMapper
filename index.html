@@ -1457,7 +1457,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.49';
+const APP_VERSION='1.9.50';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -8116,9 +8116,15 @@ function buildFxBrowser(){
       e.dataTransfer.effectAllowed='copy';
     });
     r.addEventListener('click',()=>{
-      /* click = add to selected clip, else selected layer */
-      const sel=(S.clipSel&&S.clipSel[0])||null;
-      if(sel){ dropFxOnClip(def.key, sel.i, sel.k); }
+      /* v1.9.50: click = add to what is ACTUALLY selected. This used
+         to read only the multi-select set (S.clipSel), which a plain
+         click toggles back OFF - so the effect silently landed on a
+         layer chain instead of the clip in front of him. The primary
+         selection (S.sel) is the truth: clip selected -> the clip,
+         layer selected -> that layer. */
+      if(S.sel&&S.sel.kind==='clip'){ dropFxOnClip(def.key, S.sel.i, S.sel.c); }
+      else if(S.sel&&S.sel.kind==='layer'){ dropFxOnLayer(def.key, S.sel.i); }
+      else if(S.clipSel&&S.clipSel[0]){ dropFxOnClip(def.key, S.clipSel[0].i, S.clipSel[0].k); }
       else{ dropFxOnLayer(def.key, S.selLayer||0); }
     });
     r.title='Drag onto a clip/layer, or click to add to selected';
