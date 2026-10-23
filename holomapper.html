@@ -1448,7 +1448,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.42';
+const APP_VERSION='1.9.43';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -3172,7 +3172,17 @@ precision highp float;
 out vec4 O;
 in vec2 v_uv;
 uniform sampler2D u_tex;
-void main(){ O = texture(u_tex, v_uv); }
+uniform vec2 u_pos;    /* v1.9.43: per-media transform */
+uniform float u_scale;
+uniform float u_rot;
+void main(){
+  vec2 q = v_uv - vec2(0.5) - u_pos;
+  float c = cos(u_rot), s = sin(u_rot);
+  q = mat2(c, s, -s, c) * q;
+  q = q / max(u_scale, 0.001) + vec2(0.5);
+  if(q.x<0.0||q.x>1.0||q.y<0.0||q.y>1.0){ O = vec4(0.0); return; }
+  O = texture(u_tex, q);
+}
 `;
 const SRC_CAM = `#version 300 es
 precision highp float;
@@ -4477,13 +4487,23 @@ function renderVideo(i,sidx,t,T){
      channel - a logo PNG's transparency reaches the layer target and
      the combine composites it over the layers below */
   if(!isImg||v.animated||!v._up){
+    /* v1.9.43: image elements are top-row-first and the quad expects
+       bottom-row-first - flip at upload or logos render upside down
+       (same fix as the webcam path). Videos arrive upright already. */
+    if(isImg) gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,v.el);
+    if(isImg) gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
     v._up=true;
   }
   gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
   const P=PROG.media||PROG.copy;
   if(!P) return;
   gl.useProgram(P); setTex(P,'u_tex',0,v._tex);
+  if(P===PROG.media){
+    gl.uniform2f(U(P,'u_pos'), v.tx||0, v.ty||0);
+    gl.uniform1f(U(P,'u_scale'), (v.ts!==undefined&&v.ts>0)?v.ts:1);
+    gl.uniform1f(U(P,'u_rot'), v.tr||0);
+  }
   quadDraw();
 }
 function renderWebcam(i,t,T){
@@ -7145,6 +7165,32 @@ function buildClipParamSection(host,i,src){
       sec.appendChild(b);
     }
     sec.appendChild(mkHint('The camera is global; H-Flip is per layer. Pair it with Auto Mask (Chroma) in the post chain.'));
+  }else if(isVideoSrc(src)){
+    /* v1.9.43: transform attached to the media file itself - every clip
+       that uses this source inherits it (Resolume-style clip transform,
+       but per source file, the way he asked: 'attached to all of them') */
+    const v=S.videos[videoIdx(src)];
+    if(!v) return;
+    if(v.tx===undefined){ v.tx=0; v.ty=0; v.ts=1; v.tr=0; }
+    sec.appendChild(el('div','plab','Media Transform'));
+    const mkSlider=(label,min,max,step,get,set,fmt)=>{
+      const row=el('div','trow');
+      row.appendChild(el('span','dim',label));
+      const inp=document.createElement('input');
+      inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.className='tsl'; inp.value=get();
+      const val=el('span','tval',fmt(get()));
+      inp.addEventListener('input',()=>{ const x=parseFloat(inp.value); set(x); val.textContent=fmt(x); });
+      row.appendChild(inp); row.appendChild(val);
+      sec.appendChild(row);
+    };
+    mkSlider('Pos X',-50,50,0.5,()=>Math.round(v.tx*100),x=>{ v.tx=x/100; },x=>x.toFixed(0)+'%');
+    mkSlider('Pos Y',-50,50,0.5,()=>Math.round(v.ty*100),x=>{ v.ty=x/100; },x=>x.toFixed(0)+'%');
+    mkSlider('Scale',5,400,1,()=>Math.round(v.ts*100),x=>{ v.ts=x/100; },x=>x.toFixed(0)+'%');
+    mkSlider('Rotate',-180,180,1,()=>Math.round(v.tr*180/Math.PI),x=>{ v.tr=x*Math.PI/180; },x=>x.toFixed(0)+'\u00B0');
+    const br=el('button',null,'Reset transform');
+    br.addEventListener('click',()=>{ v.tx=0; v.ty=0; v.ts=1; v.tr=0; buildProps(); if(typeof buildClipInspector==='function') buildClipInspector(); });
+    sec.appendChild(br);
+    sec.appendChild(mkHint('Attached to "'+(v.name||'media')+'" - every clip using this file gets this transform.'));
   }else if(src>=5&&src<camIdx()){
     const im=S.imports[src-5];
     if(!im) return;
@@ -9450,7 +9496,8 @@ function tryOutFullscreen(){
   if(!outWin||outWin.closed||outWin.__hmFsTried) return;
   outWin.__hmFsTried=true;
   const w=outWin, label=w.__hmTargetLabel||'';
-  (async()=>{
+  const el=w.document.documentElement;
+  const screenMatched=async()=>{
     let scr=null;
     try{
       if(w.getScreenDetails){
@@ -9458,12 +9505,13 @@ function tryOutFullscreen(){
         scr=(sd.screens||[]).find(s=>(s.label||'')===label)||sd.currentScreen||null;
       }
     }catch(e){}
-    try{
-      const el=w.document.documentElement;
-      const p=scr?el.requestFullscreen({screen:scr}):el.requestFullscreen();
-      if(p&&p.catch) p.catch(()=>{});
-    }catch(e){}
-  })();
+    if(!scr) return;
+    try{ const p=el.requestFullscreen({screen:scr}); if(p&&p.catch) p.catch(()=>{}); }catch(e){}
+  };
+  try{
+    const p=el.requestFullscreen();
+    if(p&&p.catch) p.catch(()=>{ screenMatched(); });
+  }catch(e){ screenMatched(); }
 }
 function outRefSize(){
   const d=S.outDisplay;
@@ -9533,15 +9581,28 @@ function openOutputWindow(feats){
   /* Open synchronously (popup blockers eat async opens) on the best-known
      target; display detection then refines the placement by itself -
      the window lands on the second screen without being dragged. */
+  let aimed=false;
   if(!feats){
     const r=outTargetRect();
-    if(r&&(DISPLAYS.length||(S.outDisplay&&S.outDisplay.aw!==undefined)))
+    if(r&&(DISPLAYS.length||(S.outDisplay&&S.outDisplay.aw!==undefined))){
       feats='popup=yes,left='+Math.round(r.x)+',top='+Math.round(r.y)+',width='+Math.round(r.w)+',height='+Math.round(r.h);
+      aimed=true;
+    }
   }
   outWin=window.open('','hm-output', feats||('popup=yes,width='+Math.min(1600,BASE_W)+',height='+(Math.min(1000,BASE_H)+40)));
   if(!outWin){ toast('Pop-up blocked - allow pop-ups for this site, then hit Output again'); outWin=null; return; }
   outWin.__hmTargetLabel=(S.outDisplay&&S.outDisplay.label)||'';
   outWin.__hmFsTried=false;
+  /* Aimed at the second screen: try to land fullscreen in the SAME task
+     as the click that opened the window (transient activation is still
+     alive). The window already sits on the target display, so a plain
+     requestFullscreen() fullscreens THAT display. If the browser
+     refuses, the window stays filled-sized there and one click in it
+     finishes the job (see tryOutFullscreen). */
+  if(aimed){
+    try{ const p=outWin.document.documentElement.requestFullscreen(); if(p&&p.catch) p.catch(()=>{}); }catch(e){}
+    outWin.__hmFsTried=true;
+  }
   const d=outWin.document;
   d.title='HoloMapper - Output';
   d.body.style.cssText='margin:0;background:#000;overflow:hidden;width:100vw;height:100vh';
@@ -9551,11 +9612,9 @@ function openOutputWindow(feats){
   outCanvas.style.cssText='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#000';
   d.body.appendChild(outCanvas);
   outCtx=outCanvas.getContext('2d');
-  const hint=d.createElement('div');
-  hint.textContent='HoloMapper Output - click for fullscreen (F / double-click too)';
-  hint.style.cssText='position:absolute;left:50%;bottom:14px;transform:translateX(-50%);color:#9aa3b2;font:12px sans-serif;background:rgba(10,10,14,.55);padding:5px 12px;border-radius:6px;pointer-events:none;transition:opacity 1s';
-  d.body.appendChild(hint);
-  outWin.setTimeout(()=>{ hint.style.opacity='0'; },4500);
+  /* v1.9.43: NO hint pill (or any other element) in the output window -
+     the picture is the whole window, clean and pristine. Fullscreen is
+     one click / F / double-click away, and attempted automatically. */
   const fs=()=>{ outWin.__hmFsTried=false; tryOutFullscreen(); };
   outWin.addEventListener('click',()=>{ if(!d.fullscreenElement) fs(); });
   outWin.addEventListener('dblclick',fs);
