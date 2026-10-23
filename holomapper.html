@@ -1455,7 +1455,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.45';
+const APP_VERSION='1.9.46';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -2107,7 +2107,8 @@ const syncId=Math.random().toString(36).slice(2,10);
 function mediaManifest(){
   return (S.videos||[]).map(v=>({ name:v.name||'media', kind:v.kind||'video',
     tx:v.tx||0, ty:v.ty||0, ts:(v.ts!==undefined?v.ts:1), tr:v.tr||0,
-    tsx:(v.tsx!==undefined?v.tsx:1), tsy:(v.tsy!==undefined?v.tsy:1) }));
+    tsx:(v.tsx!==undefined?v.tsx:1), tsy:(v.tsy!==undefined?v.tsy:1),
+    txt:(v.kind==='text'&&v.txt)?v.txt:undefined }));
 }
 function makeMediaStub(m){
   const cv=document.createElement('canvas'); cv.width=640; cv.height=360;
@@ -2129,6 +2130,17 @@ function applyMediaManifest(list){
     if(!m||!m.name) return;
     const xf=(dst)=>{ dst.tx=m.tx||0; dst.ty=m.ty||0; dst.ts=(m.ts!==undefined?m.ts:1); dst.tr=m.tr||0; dst.tsx=(m.tsx!==undefined?m.tsx:1); dst.tsy=(m.tsy!==undefined?m.tsy:1); };
     const cur=S.videos[idx];
+    if(m.txt){
+      /* text is data, not a file: the peer renders the REAL text */
+      if(cur&&cur.kind==='text'&&cur.name===m.name){ cur.txt=textSpec(m.txt); drawTextSpec(cur.el,cur.txt); cur._up=false; xf(cur); return; }
+      if(cur&&!cur.stub&&cur.kind!=='text'){
+        if(!S.videos.some(x=>x.name===m.name)) S.videos.push(makeTextEntry(m.txt,m));
+        return;
+      }
+      while(S.videos.length<idx) S.videos.push(makeMediaStub({name:'(missing)',kind:'video'}));
+      S.videos[idx]=makeTextEntry(m.txt,m);
+      return;
+    }
     if(cur&&cur.name===m.name){ xf(cur); return; }
     if(cur&&!cur.stub){
       /* a real local file sits at this index - never clobber it;
@@ -4521,8 +4533,8 @@ function renderVideo(i,sidx,t,T){
   const vi=videoIdx(sidx), v=S.videos[vi];
   if(!v||!v.el) return;
   const isImg=(v.kind==='image');
-  const isStill=isImg||!!v.stub;
-  if(v.stub){ /* name slate: fall through to the upload */
+  const isStill=isImg||!!v.stub||v.kind==='text';
+  if(v.stub||v.kind==='text'){ /* slate / text canvas: fall through to the upload */
   }else if(isImg){
     if(!v.el.complete||!v.el.naturalWidth) return; /* still decoding */
   }else{
@@ -7231,6 +7243,12 @@ function buildClipParamSection(host,i,src){
     const v=S.videos[videoIdx(src)];
     if(!v) return;
     if(v.tx===undefined){ v.tx=0; v.ty=0; v.ts=1; v.tr=0; v.tsx=1; v.tsy=1; }
+    if(v.kind==='text'){
+      sec.appendChild(el('div','plab','Text'));
+      const eb=el('button',null,'Edit text / font\u2026');
+      eb.addEventListener('click',()=>{ openTextDialog(v.txt,(spec)=>{ v.txt=spec; v.name=textEntryName(spec); drawTextSpec(v.el,spec); v._up=false; saveState(); buildProps(); if(typeof buildClipInspector==='function') buildClipInspector(); buildSrcBrowser(); }); });
+      sec.appendChild(eb);
+    }
     sec.appendChild(el('div','plab','Media Transform'));
     const mkSlider=(label,min,max,step,get,set,fmt)=>{
       const row=el('div','trow');
@@ -8049,6 +8067,16 @@ function buildSrcBrowser(){
     inp.click();
   });
   host.appendChild(ib);
+  const tb2=el('button','srcrow');
+  tb2.appendChild(el('span','sdot'));
+  tb2.appendChild(el('span',null,'+ Text'));
+  tb2.title='Add your own text as a source - fonts, size, color, transparent or solid background';
+  tb2.addEventListener('click',()=>{ openTextDialog(null,(spec)=>{
+    S.videos.push(makeTextEntry(spec));
+    saveState(); buildSrcBrowser();
+    toast('Text source added: '+textEntryName(spec));
+  }); });
+  host.appendChild(tb2);
   srcOptions().forEach((s,si)=>{
     const b=el('button','srcrow');
     b.appendChild(el('span','sdot'));
@@ -8688,6 +8716,113 @@ function importImage(file, onIdx){
   };
   img.onerror=()=>{ shtoast('Could not load image: '+file.name, true); if(onIdx) onIdx(-1); };
   img.src=url;
+}
+/* v1.9.46: TEXT source - your own words as a source. A text entry is
+   a media-registry entry whose element is a canvas the text is drawn
+   into, so it gets everything media gets for free: clips, alpha,
+   Media Transform, and sync (the spec is plain data, so a linked
+   screen renders the REAL text - no file to transfer). */
+const TEXT_FONTS=['Arial Black','Arial','Impact','Georgia','Times New Roman','Courier New','Verdana','Tahoma','Trebuchet MS','Segoe UI','Calibri','Consolas','Bahnschrift','Cambria','Palatino Linotype','Lucida Console'];
+function textSpec(o){ return Object.assign({t:'YOUR TEXT',f:'Arial Black',s:140,c:'#ffffff',bg:'',b:1,i:0,al:'c'},o||{}); }
+function drawTextSpec(cv,spec){
+  const t=textSpec(spec);
+  const g=cv.getContext('2d');
+  const font=(t.i?'italic ':'')+(t.b?'bold ':'')+t.s+'px "'+t.f+'", sans-serif';
+  g.font=font;
+  const lines=String(t.t||'').split('\n');
+  let w=2; for(const l of lines) w=Math.max(w,Math.ceil(g.measureText(l||' ').width));
+  const lh=Math.round(t.s*1.25), pad=Math.round(t.s*0.35);
+  cv.width=Math.max(2,Math.min(2048,w+pad*2));
+  cv.height=Math.max(2,Math.min(2048,lh*lines.length+pad*2));
+  g.font=font; g.textBaseline='top';
+  if(t.bg){ g.fillStyle=t.bg; g.fillRect(0,0,cv.width,cv.height); }
+  else g.clearRect(0,0,cv.width,cv.height);
+  g.fillStyle=t.c;
+  lines.forEach((l,li)=>{ const lw=g.measureText(l).width;
+    const x=t.al==='l'?pad : t.al==='r'? cv.width-pad-lw : (cv.width-lw)/2;
+    g.fillText(l,x,pad+li*lh); });
+}
+function textEntryName(spec){
+  const first=String((spec&&spec.t)||'').split('\n')[0].trim()||'Text';
+  return 'Text: '+(first.length>20?first.slice(0,19)+'\u2026':first);
+}
+function makeTextEntry(spec,m){
+  const sp=textSpec(spec);
+  const e={ name:textEntryName(sp), kind:'text', el:document.createElement('canvas'), txt:sp,
+    tx:(m&&m.tx)||0, ty:(m&&m.ty)||0, ts:(m&&m.ts!==undefined?m.ts:1), tr:(m&&m.tr)||0,
+    tsx:(m&&m.tsx!==undefined?m.tsx:1), tsy:(m&&m.tsy!==undefined?m.tsy:1) };
+  drawTextSpec(e.el,sp);
+  return e;
+}
+function closeTextDialog(){ const d=document.getElementById('textdlg'); if(d) d.remove(); }
+function openTextDialog(spec, onCommit){
+  closeTextDialog();
+  const sp=textSpec(spec);
+  const ov=document.createElement('div'); ov.id='textdlg';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(4,5,8,.72);z-index:9999;display:flex;align-items:center;justify-content:center';
+  const box=document.createElement('div');
+  box.style.cssText='background:#14161c;border:1px solid #2a2f3a;border-radius:10px;padding:16px;width:min(540px,94vw);max-height:92vh;overflow:auto;color:#e8eaf0;font:13px sans-serif;box-sizing:border-box';
+  box.innerHTML='<div style="font-weight:700;font-size:15px;margin-bottom:10px">Text source</div>';
+  const ta=document.createElement('textarea');
+  ta.rows=3; ta.value=sp.t; ta.placeholder='Type your text - Enter makes a new line';
+  ta.style.cssText='width:100%;box-sizing:border-box;background:#0b0e14;color:#e8eaf0;border:1px solid #2a2f3a;border-radius:6px;padding:8px;font:14px sans-serif;resize:vertical';
+  box.appendChild(ta);
+  const row=(label,node)=>{
+    const r=document.createElement('div');
+    r.style.cssText='display:flex;align-items:center;gap:8px;margin-top:10px';
+    const lb=document.createElement('span'); lb.textContent=label; lb.style.cssText='width:86px;color:#9aa3b2;flex-shrink:0';
+    r.appendChild(lb); r.appendChild(node); box.appendChild(r); return r;
+  };
+  const sel=document.createElement('select');
+  sel.style.cssText='flex:1;background:#0b0e14;color:#e8eaf0;border:1px solid #2a2f3a;border-radius:6px;padding:6px';
+  for(const f of TEXT_FONTS){ const o=document.createElement('option'); o.value=f; o.textContent=f; sel.appendChild(o); }
+  const oc=document.createElement('option'); oc.value='__custom'; oc.textContent='Custom (type below)'; sel.appendChild(oc);
+  sel.value=TEXT_FONTS.includes(sp.f)?sp.f:'__custom';
+  row('Font',sel);
+  const fc=document.createElement('input');
+  fc.type='text'; fc.value=TEXT_FONTS.includes(sp.f)?'':sp.f; fc.placeholder='Custom font name (any font on this system)';
+  fc.style.cssText='flex:1;background:#0b0e14;color:#e8eaf0;border:1px solid #2a2f3a;border-radius:6px;padding:6px';
+  row('Custom font',fc);
+  const sz=document.createElement('input');
+  sz.type='range'; sz.min=20; sz.max=400; sz.step=2; sz.value=sp.s; sz.style.cssText='flex:1';
+  const szv=document.createElement('span'); szv.textContent=sp.s+'px'; szv.style.cssText='width:52px;text-align:right';
+  const szr=row('Size',sz); szr.appendChild(szv);
+  const col=document.createElement('input'); col.type='color'; col.value=sp.c||'#ffffff';
+  row('Color',col);
+  const bgOn=document.createElement('input'); bgOn.type='checkbox'; bgOn.checked=!!sp.bg;
+  const bgCol=document.createElement('input'); bgCol.type='color'; bgCol.value=sp.bg||'#000000';
+  const bgr=row('Background',bgOn); bgr.appendChild(bgCol);
+  const bold=document.createElement('input'); bold.type='checkbox'; bold.checked=!!sp.b;
+  const bwr=row('Bold',bold);
+  const ital=document.createElement('input'); ital.type='checkbox'; ital.checked=!!sp.i;
+  bwr.appendChild(ital); const il=document.createElement('span'); il.textContent='Italic'; bwr.appendChild(il);
+  const al=document.createElement('select');
+  al.style.cssText='background:#0b0e14;color:#e8eaf0;border:1px solid #2a2f3a;border-radius:6px;padding:6px';
+  for(const a of [['l','Left'],['c','Center'],['r','Right']]){ const o=document.createElement('option'); o.value=a[0]; o.textContent=a[1]; al.appendChild(o); }
+  al.value=sp.al||'c';
+  row('Align',al);
+  const pv=document.createElement('canvas');
+  pv.style.cssText='width:100%;margin-top:14px;border:1px solid #2a2f3a;border-radius:6px;background:repeating-conic-gradient(#1a1d24 0% 25%, #101216 0% 50%) 0 0/18px 18px';
+  box.appendChild(pv);
+  const read=()=>({ t:ta.value, f:(fc.value.trim()||(sel.value==='__custom'?'Arial':sel.value)), s:parseInt(sz.value,10)||140,
+    c:col.value, bg:bgOn.checked?bgCol.value:'', b:bold.checked?1:0, i:ital.checked?1:0, al:al.value });
+  const draw=()=>{ szv.textContent=sz.value+'px'; drawTextSpec(pv,read()); };
+  for(const n of [ta,sel,fc,sz,col,bgOn,bgCol,bold,ital,al]){ n.addEventListener('input',draw); n.addEventListener('change',draw); }
+  draw();
+  const btns=document.createElement('div');
+  btns.style.cssText='display:flex;gap:8px;justify-content:flex-end;margin-top:14px';
+  const cancel=document.createElement('button'); cancel.textContent='Cancel';
+  cancel.style.cssText='padding:8px 14px;background:#1d2027;color:#e8eaf0;border:1px solid #2a2f3a;border-radius:6px;cursor:pointer';
+  cancel.addEventListener('click',closeTextDialog);
+  const okb=document.createElement('button'); okb.textContent=spec?'Save text':'Add to sources';
+  okb.style.cssText='padding:8px 14px;background:#0e3a36;color:#2dd4bf;border:1px solid #2dd4bf;border-radius:6px;cursor:pointer;font-weight:700';
+  okb.addEventListener('click',()=>{ const s2=read(); closeTextDialog(); onCommit(s2); });
+  btns.appendChild(cancel); btns.appendChild(okb);
+  box.appendChild(btns);
+  ov.appendChild(box);
+  ov.addEventListener('pointerdown',(e)=>{ if(e.target===ov) closeTextDialog(); });
+  document.body.appendChild(ov);
+  ta.focus(); ta.select();
 }
 function importMedia(file, onIdx){
   if(isImageFile(file)) importImage(file, onIdx);
