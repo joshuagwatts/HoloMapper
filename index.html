@@ -1457,7 +1457,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.47';
+const APP_VERSION='1.9.48';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -2062,9 +2062,12 @@ if(['auto','high','medium','low'].indexOf(S.quality)<0) S.quality='auto';
 if(!Array.isArray(S.imports)) S.imports=[];
 /* v1.4: imported videos (S.videos: {name, url, el}) */
 if(!Array.isArray(S.videos)) S.videos=[];
-/* videos don't survive reload (blob URLs) — clear stale clip refs */
+/* v1.9.48: media persists (IndexedDB, below) - rebuild the entries
+   from the saved manifest as stubs first; restoreMediaFromDB() then
+   revives every one whose file is stored. Only refs past the
+   manifest are stale. (Pre-1.9.48 this nulled ALL media clip refs.) */
 else if(S.videos.length===0&&S.clips){
-  const maxSi=5+S.imports.length-1;
+  const maxSi=5+S.imports.length+(Array.isArray(S.mediaList)?S.mediaList.length:0)-1;
   for(let i=0;i<S.clips.length;i++)for(let k=0;k<(S.clips[i]||[]).length;k++){
     const si=S.clips[i]&&S.clips[i][k];
     if(typeof si==='number'&&si>maxSi&&si<camIdx()) S.clips[i][k]=null;
@@ -2155,6 +2158,92 @@ function applyMediaManifest(list){
   });
   while(S.videos.length>list.length&&S.videos[S.videos.length-1].stub) S.videos.pop();
 }
+/* ================= MEDIA PERSISTENCE + THUMB SYNC (v1.9.48) =========
+   Imported images/videos autosave to IndexedDB, exactly like imported
+   shaders autosave inside localStorage state: load it once and it is
+   simply THERE next launch. Originals, unmodified. Removing a source
+   in the browser deletes its stored copy too. While linked, the
+   file-holding screen also sends the other screen a real picture of
+   each entry (images: an actual downscaled copy the peer renders for
+   real; videos: a poster frame) - no more blank slate cards. */
+const MDB_NAME='holomapper.media.v1';
+let mdbP=null;
+function mdb(){ if(mdbP) return mdbP; mdbP=new Promise((res,rej)=>{
+  try{ const rq=indexedDB.open(MDB_NAME,1);
+    rq.onupgradeneeded=()=>{ try{ rq.result.createObjectStore('files'); }catch(e){} };
+    rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error);
+  }catch(e){ rej(e); } }); return mdbP; }
+async function mdbPut(name,blob){ try{ const db=await mdb(); await new Promise((res,rej)=>{ const tx=db.transaction('files','readwrite'); tx.objectStore('files').put(blob,name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }catch(e){} }
+async function mdbGet(name){ try{ const db=await mdb(); return await new Promise((res,rej)=>{ const rq=db.transaction('files').objectStore('files').get(name); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error); }); }catch(e){ return null; } }
+async function mdbDel(name){ try{ const db=await mdb(); await new Promise((res,rej)=>{ const tx=db.transaction('files','readwrite'); tx.objectStore('files').delete(name); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }catch(e){} }
+function reviveMediaEntry(idx, blob){
+  const cur=S.videos[idx]; if(!cur||!cur.stub) return;
+  const url=URL.createObjectURL(blob);
+  let entry=null;
+  if(cur.kind==='image'){
+    const img=new Image();
+    entry={name:cur.name, url, el:img, kind:'image', animated:(blob&&blob.type==='image/gif')};
+    img.src=url;
+  }else{
+    const el=document.createElement('video');
+    el.src=url; el.loop=true; el.muted=true; el.playsInline=true; el.play().catch(()=>{});
+    entry={name:cur.name, url, el};
+  }
+  entry.tx=cur.tx||0; entry.ty=cur.ty||0; entry.ts=(cur.ts!==undefined?cur.ts:1); entry.tr=cur.tr||0;
+  entry.tsx=(cur.tsx!==undefined?cur.tsx:1); entry.tsy=(cur.tsy!==undefined?cur.tsy:1);
+  S.videos[idx]=entry;
+}
+async function restoreMediaFromDB(){
+  let n=0;
+  for(let i=0;i<S.videos.length;i++){
+    const v=S.videos[i];
+    if(!v||!v.stub||v.kind==='text') continue;
+    const blob=await mdbGet(v.name);
+    if(blob){ reviveMediaEntry(i, blob); n++; }
+  }
+  if(n){ try{ buildSrcBrowser(); }catch(e){} try{ buildDeck(); }catch(e){} }
+  sendMediaThumbsSoon();
+}
+function mediaThumbURL(v){
+  try{
+    if(v.kind==='image'&&v.el&&(v.el.naturalWidth||v.el.width)){
+      const iw=v.el.naturalWidth||v.el.width, ih=v.el.naturalHeight||v.el.height;
+      const cv=document.createElement('canvas');
+      let sc=Math.min(1,896/Math.max(iw,ih));
+      cv.width=Math.max(2,Math.round(iw*sc)); cv.height=Math.max(2,Math.round(ih*sc));
+      cv.getContext('2d').drawImage(v.el,0,0,cv.width,cv.height);
+      let d=cv.toDataURL('image/jpeg',0.8);
+      if(d.length>380000){ cv.width=Math.max(2,Math.round(cv.width/2)); cv.height=Math.max(2,Math.round(cv.height/2)); cv.getContext('2d').drawImage(v.el,0,0,cv.width,cv.height); d=cv.toDataURL('image/jpeg',0.7); }
+      return d;
+    }
+    if(v.kind!=='text'&&v.el&&v.el.readyState>=2&&v.el.videoWidth){
+      const iw=v.el.videoWidth, ih=v.el.videoHeight, sc=Math.min(1,640/iw);
+      const cv=document.createElement('canvas');
+      cv.width=Math.max(2,Math.round(iw*sc)); cv.height=Math.max(2,Math.round(ih*sc));
+      cv.getContext('2d').drawImage(v.el,0,0,cv.width,cv.height);
+      return cv.toDataURL('image/jpeg',0.72);
+    }
+  }catch(e){}
+  return null;
+}
+let thumbRetryN=0, thumbRetryT=0;
+function sendMediaThumbs(){
+  if(!SYNC.on) return;
+  let pending=false;
+  (S.videos||[]).forEach(v=>{
+    if(!v||v.stub||v.kind==='text'||v._thumbSent) return;
+    const d=mediaThumbURL(v);
+    if(d){ v._thumbSent=true; syncSend({kind:'sync-thumb', name:v.name, d}); }
+    else { pending=true; if(v.kind!=='image'&&!v._thumbHook){ v._thumbHook=true; const el=v.el; if(el&&el.addEventListener) el.addEventListener('loadeddata',()=>{ sendMediaThumbs(); },{once:true}); } }
+  });
+  if(pending&&thumbRetryN<10){ thumbRetryN++; clearTimeout(thumbRetryT); thumbRetryT=setTimeout(sendMediaThumbs,2000); }
+  else if(!pending) thumbRetryN=0;
+}
+let thumbSendT=0;
+function sendMediaThumbsSoon(){ if(!SYNC||!SYNC.on) return; clearTimeout(thumbSendT); thumbSendT=setTimeout(sendMediaThumbs,400); }
+let thumbUiT=0;
+function scheduleThumbRepaint(){ clearTimeout(thumbUiT); thumbUiT=setTimeout(()=>{ try{ buildSrcBrowser(); }catch(e){} try{ buildDeck(); }catch(e){} },350); }
+
 function stateJSON(){
   try{
     const sc=Object.assign({},S);
@@ -8099,7 +8188,7 @@ function buildSrcBrowser(){
       x.addEventListener('click',(e)=>{
         e.stopPropagation();
         const vi=videoIdx(si);
-        if(S.videos[vi]){ URL.revokeObjectURL(S.videos[vi].url); S.videos.splice(vi,1); }
+        if(S.videos[vi]){ const rnm=S.videos[vi].name; URL.revokeObjectURL(S.videos[vi].url); S.videos.splice(vi,1); if(rnm) mdbDel(rnm); }
         saveState(); buildSrcBrowser(); buildDeck();
       });
       b.appendChild(x);
@@ -8712,6 +8801,7 @@ function importImage(file, onIdx){
     const si=S.videos.findIndex(x=>x.stub&&x.name===nm);
     if(si>=0){ const st=S.videos[si]; entry.tx=st.tx; entry.ty=st.ty; entry.ts=st.ts; entry.tr=st.tr; entry.tsx=st.tsx; entry.tsy=st.tsy; S.videos[si]=entry; }
     else S.videos.push(entry);
+    mdbPut(nm, file); sendMediaThumbsSoon();
     saveState(); buildSrcBrowser();
     toast('Image imported: '+file.name);
     if(onIdx) onIdx(5+S.imports.length+(si>=0?si:S.videos.length-1));
@@ -8840,6 +8930,7 @@ function importVideo(file){
   const si=S.videos.findIndex(x=>x.stub&&x.name===nm);
   if(si>=0){ const st=S.videos[si]; entry.tx=st.tx; entry.ty=st.ty; entry.ts=st.ts; entry.tr=st.tr; entry.tsx=st.tsx; entry.tsy=st.tsy; S.videos[si]=entry; }
   else S.videos.push(entry);
+  mdbPut(nm, file); sendMediaThumbsSoon();
   saveState(); buildSrcBrowser();
   toast('Video imported: '+file.name);
   return si>=0?si:S.videos.length-1;
@@ -11133,10 +11224,12 @@ else neInit();
 /* ================= MAIN LOOP ================= */
 let tStart=performance.now()/1000, lastT=0, frames=0, fpsT=0, pvTick=0, _pvLast=0;
 /* Auto quality: a rolling 1s fps average drives the render-scale steps.
-   Step DOWN (1.0 -> 0.75 -> 0.5) when fps < 42 sustained ~3s; step back UP
-   when fps > 57 sustained ~10s. A 5s cooldown after every step plus the
-   split thresholds = hysteresis, no thrashing. Manual High/Medium/Low
-   pin the scale and skip this entirely. qFpsAvg also feeds the fps meter. */
+   v1.9.48 (his ask: hold a steady 60): step DOWN when fps < 55 sustained
+   ~1.5s - act long before the picture falls apart; step back UP only
+   when fps > 59 sustained ~20s, so resolution returns slowly and the
+   frame rate never yo-yos. A 4s cooldown after every step plus the
+   split thresholds = hysteresis. Manual High/Medium/Low pin the scale
+   and skip this entirely. qFpsAvg also feeds the fps meter. */
 let qSlowT=0, qFastT=0, qCooldown=0, qLastT=0, qFpsAvg=60;
 const qTs=[]; /* frame timestamps (seconds) for the rolling 1s fps average */
 function qualityAutoTick(now){
@@ -11148,15 +11241,15 @@ function qualityAutoTick(now){
   const dt=Math.min(Math.max(now-qLastT,0),0.5); /* ignore tab-switch gaps */
   qLastT=now;
   if(qCooldown>0){ qCooldown-=dt; qSlowT=0; qFastT=0; return; }
-  if(qFpsAvg<42){ qSlowT+=dt; qFastT=0; }
-  else if(qFpsAvg>57){ qFastT+=dt; qSlowT=0; }
+  if(qFpsAvg<55){ qSlowT+=dt; qFastT=0; }
+  else if(qFpsAvg>59){ qFastT+=dt; qSlowT=0; }
   else { qSlowT=0; qFastT=0; }
-  if(qSlowT>=3.0 && qScaleIdx<Q_SCALES.length-1) setQualityScale(qScaleIdx+1,true);
-  else if(qFastT>=10.0 && qScaleIdx>0) setQualityScale(qScaleIdx-1,true);
+  if(qSlowT>=1.5 && qScaleIdx<Q_SCALES.length-1) setQualityScale(qScaleIdx+1,true);
+  else if(qFastT>=20.0 && qScaleIdx>0) setQualityScale(qScaleIdx-1,true);
 }
 function setQualityScale(idx,auto){
   qScaleIdx=Math.max(0,Math.min(Q_SCALES.length-1,idx));
-  qSlowT=0; qFastT=0; qCooldown=5.0;
+  qSlowT=0; qFastT=0; qCooldown=4.0;
   buildTargets();
   syncQualityUI();
   if(auto) toast('Auto quality: render scale '+effScale()+'x');
@@ -11422,6 +11515,8 @@ function init(){
       saveState();
     }catch(e){}
   }
+  if(S.videos.length===0&&Array.isArray(S.mediaList)&&S.mediaList.length){ try{ applyMediaManifest(S.mediaList); }catch(e){} }
+  restoreMediaFromDB(); /* v1.9.48: revive autosaved media (IndexedDB) */
   requestAnimationFrame(loop);
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
@@ -11737,6 +11832,10 @@ function cloudStart(){
         c.send(apres);
         cloudConnectedAt=Date.now(); SYNC.on=true;
         syncSend({kind:'sync-hello'});
+        /* keep announcing until a peer's state lands: a single hello
+           is QoS-0 and vanishes if the other screen connects second */
+        if(SYNC.helloTimer) clearInterval(SYNC.helloTimer);
+        SYNC.helloTimer=setInterval(()=>{ if(!SYNC.on||SYNC.got){ clearInterval(SYNC.helloTimer); SYNC.helloTimer=0; return; } syncSend({kind:'sync-hello'}); },4000);
         prmStatus('cloud relay live ('+host+')');
         renderSrvList();
       },
@@ -11809,6 +11908,7 @@ function syncMacroSend(i,v){
 function syncHandle(d){
   if(!d||d.from===syncId) return;
   const now=Date.now();
+  if(d.from&&SYNC.thumbPeer!==d.from){ SYNC.thumbPeer=d.from; (S.videos||[]).forEach(v=>{ if(v) v._thumbSent=false; }); }
   if(d.kind==='sync-hello'){
     SYNC.peerAt=now;
     if(SYNC.helloFrom===d.from&&now-SYNC.helloAt<3000) return;
@@ -11817,6 +11917,7 @@ function syncHandle(d){
       SYNC.shakeAt=now;
       const json=stateJSON();
       if(json){ SYNC.lastJson=json; syncSend({kind:'sync-state',ts:syncNextTs(),json}); }
+      sendMediaThumbsSoon();
     }
     return;
   }
@@ -11841,6 +11942,7 @@ function syncHandle(d){
        a 35KB ping-pong after every phone interaction, each one
        rebuilding both apps. Now an apply stays silent unless the user
        here actually changes something. */
+    sendMediaThumbsSoon();
     try{ const cj=stateJSON(); if(cj) SYNC.lastJson=cj; }catch(e){}
     if(first) toast('Synced \u2014 this screen is live with your other device');
     return;
@@ -11855,6 +11957,20 @@ function syncHandle(d){
     return;
   }
   if(d.kind==='sync-cam-off'){ phoneCam.fresh=false; return; }
+  if(d.kind==='sync-thumb'){
+    SYNC.peerAt=now;
+    if(typeof d.name==='string'&&typeof d.d==='string'&&d.d.indexOf('data:image/')===0&&d.d.length<700000){
+      const v=(S.videos||[]).find(x=>x.stub&&x.name===d.name);
+      if(v){ const im=new Image();
+        im.onload=()=>{ try{ const cv=v.el, g=cv.getContext('2d');
+          if(v.kind==='image'){ cv.width=im.naturalWidth; cv.height=im.naturalHeight; g.drawImage(im,0,0); v.proxy=true; }
+          else { const sc2=Math.max(cv.width/im.naturalWidth, cv.height/im.naturalHeight), w2=im.naturalWidth*sc2, h2=im.naturalHeight*sc2; g.fillStyle='#000'; g.fillRect(0,0,cv.width,cv.height); g.drawImage(im,(cv.width-w2)/2,(cv.height-h2)/2,w2,h2); v.poster=true; }
+          v._up=false; scheduleThumbRepaint();
+        }catch(e){} };
+        im.src=d.d; }
+    }
+    return;
+  }
   if(d.kind==='sync-fire'){
     SYNC.peerAt=now; SYNC.shakeAt=now;
     if(typeof d.l==='number'&&typeof d.c==='number'&&S.fired[d.l]!==d.c){
