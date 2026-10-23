@@ -1457,7 +1457,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.48';
+const APP_VERSION='1.9.49';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -5170,6 +5170,10 @@ function renderLayerInto(i,t,T,srcOv,ignByp){
         gl.uniform1i(loc,4+ch);
       }
     }
+    const crl=gl.getUniformLocation(prog,'iChannelResolution');
+    if(crl) gl.uniform3fv(crl,ICH_RES_FLAT);
+    const dn=new Date();
+    gl.uniform4f(U(prog,'iDate'),dn.getFullYear(),dn.getMonth()+1,dn.getDate(),dn.getHours()*3600+dn.getMinutes()*60+dn.getSeconds());
     gl.activeTexture(gl.TEXTURE0);
   }
   if(sidx===3||(sidx>=5&&sidx<camIdx())){ /* auto-knob uniforms, per scanShaderUniforms (imports + Plugin src 3) */
@@ -8722,17 +8726,37 @@ const ST_DECL =
 '#define iTime u_time\n'+
 'uniform float iTimeDelta;\n'+
 'uniform int iFrame;\n'+
-'uniform vec4 iMouse;\n';
+'uniform vec4 iMouse;\n'+
+'uniform vec4 iDate;\n'+
+'uniform sampler2D iChannel0;\n'+
+'uniform sampler2D iChannel1;\n'+
+'uniform sampler2D iChannel2;\n'+
+'uniform sampler2D iChannel3;\n'+
+'uniform vec3 iChannelResolution[4];\n';
 function shaderTranslate(code){
   let body=String(code||'').replace(/^\s*#version[^\n]*\n/,'');
   body=body.replace(/\btexture2D\s*\(/g,'texture(');
   body=body.replace(/\bgl_FragColor\b/g,'O');
+  /* v1.9.49: two real-world load killers, fixed here so every compile
+     path (imports + plugin) gets them:
+     (1) the shader declares a uniform the app already provides
+         (FRAG_HEAD / ST_DECL) -> duplicate declaration, dead shader.
+         Strip the shader's copy; the provided one wins.
+     (2) the shader defines its own hsv/hash12/vnoise/fbm, which
+         FRAG_HEAD also defines -> "function already has a body".
+         Rename the shader's own copies (definition + call sites). */
+  body=body.replace(/uniform\s+[A-Za-z_]\w*\s+(iTime|iResolution|iTimeDelta|iFrame|iMouse|iDate|iChannel[0-3]|iChannelResolution|u_time|u_res|u_speed|u_hue|u_audioBass|u_audioMid|u_audioHigh|u_beat|u_param1|u_param2)(\s*\[[^\]]*\])?\s*(=[^;]*)?;/g,'');
+  for(const hn of ['hsv','hash12','vnoise','fbm']){
+    if(new RegExp('(^|\\n)\\s*(float|vec2|vec3|vec4|int|bool)\\s+'+hn+'\\s*\\(').test(body))
+      body=body.replace(new RegExp('\\b'+hn+'\\b','g'),'usr_'+hn);
+  }
   if(/\bvoid\s+mainImage\s*\(/.test(body))
     return ST_DECL+body+'\nvoid main(){ mainImage(O, gl_FragCoord.xy); }\n';
   return body;
 }
 /* iChannel default textures: procedural noise/gradient, like Shadertoy's defaults.
    Stored in ICH_TEX[0..3] as WebGL textures. User can override via UI. */
+const ICH_RES_FLAT=new Float32Array([256,256,1,256,256,1,256,256,1,256,256,1]);
 let ICH_TEX=[null,null,null,null];
 let ICH_IMG=[null,null,null,null]; /* user-assigned HTMLImageElement or null */
 function makeIchTex(idx){
@@ -9265,6 +9289,27 @@ function convertConstParams(code, tier){
       newUniforms.push('uniform '+(isIntDef?'int':'float')+' '+n+';');
     }
   }
+  /* 3. global uniform declarations WITH initializers: this driver
+     rejects them ("cannot initialize this type of qualifier"), which
+     kills real shaders outright. Strip the initializer and keep the
+     value as the knob default - same contract as const conversion. */
+  {
+    const re=/^([ \t]*)uniform\s+(float|int|bool|vec2|vec3|vec4)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+?)\s*;/gm;
+    let m;
+    while((m=re.exec(stripped))){
+      const ty=m[2], n=m[3], lit=m[4].trim();
+      if(tier!=='all'&&ty!=='float') continue;
+      let ok=false;
+      if(ty==='float') ok=new RegExp('^'+FLOATLIT+'$').test(lit);
+      else if(ty==='int') ok=/^-?\d+$/.test(lit);
+      else if(ty==='bool') ok=/^(true|false)$/.test(lit);
+      else{ const vm=lit.match(/^vec[234]\s*\(([^()]*)\)$/); if(vm){ const args=vm[1].split(',').map(s=>s.trim()); ok=args.length>=1&&args.every(a=>new RegExp('^'+FLOATLIT+'$').test(a)); } }
+      if(!ok) continue;
+      if(skipName(n)||depthAt(m.index)!==0) continue;
+      converted[n]=1; defs[n]=lit;
+      repls.push({start:m.index, end:m.index+m[0].length, text:m[1]+'uniform '+ty+' '+n+';'});
+    }
+  }
   let out=src;
   repls.sort((a,b)=>b.start-a.start);
   for(const r of repls) out=out.slice(0,r.start)+r.text+out.slice(r.end);
@@ -9436,7 +9481,7 @@ function importShader(name, code){
     code=raw; defs={};
     pr=makeProgram(VERT, FRAG_HEAD+shaderTranslate(code));
   }
-  if(!pr) return -1;
+  if(!pr){ shtoast('Shader "'+clean+'" would not load: '+String(lastGlslErr||'unknown error').slice(0,150), true); return -1; }
   const uniforms=scanShaderUniforms(code);
   for(const u of uniforms){ if(defs[u.name]!==undefined) u.init=defs[u.name]; }
   shApplyMeta(uniforms, raw);
