@@ -854,7 +854,7 @@ button.slon{flex:none;padding:2px 8px;font-size:11px}
             <input id="mbSpdVal" class="mbnum" type="number" step="0.05" title="Exact time scale (x) - type a value and Enter">
           </div>
           <div class="mbknob" id="mbHueK"></div>
-          <div class="mbgrp"><button id="mbStrobe" title="Master strobe">STROBE</button><div class="mbknob" id="mbSRateK"></div><button id="mbStrobeMode" title="Strobe rate mode: Hz (free) or BPM (note divisions of the beat clock)">HZ</button></div>
+          <div class="mbgrp"><button id="mbBeat" title="Beat reactivity: shaders pulse to the beat clock. Off by default - turn it on when you want the throb.">BEAT</button><button id="mbStrobe" title="Master strobe">STROBE</button><div class="mbknob" id="mbSRateK"></div><button id="mbStrobeMode" title="Strobe rate mode: Hz (free) or BPM (note divisions of the beat clock)">HZ</button></div>
           <div class="mbgrp"><button id="mbBlack" title="Blackout (Space)">BLACKOUT</button><select id="mbBlType" title="Blackout type"><option value="black">Black</option><option value="white">White</option><option value="freeze">Freeze</option></select></div>
           <div class="mbknob" id="mbMasterK"></div>
         </div>
@@ -1458,7 +1458,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.54';
+const APP_VERSION='1.9.55';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1868,6 +1868,12 @@ defParam('P.kseg',  'Kaleido Seg',  0.4, v=>Math.round(2+v*10), v=>String(Math.r
 defParam('P.kang',  'Kaleido Angle',0,   v=>v*6.2832,       v=>Math.round(v*360)+'\u00B0');
 defParam('P.gamt',  'Glitch Amt',   0.35);
 defParam('P.twitchamt','Twitch Amt', 0.5);
+/* v1.9.55: beat reactivity is OPT-IN. The beat clock (default 120 BPM)
+   used to feed u_beat raw into every shader, and the built-in shaders
+   bake it into brightness - so everything throbbed to a metronome
+   nobody asked for, even in silence. Default 0 = shaders sit still;
+   the BEAT toggle in the master bar turns the pulse on. */
+defParam('P.breact','Beat React', 0, v=>v, clTglFmt);
 defParam('P.warpamt','Warp Amt',     0.5);
 defParam('P.warpmode','Warp Mode',   0.0);
 defParam('P.cpspeed','Phase Speed',  0.5);
@@ -8478,6 +8484,7 @@ function syncMasterBar(){
   const smb=$('mbStrobeMode'); if(smb) smb.textContent=(S.strobeMode==='bpm')?'BPM':'HZ';
   if(MBK.out) MBK.out.set((S.params['P.master']!==undefined)?S.params['P.master']:1,false);
   const st=$('mbStrobe'); if(st) st.classList.toggle('on',!!S.strobeOn);
+  const mb=$('mbBeat'); if(mb) mb.classList.toggle('on',eff('P.breact')>=0.5);
   const bk=$('mbBlack'); if(bk) bk.classList.toggle('armed',!!S.blackout);
   const bt=$('mbBlType'); if(bt) bt.value=S.bltype||'black';
 }
@@ -8528,6 +8535,8 @@ function wireMasterBar(){
     set:v=>setParam('P.master',v) });
   const st=$('mbStrobe');
   if(st) st.addEventListener('click',()=>{ S.strobeOn=!S.strobeOn; st.classList.toggle('on',S.strobeOn); saveState(); if(typeof syncFieldSend==='function') syncFieldSend('strobeOn',S.strobeOn); });
+  const mbt=$('mbBeat');
+  if(mbt) mbt.addEventListener('click',()=>{ const on=eff('P.breact')<0.5; setParam('P.breact',on?1:0); mbt.classList.toggle('on',on); saveState(); toast('Beat reactivity '+(on?'ON - shaders pulse to the beat':'OFF - shaders sit still')); });
   const bk=$('mbBlack');
   if(bk) bk.addEventListener('click',()=>toggleBlackout());
   const bt=$('mbBlType');
@@ -11545,7 +11554,7 @@ function loop(){
   if((frames&1)===0) drawBeatPhase();
   let pulse=0;
   if(S.bpm>0){ const ph=(t*S.bpm/60)%1; pulse=Math.pow(1-ph,3); }
-  beatPulse=Math.max(pulse,audioBeat);
+  beatPulse=(eff('P.breact')>=0.5)?Math.max(pulse,audioBeat):0;
   evalModulators(t);
   pumpWebcam(); /* one texture upload per frame max, shared by all layers */
   const isPhone=window.HM_DEVICE&&HM_DEVICE.device==='phone';
