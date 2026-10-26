@@ -543,7 +543,7 @@ html[data-device="phone"] .lstrip .vfad{grid-row:2;grid-column:2;width:100%;max-
 html[data-device="phone"] .clip{min-height:90px;font-size:12px}
 html[data-device="phone"] .clip .cname{font-size:10px;padding:4px 2px}
 /* phone: horizontal swipe between layers */
-html[data-device="phone"] .maindeck{display:flex;flex-direction:row;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:12px;padding:8px}
+html[data-device="phone"] .maindeck{display:flex;flex-direction:row;overflow-x:auto;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;gap:12px;padding:8px}
 html[data-device="phone"] .maindeck .lstrip{flex:0 0 88vw;scroll-snap-align:start;min-height:0;height:auto;align-self:flex-start}
 /* phone: hide blend/transition micro-controls (desktop power features) */
 html[data-device="phone"] .lfad{flex-direction:column;align-items:center}
@@ -562,6 +562,7 @@ html[data-device="phone"] .fxbtn{min-height:36px;min-width:36px}
 html[data-device="phone"] select{min-height:40px;font-size:14px}
 html[data-device="phone"] input[type="range"]{min-height:40px}
 html[data-device="phone"] .vfad{width:44px;touch-action:none}
+html[data-device="phone"] .clip.picked{box-shadow:0 0 0 2px #5eead4}
 html[data-device="phone"] #transport{flex-wrap:wrap;height:auto;row-gap:6px}
 html[data-device="phone"] .dockhead{font-size:13px;padding:8px 10px}
 /* tablet: stacked too, but denser grid + slightly smaller targets than phone */
@@ -1457,7 +1458,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.52';
+const APP_VERSION='1.9.53';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -7049,24 +7050,35 @@ function buildDeck(){
          hold still opens the menu; moving past 14px first turns
          the press into a drag instead. */
       if(window.HM_DEVICE&&HM_DEVICE.device==='phone'){
-        let _lpT=null, _td=null;
+        let _lpT=null, _pkT=null, _td=null;
         th.addEventListener('touchstart',(e)=>{
           const t0=e.touches[0];
-          _td={sx:t0.clientX, sy:t0.clientY, dragging:false, ghost:null, ti:-1, tk:-1, opened:false};
+          _td={sx:t0.clientX, sy:t0.clientY, dragging:false, armed:false, ghost:null, ti:-1, tk:-1, opened:false, lx:0, ly:0};
           _lpT=setTimeout(()=>{
-            if(_td) _td.opened=true;
+            if(_td){ _td.opened=true; c.classList.remove('picked'); }
             showClipMenu(t0.clientX,t0.clientY,i,k,{fromTouch:true});
             th._lastTap=0; /* suppress the tap-select */
           },500);
+          /* v1.9.53: a clip drag now needs a short HOLD to pick up
+             (180ms, ring shows). Any decisive move before that is a
+             SCROLL and is released untouched - the old handler turned
+             every 14px move in any direction into a drag and
+             preventDefault'd the scroll, which is exactly why sliding
+             around the phone UI felt sticky. */
+          _pkT=setTimeout(()=>{ if(_td&&!_td.opened) { _td.armed=true; c.classList.add('picked'); } },180);
         },{passive:true});
         th.addEventListener('touchmove',(e)=>{
           if(!_td) return;
           const t=e.touches[0]; if(!t) return;
           if(!_td.dragging){
             if(_td.opened) return;
-            if(Math.hypot(t.clientX-_td.sx,t.clientY-_td.sy)<14) return;
+            if(!_td.armed){
+              if(Math.hypot(t.clientX-_td.sx,t.clientY-_td.sy)>10){ clearTimeout(_lpT); clearTimeout(_pkT); _td=null; }
+              return;
+            }
+            if(Math.hypot(t.clientX-_td.sx,t.clientY-_td.sy)<8) return;
             clearTimeout(_lpT);
-            if(src===null||src===undefined){ if(!base0){ _td=null; return; } }
+            if(src===null||src===undefined){ if(!base0){ _td=null; c.classList.remove('picked'); return; } }
             _td.dragging=true;
             const r=c.getBoundingClientRect();
             const g=c.cloneNode(true);
@@ -7076,6 +7088,8 @@ function buildDeck(){
           e.preventDefault();
           _td.ghost.style.left=(t.clientX-_td.w/2)+'px';
           _td.ghost.style.top=(t.clientY-_td.h/2)+'px';
+          if(Math.abs(t.clientX-_td.lx)<4&&Math.abs(t.clientY-_td.ly)<4) return;
+          _td.lx=t.clientX; _td.ly=t.clientY;
           const hit=document.elementFromPoint(t.clientX,t.clientY);
           const cell=hit&&hit.closest?hit.closest('.clip'):null;
           document.querySelectorAll('.clip.drophl').forEach(x=>{ if(x!==cell) x.classList.remove('drophl'); });
@@ -7083,7 +7097,7 @@ function buildDeck(){
           else{ _td.ti=-1; _td.tk=-1; }
         },{passive:false});
         const _tend=()=>{
-          clearTimeout(_lpT);
+          clearTimeout(_lpT); clearTimeout(_pkT); c.classList.remove('picked');
           if(_td&&_td.dragging){
             if(_td.ghost) _td.ghost.remove();
             document.querySelectorAll('.clip.drophl').forEach(x=>x.classList.remove('drophl'));
@@ -11328,6 +11342,7 @@ let tStart=performance.now()/1000, lastT=0, frames=0, fpsT=0, pvTick=0, _pvLast=
    and skip this entirely. qFpsAvg also feeds the fps meter. */
 let qSlowT=0, qFastT=0, qCooldown=0, qLastT=0, qFpsAvg=60;
 let qSpikeT=0, qLastNow=0; /* v1.9.52: burst-drop detector state */
+let hmSrvTick=0; /* v1.9.53: server-list/parity refresh cadence */
 let dropTimes=[], dropEma=0; /* v1.9.52: dropped-frame counter (5s window) */
 const qTs=[]; /* frame timestamps (seconds) for the rolling 1s fps average */
 function qualityAutoTick(now){
@@ -11549,6 +11564,7 @@ function loop(){
   if(now-fpsT>0.5){
     /* rolling 1s fps average + effective render scale, always honest */
     $('fps').textContent=Math.round(qFpsAvg)+' fps · '+effScale()+'x · '+(dropTimes.length?dropTimes.length+' drop'+(dropTimes.length>1?'s':''):'0 drops');
+    if(++hmSrvTick>=4){ hmSrvTick=0; const sl=$('srvlist'); if(sl&&sl.offsetParent) renderSrvList(); if(SYNC.on) syncParityCheck(); }
     frames=0; fpsT=now;
     updateMeters();
   }
@@ -11777,16 +11793,19 @@ function p2pStatusText(){
 function renderSrvList(){
   const host=$('srvlist'); if(!host) return;
   const linked=Object.keys(p2pLink).filter(k=>p2pLink[k]==='linked');
+  const peerLive=syncPeerLive();
   const phone = !p2pCode ? 'off'
-    : linked.length ? 'linked via '+linked.join(' + ')
-    : cloudPeerOn ? 'linked via cloud relay'
+    : (peerLive&&SYNC.inSync) ? 'SYNCED — live, same state as your other screen'
+    : peerLive ? 'peer live — catching up…'
+    : linked.length ? 'linked via '+linked.join(' + ')+' — waiting for state…'
+    : cloudClient ? 'relay connected — waiting for your other screen'
     : (p2pRooms.length||cloudClient) ? 'waiting for phone — it must scan THIS code\'s QR' : 'starting…';
   const midi=($('midistat')&&$('midistat').textContent)||'—';
   const linkFresh = linkLastSeen && (performance.now()-linkLastSeen<6000);
   const hub = prmOn ? 'connected' : 'off';
   const row=(k,v,on)=>'<div class="srvrow"><span>'+k+'</span><span class="sv'+(on?' on':'')+'">'+v+'</span></div>';
   host.innerHTML =
-    row('\uD83D\uDCF1 Phone remote', phone, linked.length>0||cloudPeerOn) +
+    row('\uD83D\uDCF1 Phone remote', phone, !!(peerLive&&SYNC.inSync)) +
     row('\uD83C\uDFB9 MIDI', midi, /connected|device|in/i.test(midi)&&!/not|off/i.test(midi)) +
     row('\uD83D\uDD17 Ableton Link', linkFresh?('sync \u00B7 '+(linkBpm?linkBpm.toFixed(1)+' BPM':'')+(linkPeers?' \u00B7 '+linkPeers+' peers':'')):'not connected', !!linkFresh) +
     row('\uD83D\uDDA5 Hub link', hub, prmOn);
@@ -11856,6 +11875,7 @@ function cloudBrokers(){
   return CLOUD_BROKERS.map(b=>[b[0],b[1],b[2],true]);
 }
 let cloudClient=null, cloudBroker='', cloudPeerOn=false, cloudConnecting=false;
+let cloudPeerAt=0; /* v1.9.53: last fresh presence from the peer */
 let cloudIdx=0, cloudConnectedAt=0, cloudStartIdx=0, cloudHopping=false;
 function cloudTopic(suffix){ return 'holomapper/v1/'+p2pCode+'/'+suffix; }
 function cloudSend(o){
@@ -11906,20 +11926,23 @@ function cloudStart(){
     catch(e){ tryNext(); return; }
     let settled=false;
     c.onConnectionLost=()=>{
-      if(cloudClient===c){ cloudClient=null; cloudPeerOn=false; cloudConnecting=false; renderSrvList(); setTimeout(()=>{ if(p2pCode) cloudStart(); },2500); }
+      if(cloudClient===c){ cloudClient=null; cloudPeerOn=false; cloudConnecting=false; if(SYNC.presTimer){ clearInterval(SYNC.presTimer); SYNC.presTimer=0; } renderSrvList(); setTimeout(()=>{ if(p2pCode) cloudStart(); },2500); }
     };
     c.onMessageArrived=(m)=>{
       let d; try{ d=JSON.parse(m.payloadString); }catch(e){ return; }
       if(m.destinationName.endsWith('/sync')){ syncHandle(d); return; }
       if(m.destinationName.indexOf('/presence/')>=0&&!m.destinationName.endsWith('/presence/remote')){
-        if(d&&d.app&&d.id!==syncId&&d.online){ SYNC.peerAt=Date.now(); cloudPeerOn=true; renderSrvList(); }
+        if(d&&d.app&&d.id!==syncId){
+          if(d.online&&(!d.ts||Date.now()-d.ts<9000)){ SYNC.peerAt=Date.now(); cloudPeerOn=true; cloudPeerAt=Date.now(); if(d.h){ SYNC.peerHash=d.h; syncParityCheck(); } }
+          else if(!d.online){ cloudPeerOn=false; }
+        }
         return;
       }
       if(m.destinationName.endsWith('/presence/remote')){
         if(d&&d.role==='remote'){ cloudPeerOn=!!d.online; if(cloudPeerOn){ SYNC.shakeAt=Date.now(); broadcastState(); } renderSrvList(); }
         return;
       }
-      cloudPeerOn=true;
+      cloudPeerOn=true; cloudPeerAt=Date.now(); SYNC.peerAt=Date.now();
       if(d&&d.type==='ping'){ renderSrvList(); return; }
       if(d&&d.type==='hello'){ SYNC.shakeAt=Date.now(); broadcastState(); return; }
       if(d&&d.mid&&p2pDupe(d.mid)) return;
@@ -11937,9 +11960,13 @@ function cloudStart(){
         const pres=new Paho.MQTT.Message(JSON.stringify({type:'peer',role:'engine',online:true}));
         pres.destinationName=cloudTopic('presence/engine'); pres.retained=true;
         c.send(pres);
-        const apres=new Paho.MQTT.Message(JSON.stringify({type:'peer',app:1,online:true,id:syncId}));
+        const apres=new Paho.MQTT.Message(JSON.stringify({type:'peer',app:1,online:true,id:syncId,ts:Date.now(),h:syncOwnHash()}));
         apres.destinationName=cloudTopic('presence/'+syncId); apres.retained=true;
         c.send(apres);
+        /* heartbeat: without a fresh ts the retained 'online' outlives
+           the peer and the UI claims a link that is not there */
+        if(SYNC.presTimer) clearInterval(SYNC.presTimer);
+        SYNC.presTimer=setInterval(()=>{ if(!cloudClient) return; try{ const p=new Paho.MQTT.Message(JSON.stringify({type:'peer',app:1,online:true,id:syncId,ts:Date.now(),h:syncOwnHash()})); p.destinationName=cloudTopic('presence/'+syncId); p.retained=true; cloudClient.send(p); }catch(e){} },4000);
         cloudConnectedAt=Date.now(); SYNC.on=true;
         syncSend({kind:'sync-hello'});
         /* keep announcing until a peer's state lands: a single hello
@@ -12015,6 +12042,22 @@ function syncMacroSend(i,v){
   SYNC.paramAt[id]=now;
   syncSend({kind:'sync-macro',i,v});
 }
+/* v1.9.53: 'synced' must mean the two screens hold the SAME state and
+   the peer is actually alive - not just that a broker accepted a
+   connection or a retained presence message exists. Each side hashes
+   its canonical state; presence heartbeats and state packets carry the
+   hash; a live peer whose hash differs triggers a heal (guest re-asks,
+   host re-sends) instead of a silent lie. */
+function syncHashOf(s){ let h=0x811c9dc5; if(!s) return '0'; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193); } return (h>>>0).toString(36); }
+function syncOwnHash(){ try{ return syncHashOf(SYNC.lastJson||stateJSON()||''); }catch(e){ return 'x'; } }
+function syncPeerLive(){ return !!(SYNC.peerAt&&(Date.now()-SYNC.peerAt<8000)); }
+function syncParityCheck(){
+  SYNC.inSync=!!(SYNC.peerHash&&SYNC.peerHash===syncOwnHash());
+  if(!SYNC.inSync&&syncPeerLive()){
+    const now=Date.now();
+    if(!SYNC.healAt||now-SYNC.healAt>5000){ SYNC.healAt=now; if(SYNC.guest){ syncSend({kind:'sync-hello'}); } else if(typeof broadcastState==='function'){ broadcastState(); } }
+  }
+}
 function syncHandle(d){
   if(!d||d.from===syncId) return;
   const now=Date.now();
@@ -12040,7 +12083,7 @@ function syncHandle(d){
        apps quietly stopped being 1:1. Each sender's stream is now
        ordered on its own clock. */
     if(d.ts<=(SYNC.tsFrom[d.from]||0)) return;
-    SYNC.tsFrom[d.from]=d.ts; SYNC.lastJson=d.json;
+    SYNC.tsFrom[d.from]=d.ts; SYNC.lastJson=d.json; SYNC.peerHash=syncHashOf(d.json);
     const first=!SYNC.got; SYNC.got=true;
     SYNC.applying=true;
     try{ histApply(d.json, true); }catch(e){}
@@ -12054,6 +12097,7 @@ function syncHandle(d){
        here actually changes something. */
     sendMediaThumbsSoon();
     try{ const cj=stateJSON(); if(cj) SYNC.lastJson=cj; }catch(e){}
+    syncParityCheck();
     if(first) toast('Synced \u2014 this screen is live with your other device');
     return;
   }
