@@ -1458,7 +1458,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.55';
+const APP_VERSION='1.9.56';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -1913,6 +1913,8 @@ defParam('P.czhueB','CZ Hue B',0.13, v=>v, v=>Math.round(v*360)+'\u00B0');
 defParam('P.blthr','Bloom Thr',0.55, v=>v*2.5, v=>(v*2.5).toFixed(2));
 defParam('P.blstr','Bloom Str',0.4, v=>v*3, v=>(v*3).toFixed(2));
 for(let i=0;i<MAX_LAYERS;i++) defParam('L'+i+'.camFlip',LAYER_NAMES[i]+' Cam Flip',1, v=>v, clTglFmt);
+/* v1.9.56: camera FOV (digital crop zoom 1x-3x) per layer */
+for(let i=0;i<MAX_LAYERS;i++) defParam('L'+i+'.camFov',LAYER_NAMES[i]+' Cam FOV',0, v=>1+v*2, v=>(1+v*2).toFixed(1)+'x');
 /* discrete option counts for the new mode params */
 PARAMS['P.mirmode'].nopts=3; PARAMS['P.ammode'].nopts=2; PARAMS['P.czpal'].nopts=5;
 
@@ -2026,7 +2028,7 @@ function defaultState(){
     postBypass:{feedback:false, kaleido:true, glitch:true, mirror:true, automask:true, colorize:true, bloompost:true},
     strobeOn:false, strobeMode:'hz', strobeDiv:2, beatSync:false, bpm:120, blackout:false, knobSmooth:0,
     compW:0, compH:0, outDisplay:null,
-    bltype:'black', ghue:0, gspeed:1, gspeedMin:0.1, gspeedMax:2, camFace:'user',
+    bltype:'black', ghue:0, gspeed:1, gspeedMin:0.1, gspeedMax:2, camFace:'user', camDeviceId:null,
     layerFx:Array.from({length:MAX_LAYERS},()=>[]),
     clipFx:Array.from({length:MAX_LAYERS},()=>Array.from({length:START_COLS},()=>[])),
     compFx:[],
@@ -3355,8 +3357,11 @@ out vec4 O;
 in vec2 v_uv;
 uniform sampler2D u_tex;
 uniform float u_flip;
+uniform float u_zoom;
 void main(){
-  vec2 uv = vec2(mix(v_uv.x, 1.0-v_uv.x, u_flip), v_uv.y);
+  float z = u_zoom>0.01? u_zoom : 1.0;
+  vec2 uv = (v_uv-0.5)/z+0.5;
+  uv = vec2(mix(uv.x, 1.0-uv.x, u_flip), uv.y);
   O = vec4(texture(u_tex,uv).rgb, 1.0);
 }
 `;
@@ -4521,7 +4526,8 @@ function layerEnabled(i){
    requested the first time the Webcam source is selected/fired; denial shows
    a toast and the layer renders a "NO CAMERA" slate (never black). Works in
    Electron (file://) and in browsers over HTTPS/localhost. */
-let camVideo=null, camTex=null, camSlateTex=null, camStream=null;
+let camVideo=null, camTex=null, camStream=null;
+const camSlateCache={};
 let camState='off', camLastT=-1, camReq=null; /* off|requesting|live|denied */
 let camHold=false; /* v1.9.24: explicit Stop - the render loop's auto-start respects it; a deliberate fire/Enable clears it */
 async function ensureCamera(){
@@ -4536,7 +4542,9 @@ async function ensureCamera(){
   camState='requesting';
   camReq=(async()=>{
     try{
-      camStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:(S.camFace==='environment')?'environment':'user'},audio:false});
+      const mkCons=(dev)=>({video: dev? {deviceId:{exact:dev},width:{ideal:1280},height:{ideal:720}} : {width:{ideal:1280},height:{ideal:720},facingMode:(S.camFace==='environment')?'environment':'user'},audio:false});
+      try{ camStream=await navigator.mediaDevices.getUserMedia(mkCons(S.camDeviceId||null)); }
+      catch(e1){ if(S.camDeviceId){ S.camDeviceId=null; camStream=await navigator.mediaDevices.getUserMedia(mkCons(null)); } else throw e1; }
       camVideo=document.createElement('video');
       camVideo.muted=true; camVideo.playsInline=true;
       camVideo.srcObject=camStream;
@@ -4566,9 +4574,29 @@ function stopCamera(){
 }
 async function switchCamera(){
   stopCamera();
+  S.camDeviceId=null;
   S.camFace=(S.camFace==='environment')?'user':'environment';
   saveState();
   await ensureCamera();
+  buildProps();
+  if(typeof buildClipInspector==='function') buildClipInspector();
+}
+/* v1.9.56: physical lenses. Phones expose ultrawide / wide / tele as
+   separate videoinput devices - picking one is a REAL FOV change. */
+let camDevices=[];
+async function refreshCamDevices(){
+  try{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.enumerateDevices) return camDevices;
+    const ds=await navigator.mediaDevices.enumerateDevices();
+    camDevices=ds.filter(d=>d.kind==='videoinput');
+  }catch(e){}
+  return camDevices;
+}
+async function useCamDevice(id){
+  S.camDeviceId=id||null;
+  stopCamera();
+  await ensureCamera();
+  saveState();
   buildProps();
   if(typeof buildClipInspector==='function') buildClipInspector();
 }
@@ -4584,8 +4612,9 @@ function pumpWebcam(){
   catch(e){ /* transient upload failure — keep the last good frame */ }
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
 }
-function camSlate(){
-  if(camSlateTex) return camSlateTex;
+function camSlate(sub){
+  const _key=sub||'';
+  if(camSlateCache[_key]) return camSlateCache[_key];
   const c=document.createElement('canvas'); c.width=640; c.height=360;
   const g=c.getContext('2d');
   g.fillStyle='#14161c'; g.fillRect(0,0,640,360);
@@ -4593,7 +4622,7 @@ function camSlate(){
   g.fillStyle='#e8eaee'; g.font='bold 44px sans-serif'; g.textAlign='center';
   g.fillText('NO CAMERA',320,158);
   g.fillStyle='#878b94'; g.font='21px sans-serif';
-  g.fillText(camState==='denied'?'camera access denied — allow it in the browser':'select the Webcam source to enable',320,205);
+  g.fillText(camState==='denied'?'camera access denied — allow it in the browser':(sub||'select the Webcam source to enable'),320,205);
   const t=gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D,t);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
@@ -4603,7 +4632,7 @@ function camSlate(){
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
-  camSlateTex=t; return t;
+  camSlateCache[_key]=t; return t;
 }
 /* Layer router: use another layer's (or group's) output as this clip's source.
    Uses the previous frame's texture to avoid ordering/feedback issues. */
@@ -4726,6 +4755,7 @@ function renderWebcam(i,t,T){
     if(!P) return;
     gl.useProgram(P); setTex(P,'u_tex',0,camTex);
     gl.uniform1f(U(P,'u_flip'),eff('L'+i+'.camFlip')>=0.5?1:0);
+    gl.uniform1f(U(P,'u_zoom'),PARAMS['L'+i+'.camFov'].map(eff('L'+i+'.camFov')));
     quadDraw();
   }else{
     const P=PROG.copy;
@@ -4786,16 +4816,43 @@ function uploadPhoneCam(){
 function renderPhoneCam(i,t,T){
   gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb); gl.viewport(0,0,T.w,T.h);
   if(phoneCam.fresh&&Date.now()-phoneCam.lastAt>3000) phoneCam.fresh=false;
+  const P=PROG.cam;
   if(phoneCam.fresh&&phoneCam.tex){
-    const P=PROG.cam; if(!P) return;
+    if(!P) return;
     gl.useProgram(P); setTex(P,'u_tex',0,phoneCam.tex);
+    /* the sender already mirrors a front camera at capture time, so
+       the received feed is drawn unflipped (v1.9.38 behavior); the
+       H-Flip toggle applies to this device's own camera view */
     gl.uniform1f(U(P,'u_flip'),0);
+    gl.uniform1f(U(P,'u_zoom'),PARAMS['L'+i+'.camFov'].map(eff('L'+i+'.camFov')));
     quadDraw();
-  }else{
-    const P=PROG.copy; if(!P) return;
-    gl.useProgram(P); setTex(P,'u_tex',0,phoneCamSlate());
-    quadDraw();
+    return;
   }
+  /* v1.9.56: no linked feed - on the phone itself (or whenever this
+     screen's own camera is already live or being shared) the Phone
+     Cam source falls back to THIS device's camera, so it works
+     standalone in phone mode like any other clip source. */
+  const localOk=(typeof HM_DEVICE!=='undefined'&&HM_DEVICE&&HM_DEVICE.device==='phone')||camState==='live'||camShare.on;
+  if(localOk){
+    if(camState==='off'&&!camHold) ensureCamera();
+    if(camState==='live'&&camVideo&&camVideo.readyState>=2&&camTex){
+      if(!P) return;
+      gl.useProgram(P); setTex(P,'u_tex',0,camTex);
+      gl.uniform1f(U(P,'u_flip'),eff('L'+i+'.camFlip')>=0.5?1:0);
+      gl.uniform1f(U(P,'u_zoom'),PARAMS['L'+i+'.camFov'].map(eff('L'+i+'.camFov')));
+      quadDraw();
+      return;
+    }
+    if(camState==='denied'){
+      const PC=PROG.copy; if(!PC) return;
+      gl.useProgram(PC); setTex(PC,'u_tex',0,camSlate('allow camera access to use your camera here'));
+      quadDraw();
+      return;
+    }
+  }
+  const PC=PROG.copy; if(!PC) return;
+  gl.useProgram(PC); setTex(PC,'u_tex',0,phoneCamSlate());
+  quadDraw();
 }
 /* ---- sender side ---- */
 let camShare={on:false, timer:0, video:null, stream:null, cv:null, seq:0, q:0.55};
@@ -6619,6 +6676,7 @@ function fireClip(i,k){ S.firedCol=null; quantizeFire(i,k); }
 function fireClipNow(i,k){
   const src=S.clips[i][k];
   if(src===camIdx()) ensureCamera(); /* v1.9.24: webcam clips start the camera when fired */
+  if(src===phoneCamIdx()&&((typeof HM_DEVICE!=='undefined'&&HM_DEVICE&&HM_DEVICE.device==='phone')||camShare.on)) ensureCamera(); /* v1.9.56: standalone phone cam fires live */
   if(src===null||src===undefined){
     /* effect clip: no source — the layer will process the layers below it */
     if(!clipBaseAt(i,k)) return;
@@ -7378,26 +7436,49 @@ function shUniformRows(sec,sidx,uns){
     }
   }
 }
+/* v1.9.56: camera controls shared by the Webcam + Phone Cam sources:
+   per-layer H-Flip + FOV, a physical Lens picker (phones expose their
+   ultrawide / wide / tele cameras as separate devices - real FOV
+   options), front/rear switch, stop/enable. */
+function buildCamControls(sec,i){
+  sec.appendChild(el('div','dim','Camera: '+camState+' \u00B7 '+((S.camFace==='environment')?'rear':'front')+(S.camDeviceId?' \u00B7 lens picked below':'')));
+  toggleRow(sec,'L'+i+'.camFlip','H-Flip');
+  paramRow(sec,'L'+i+'.camFov','FOV');
+  if(camDevices.length>1){
+    sec.appendChild(el('div','plab','Lens'));
+    camDevices.forEach((d,n)=>{
+      let cur=false;
+      try{ cur=(S.camDeviceId&&S.camDeviceId===d.deviceId)||(!S.camDeviceId&&camStream&&camStream.getVideoTracks()[0]&&camStream.getVideoTracks()[0].getSettings().deviceId===d.deviceId); }catch(e){}
+      const bl=el('button',null,((d.label&&d.label.trim())?d.label.trim():'Camera '+(n+1))+(cur?' (current)':''));
+      bl.addEventListener('click',()=>{ useCamDevice(d.deviceId); });
+      sec.appendChild(bl);
+    });
+  }
+  if(camState==='live'){
+    const bs=el('button',null,'Switch camera (front/rear)');
+    bs.addEventListener('click',()=>{ switchCamera(); });
+    sec.appendChild(bs);
+    const bt=el('button',null,'Stop camera');
+    bt.addEventListener('click',()=>{ stopCamera(); buildProps(); if(typeof buildClipInspector==='function') buildClipInspector(); });
+    sec.appendChild(bt);
+  }else{
+    const b=el('button',null,'Enable camera');
+    b.addEventListener('click',()=>{ ensureCamera().then(()=>refreshCamDevices()).then(()=>{ buildProps(); if(typeof buildClipInspector==='function') buildClipInspector(); }); });
+    sec.appendChild(b);
+  }
+  sec.appendChild(mkHint('FOV zooms the frame (a digital crop). On phones with several lenses, the Lens buttons switch the actual camera - ultrawide is a true wide FOV. The camera is global; H-Flip and FOV are per layer.'));
+  refreshCamDevices().then(()=>{ if(camDevices.length!==buildCamControls._n){ buildCamControls._n=camDevices.length; buildProps(); if(typeof buildClipInspector==='function') buildClipInspector(); } });
+}
 function buildClipParamSection(host,i,src){
   if(typeof src!=='number') return;
   const sec=el('div','psec');
   if(src===camIdx()){
     sec.appendChild(el('div','plab','Webcam'));
-    sec.appendChild(el('div','dim','Camera: '+camState+' \u00B7 '+((S.camFace==='environment')?'rear':'front')));
-    toggleRow(sec,'L'+i+'.camFlip','H-Flip');
-    if(camState==='live'){
-      const bs=el('button',null,'Switch camera (front/rear)');
-      bs.addEventListener('click',()=>{ switchCamera(); });
-      sec.appendChild(bs);
-      const bt=el('button',null,'Stop camera');
-      bt.addEventListener('click',()=>{ stopCamera(); buildProps(); if(typeof buildClipInspector==='function') buildClipInspector(); });
-      sec.appendChild(bt);
-    }else{
-      const b=el('button',null,'Enable camera');
-      b.addEventListener('click',()=>{ ensureCamera().then(()=>{ buildProps(); if(typeof buildClipInspector==='function') buildClipInspector(); }); });
-      sec.appendChild(b);
-    }
-    sec.appendChild(mkHint('The camera is global; H-Flip is per layer. Pair it with Auto Mask (Chroma) in the post chain.'));
+    buildCamControls(sec,i);
+  }else if(src===phoneCamIdx()){
+    sec.appendChild(el('div','plab','Phone Cam'));
+    sec.appendChild(el('div','dim',phoneCam.fresh?'Showing the shared camera from your other screen':'Standalone: this shows your own camera - no link needed'));
+    buildCamControls(sec,i);
   }else if(isVideoSrc(src)){
     /* v1.9.43: transform attached to the media file itself - every clip
        that uses this source inherits it (Resolume-style clip transform,
