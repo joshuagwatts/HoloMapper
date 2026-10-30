@@ -1458,7 +1458,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.56';
+const APP_VERSION='1.9.57';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -10371,6 +10371,14 @@ function wireStatic(){
   $('btnPerform').addEventListener('click',togglePerform);
   /* context loss */
   canvas.addEventListener('webglcontextlost',(e)=>{ e.preventDefault(); $('ctxlost').classList.add('show'); });
+  /* v1.9.57: when the browser restores the context after a GPU reset,
+     reload once so every GPU resource rebuilds cleanly (state is
+     persisted; the deck comes back as it was). The 90s guard keeps a
+     GPU that keeps dying on the banner instead of reload-looping. */
+  canvas.addEventListener('webglcontextrestored',()=>{
+    let last=0; try{ last=+sessionStorage.getItem('hm.glloss')||0; }catch(e){}
+    if(Date.now()-last>90000){ try{ sessionStorage.setItem('hm.glloss',String(Date.now())); }catch(e){} location.reload(); }
+  });
   $('btnCtxReload').addEventListener('click',()=>location.reload());
   /* MIDI learn: pointerdown capture so the click selects without moving the slider */
   document.addEventListener('pointerdown',(e)=>{
@@ -11863,8 +11871,40 @@ function init(){
   restoreMediaFromDB(); /* v1.9.48: revive autosaved media (IndexedDB) */
   requestAnimationFrame(loop);
 }
-if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
-else init();
+/* v1.9.57: graphics pre-flight. A GPU reset (a heavy shader can wedge
+   the phone's GPU process) makes WebGL2 creation fail at boot; the old
+   flow tried once inside init() and dead-ended on the error. Now the
+   context is created BEFORE init(): a ladder of attribute sets first,
+   then timed retries while the GPU recovers. A context created here IS
+   the app's context - a second getContext('webgl2') on the same canvas
+   returns it, so initGL() picks it up unchanged. */
+let _booted=false;
+function bootApp(){ if(_booted) return; _booted=true; init(); }
+function preflightGL(){
+  if(!canvas) return null;
+  const ladder=[
+    {antialias:false, alpha:false, powerPreference:'high-performance', preserveDrawingBuffer:false},
+    {antialias:false, alpha:false, preserveDrawingBuffer:false},
+    {antialias:false, alpha:false},
+    {}
+  ];
+  for(const a of ladder){ try{ const g=canvas.getContext('webgl2',a); if(g) return g; }catch(e){} }
+  return null;
+}
+function bootSequence(){
+  if(preflightGL()){ bootApp(); return; }
+  showErr('Graphics hiccup \u2014 retrying while the GPU recovers\u2026');
+  const delays=[800,2000,4500,8000];
+  let step=0;
+  const tryAgain=()=>{
+    if(preflightGL()){ bootApp(); return; }
+    if(step<delays.length) setTimeout(tryAgain,delays[step++]);
+    else showErr('Graphics (WebGL2) could not start \u2014 the GPU likely reset. Fully close the browser app (swipe it away) and reopen HoloMapper.');
+  };
+  setTimeout(tryAgain,delays[step++]);
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bootSequence);
+else bootSequence();
 </script>
 <script>
 'use strict';
