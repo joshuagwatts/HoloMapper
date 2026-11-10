@@ -758,7 +758,7 @@ button.slon{flex:none;padding:2px 8px;font-size:11px}
     <button id="btnPair" title="Server — pair your phone and see everything connected">Server</button>
     <span id="prmstat" class="dim"></span>
     <span class="tsep"></span>
-    <button id="btnNodes" title="Open node graph for selected layer (N)">Nodes</button>
+    <button id="btnNodes" title="Open HoloMapper Studio for the selected layer (N)">Studio</button>
     <button id="btnLearn" title="MIDI learn (M)">MIDI Learn</button>
     <span id="midistat">MIDI: not scanned</span>
     <span class="tsep"></span>
@@ -1458,7 +1458,7 @@ function dockInit(){
 'use strict';
 /* HoloMapper build version — bump this one line per release. Shown in the
    top bar next to the HoloMapper brand. */
-const APP_VERSION='1.9.57';
+const APP_VERSION='1.9.58';
 /* =====================================================================
    HoloMapper v1 — a self-contained WebGL2 live visual performance deck.
    Zero network dependencies. One canvas, 4 layer FBOs -> combine ->
@@ -10440,6 +10440,8 @@ function wireStatic(){
 
 /* ---------- node type registry ---------- */
 const NPORT_TEX={label:'tex'};
+const NPORT_MESH={label:'mesh',kind:'mesh'};
+const NPORT_MAT={label:'mat',kind:'mat'};
 const NTYPES={
   src:{label:'Source',group:'Sources',color:'#a78bfa',outs:[NPORT_TEX],
     params:[
@@ -10462,6 +10464,32 @@ const NTYPES={
       {k:'sat',label:'Saturation',def:0.65,map:v=>v*1.3,fmt:v=>(v*1.3).toFixed(2)},
       {k:'twk',label:'Twinkle',def:0.4},
       {k:'loop',label:'Loop Length',def:0.25,map:v=>2+v*30,fmt:v=>(2+v*30).toFixed(1)+'s loop'},
+    ]},
+  mesh3d:{label:'Mesh',group:'3D',color:'#fb923c',outs:[NPORT_MESH],
+    params:[
+      {k:'mesh',label:'Mesh',kind:'discrete',def:0,
+       opts:['Icosahedron','Torus Knot','Box','Tetra','Torus','Cone','Cylinder','Capsule','Helix','Star','Gem','Diamond','Quad']},
+      {k:'scale',label:'Scale',def:0.45,map:v=>0.3+v*2.2,fmt:v=>(0.3+v*2.2).toFixed(2)+'x'},
+      {k:'spin',label:'Spin',def:0.25,map:v=>v*2,fmt:v=>(v*2).toFixed(2)+'x'},
+      {k:'tilt',label:'Tilt',def:0.5,map:v=>(v-0.5)*120,fmt:v=>Math.round((v-0.5)*120)+'\u00B0'},
+    ]},
+  material3d:{label:'Material',group:'3D',color:'#f472b6',outs:[NPORT_MAT],
+    params:[
+      {k:'shader',label:'Shader',kind:'discrete',def:0,
+       opts:['Standard Lit','Fresnel Glow','Plasma']},
+      {k:'hue',label:'Hue',def:0.58,fmt:v=>Math.round(v*360)+'\u00B0'},
+      {k:'sat',label:'Saturation',def:0.7,map:v=>v*1.4,fmt:v=>(v*1.4).toFixed(2)},
+      {k:'bright',label:'Brightness',def:0.55,map:v=>0.25+v*1.3,fmt:v=>(0.25+v*1.3).toFixed(2)},
+      {k:'spec',label:'Shine',def:0.5,map:v=>v*1.5,fmt:v=>(v*1.5).toFixed(2)},
+      {k:'p1',label:'Shader P1',def:0.4},
+      {k:'p2',label:'Shader P2',def:0.6},
+    ]},
+  scene3d:{label:'3D Scene',group:'3D',color:'#22d3ee',ins:[NPORT_MESH,NPORT_MAT,NPORT_TEX],outs:[NPORT_TEX],
+    params:[
+      {k:'dist',label:'Cam Distance',def:0.3,map:v=>2.2+v*7,fmt:v=>(2.2+v*7).toFixed(1)+'m'},
+      {k:'az',label:'Cam Orbit',def:0.5,map:v=>(v-0.5)*360,fmt:v=>Math.round((v-0.5)*360)+'\u00B0'},
+      {k:'el',label:'Cam Height',def:0.55,map:v=>-2.5+v*5,fmt:v=>(-2.5+v*5).toFixed(1)+'m'},
+      {k:'bg',label:'Backdrop',def:0.15,map:v=>v*0.35,fmt:v=>Math.round(v*100)+'%'},
     ]},
   feedback:{label:'Feedback',group:'FX',color:'#f59e0b',ins:[NPORT_TEX],outs:[NPORT_TEX],
     params:[
@@ -10797,6 +10825,7 @@ function renderNodeTex(i,nd,t,ins,T,srcOv){
       renderLayerInto(i,t,T, sv===0?srcOv:sv-1, srcOv!==undefined);
       break;
     }
+    case 'scene3d':{ renderScene3D(i,nd,t,ins,T); break; }
     case 'cloner3d':{
       /* the layer's full Cloner 3D system (modes, meshes, effectors,
          falloffs - all its usual controls) as a graph generator.
@@ -10976,6 +11005,7 @@ function invalidateGraph(i){ graphOrder[i]=null; graphCache[i]=null; }
 const graphCache=[null,null,null,null];
 const _texOf=[{},{},{},{}];
 const _ins={}; /* scratch input map for evalGraph: cleared per node */
+const _dataIns={}; /* scratch DATA input map (mesh/material products) */
 function topoOrder(g){
   const indeg={}, adj={}, byId={};
   for(const n of g.nodes){ indeg[n.id]=0; adj[n.id]=[]; byId[n.id]=n; }
@@ -11012,16 +11042,223 @@ function evalGraph(i,t,srcOv,outT){
   if(!order) throw new Error('node graph has a cycle');
   const texOf=_texOf[i], wiresByT=gc.wiresByT, byId=gc.byId;
   for(const k in texOf) delete texOf[k];
+  for(const k in _dataOf[i]) delete _dataOf[i][k];
   for(const nid of order){
     const nd=byId[nid]; if(!nd) continue;
     if(nd.type==='lfo'||nd.type==='audiof') continue;
     if(nd.type==='output'){ renderOutputNode(i,nd,t,wiresByT,texOf,outT); continue; }
+    const def=NTYPES[nd.type];
+    if(def&&def.outs&&def.outs[0]&&def.outs[0].kind&&def.outs[0].kind!=='tex'){ evalNodeData(i,nd,t); continue; }
     const T=nodeTarget(i,nd.id);
     for(const k in _ins) delete _ins[k];
-    for(const w of (wiresByT[nd.id]||[])) _ins[w.t.p]=texOf[w.f.n];
+    for(const k in _dataIns) delete _dataIns[k];
+    for(const w of (wiresByT[nd.id]||[])){ _ins[w.t.p]=texOf[w.f.n]; _dataIns[w.t.p]=_dataOf[i][w.f.n]; }
     renderNodeTex(i,nd,t,_ins,T,srcOv);
     texOf[nd.id]=T.tex;
   }
+}
+
+/* ================= STUDIO 3D: MESH -> MATERIAL -> SCENE (v1.9.58) =====
+   TouchDesigner-style data flow inside the layer graph: a Mesh node
+   produces geometry data, a Material node produces a surface (built-in
+   lit / fresnel / plasma shaders, or ANY imported shader projected
+   screen-space onto the mesh), and a 3D Scene node renders mesh +
+   material (+ optional backdrop texture) into a texture that chains
+   through FX / Blend / Output like any other source. Data products
+   ride _dataOf next to the texture channel; port kinds keep wires
+   honest (mesh only feeds mesh, material only feeds material). */
+const _dataOf=[{},{},{},{}];
+function matShaderCount(){ return 3+S.imports.length; }
+function matShaderOptions(){
+  const o=['Standard Lit','Fresnel Glow','Plasma'];
+  for(const im of S.imports) o.push('Shader: '+(im.name||'import'));
+  return o;
+}
+function evalNodeData(i,nd,t){
+  const idp='L'+i+'.N'+nd.id+'.';
+  if(nd.type==='mesh3d'){
+    _dataOf[i][nd.id]={kind:'mesh',geo:Math.min(12,Math.round(eff(idp+'mesh')*12)),
+      scale:neff(i,nd.id,'scale'),spin:neff(i,nd.id,'spin'),tilt:neff(i,nd.id,'tilt')};
+  }else if(nd.type==='material3d'){
+    const cnt=matShaderCount();
+    _dataOf[i][nd.id]={kind:'mat',shader:Math.min(cnt-1,Math.round(eff(idp+'shader')*Math.max(0,cnt-1))),
+      hue:eff(idp+'hue'),sat:neff(i,nd.id,'sat'),bright:neff(i,nd.id,'bright'),
+      spec:neff(i,nd.id,'spec'),p1:eff(idp+'p1'),p2:eff(idp+'p2')};
+  }
+}
+function hsvRgb(h,s,v){
+  const f=(n)=>{ const k=(n+h*6)%6; return v-v*s*Math.max(0,Math.min(k,4-k,1)); };
+  return [f(5),f(3),f(1)];
+}
+const MAT_VS=`#version 300 es
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec3 a_nor;
+uniform mat4 u_mvp; uniform mat3 u_nm;
+out vec3 v_n; out vec3 v_p;
+void main(){ v_n=u_nm*a_nor; v_p=a_pos; gl_Position=u_mvp*vec4(a_pos,1.0); }`;
+const MAT_VS_IMP=`#version 300 es
+layout(location=0) in vec3 a_pos;
+layout(location=1) in vec3 a_nor;
+uniform mat4 u_mvp;
+out vec2 v_uv;
+void main(){ v_uv=a_pos.xy*0.5+0.5; gl_Position=u_mvp*vec4(a_pos,1.0); }`;
+const MAT_FS_STD=`#version 300 es
+precision highp float;
+out vec4 O; in vec3 v_n; in vec3 v_p;
+uniform vec3 u_col; uniform float u_spec;
+void main(){
+  vec3 N=normalize(v_n);
+  vec3 L=normalize(vec3(0.45,0.75,0.6));
+  vec3 V=vec3(0.0,0.0,1.0);
+  float dif=max(dot(N,L),0.0)*0.72+0.28;
+  vec3 H=normalize(L+V);
+  float sp=pow(max(dot(N,H),0.0),48.0)*u_spec;
+  float rim=pow(1.0-abs(N.z),3.0)*0.22;
+  O=vec4(u_col*dif+vec3(sp)+u_col*rim,1.0);
+}`;
+const MAT_FS_FRE=`#version 300 es
+precision highp float;
+out vec4 O; in vec3 v_n; in vec3 v_p;
+uniform vec3 u_col;
+void main(){
+  vec3 N=normalize(v_n);
+  float rim=pow(1.0-abs(N.z),2.4);
+  float dif=max(dot(N,normalize(vec3(0.45,0.75,0.6))),0.0);
+  O=vec4(u_col*(rim*1.7+0.08+0.25*dif),1.0);
+}`;
+const MAT_FS_PLA=`#version 300 es
+precision highp float;
+out vec4 O; in vec3 v_n; in vec3 v_p;
+uniform float u_time; uniform float u_hue; uniform float u_sat; uniform float u_val;
+vec3 phsv(vec3 c){
+  vec3 rgb=clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0,0.0,1.0);
+  return c.z*mix(vec3(1.0),rgb,c.y);
+}
+void main(){
+  vec3 N=normalize(v_n); vec3 p=v_p;
+  float w=sin(p.x*3.0+u_time*0.7)*0.5+sin(p.y*4.0-u_time*0.9)*0.35
+         +sin((p.x+p.z)*5.0+u_time*0.5)*0.4+sin(length(p)*6.0-u_time*1.3)*0.45;
+  float dif=max(dot(N,normalize(vec3(0.45,0.75,0.6))),0.0)*0.5+0.5;
+  O=vec4(phsv(vec3(fract(u_hue+w*0.22),u_sat,u_val*dif*(0.8+0.4*w))),1.0);
+}`;
+let MATPROG=null; const MATIMP={};
+function ensureMatProgs(){
+  if(MATPROG) return MATPROG;
+  MATPROG={std:makeProgram(MAT_VS,MAT_FS_STD),fre:makeProgram(MAT_VS,MAT_FS_FRE),pla:makeProgram(MAT_VS,MAT_FS_PLA)};
+  return MATPROG;
+}
+function matImpProg(k){
+  const im=S.imports[k]; if(!im) return null;
+  const c=MATIMP[k];
+  if(c&&c.code===im.code) return c.prog;
+  if(c&&c.prog) gl.deleteProgram(c.prog);
+  let pr=null;
+  try{ pr=makeProgram(MAT_VS_IMP,FRAG_HEAD+shaderTranslate(im.code)); }catch(e){ pr=null; }
+  MATIMP[k]={code:im.code,prog:pr};
+  return pr;
+}
+function renderScene3D(i,nd,t,ins,T){
+  const mesh=_dataIns[0], mat=_dataIns[1];
+  gl.bindFramebuffer(gl.FRAMEBUFFER,T.fb);
+  gl.viewport(0,0,T.w,T.h);
+  if(ins[2]){
+    gl.disable(gl.DEPTH_TEST);
+    const P=PROG.copy;
+    if(P){ gl.useProgram(P); setTex(P,'u_tex',0,ins[2]); quadDraw(); }
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+  }else{
+    const bgl=neff(i,nd.id,'bg');
+    gl.clearColor(bgl*0.45,bgl*0.6,bgl,1);
+    gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  }
+  if(!mesh||mesh.kind!=='mesh'||!mat||mat.kind!=='mat'){ gl.bindFramebuffer(gl.FRAMEBUFFER,null); return; }
+  ensureClonerGL();
+  if(!CLGEO){ gl.bindFramebuffer(gl.FRAMEBUFFER,null); return; }
+  const geo=CLGEO[mesh.geo];
+  if(!geo){ gl.bindFramebuffer(gl.FRAMEBUFFER,null); return; }
+  const MP=ensureMatProgs();
+  const dist=neff(i,nd.id,'dist'), az=neff(i,nd.id,'az')*Math.PI/180, el=neff(i,nd.id,'el');
+  const eye=[Math.sin(az)*dist,el,Math.cos(az)*dist];
+  const proj=m4persp(0.95,T.w/T.h,0.1,60), view=m4look(eye,[0,0,0],[0,1,0]);
+  const sa=t*mesh.spin*Math.PI*0.5, cs=Math.cos(sa), sn=Math.sin(sa);
+  const tx=mesh.tilt*Math.PI/180, cx=Math.cos(tx), sx=Math.sin(tx), sc=mesh.scale;
+  const rotY=new Float32Array([cs,0,-sn,0, 0,1,0,0, sn,0,cs,0, 0,0,0,1]);
+  const rotX=new Float32Array([1,0,0,0, 0,cx,sx,0, 0,-sx,cx,0, 0,0,0,1]);
+  const sclM=new Float32Array([sc,0,0,0, 0,sc,0,0, 0,0,sc,0, 0,0,0,1]);
+  const model=m4mul(m4mul(rotY,rotX),sclM);
+  const mvp=m4mul(m4mul(proj,view),model);
+  const nm=new Float32Array([model[0],model[1],model[2],model[4],model[5],model[6],model[8],model[9],model[10]]);
+  const col=hsvRgb(mat.hue,Math.min(1,mat.sat),mat.bright);
+  let prog=null, imported=-1;
+  if(mat.shader===0) prog=MP.std;
+  else if(mat.shader===1) prog=MP.fre;
+  else if(mat.shader===2) prog=MP.pla;
+  else{ imported=mat.shader-3; prog=matImpProg(imported); }
+  if(!prog){ gl.bindFramebuffer(gl.FRAMEBUFFER,null); return; }
+  gl.useProgram(prog);
+  gl.uniformMatrix4fv(U(prog,'u_mvp'),false,mvp);
+  if(imported<0){
+    gl.uniformMatrix3fv(U(prog,'u_nm'),false,nm);
+    if(mat.shader===0){ gl.uniform3f(U(prog,'u_col'),col[0],col[1],col[2]); gl.uniform1f(U(prog,'u_spec'),mat.spec); }
+    else if(mat.shader===1){ gl.uniform3f(U(prog,'u_col'),col[0],col[1],col[2]); }
+    else{ gl.uniform1f(U(prog,'u_time'),t); gl.uniform1f(U(prog,'u_hue'),mat.hue); gl.uniform1f(U(prog,'u_sat'),mat.sat); gl.uniform1f(U(prog,'u_val'),mat.bright); }
+  }else{
+    gl.uniform1f(U(prog,'u_time'),t);
+    gl.uniform2f(U(prog,'u_res'),T.w,T.h);
+    gl.uniform1f(U(prog,'u_speed'),1);
+    gl.uniform1f(U(prog,'u_hue'),mat.hue);
+    gl.uniform1f(U(prog,'u_audioBass'),bassSm);
+    gl.uniform1f(U(prog,'u_audioMid'),midSm);
+    gl.uniform1f(U(prog,'u_audioHigh'),highSm);
+    gl.uniform1f(U(prog,'u_beat'),beatPulse);
+    gl.uniform1f(U(prog,'u_param1'),mat.p1);
+    gl.uniform1f(U(prog,'u_param2'),mat.p2);
+    gl.uniform1f(U(prog,'iTimeDelta'),shDt);
+    gl.uniform1i(U(prog,'iFrame'),shFrame);
+    gl.uniform4f(U(prog,'iMouse'),shMouse[0],shMouse[1],shMouse[2],shMouse[3]);
+    for(let ch=0;ch<4;ch++){
+      const loc=gl.getUniformLocation(prog,'iChannel'+ch);
+      if(loc){ gl.activeTexture(gl.TEXTURE4+ch); gl.bindTexture(gl.TEXTURE_2D,getIchTex(ch)); gl.uniform1i(loc,4+ch); }
+    }
+    const crl=gl.getUniformLocation(prog,'iChannelResolution');
+    if(crl) gl.uniform3fv(crl,ICH_RES_FLAT);
+    const dn=new Date();
+    gl.uniform4f(U(prog,'iDate'),dn.getFullYear(),dn.getMonth()+1,dn.getDate(),dn.getHours()*3600+dn.getMinutes()*60+dn.getSeconds());
+    gl.activeTexture(gl.TEXTURE0);
+    const uns=(S.imports[imported]||{}).uniforms;
+    if(uns&&uns.length){
+      const mp=(id)=>PARAMS[id]?PARAMS[id].map(eff(id)):eff(id);
+      for(const u0 of uns){
+        const u=normUniform(u0); if(!u) continue;
+        const base='SH'+(5+imported)+'.'+u.name;
+        if((u.count||1)>1) continue;
+        if(u.type==='vec2'||u.type==='vec3'||u.type==='vec4'){
+          const ncomp={vec2:2,vec3:3,vec4:4}[u.type], axes='xyzw', vv=[];
+          for(let c=0;c<ncomp;c++) vv.push(mp(base+'.'+axes[c]));
+          if(ncomp===2) gl.uniform2f(U(prog,u.name),vv[0],vv[1]);
+          else if(ncomp===3) gl.uniform3f(U(prog,u.name),vv[0],vv[1],vv[2]);
+          else gl.uniform4f(U(prog,u.name),vv[0],vv[1],vv[2],vv[3]);
+        }else if(u.type==='int'||u.type==='bool'){
+          gl.uniform1i(U(prog,u.name),u.type==='bool'?(eff(base)>=0.5?1:0):mp(base));
+        }else{
+          gl.uniform1f(U(prog,u.name),mp(base));
+        }
+      }
+    }
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,geo.pos);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,geo.nor);
+  gl.enableVertexAttribArray(1);
+  gl.vertexAttribPointer(1,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,geo.idx);
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+  gl.drawElements(gl.TRIANGLES,geo.n,gl.UNSIGNED_INT,0);
+  gl.disable(gl.DEPTH_TEST);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
 }
 
 /* ---------- editor UI ---------- */
@@ -11040,8 +11277,8 @@ function buildNodeEd(){
   if($('nodeed')) return;
   const root=el('div',''); root.id='nodeed'; root.style.display='none';
   root.innerHTML=
-   '<div id="nehead"><button id="neBack" class="nbtn" title="Back to deck (ESC / Tab)">&#8592; Deck</button>'+
-   '<span id="neTitle"></span><span class="ncrumb">Layer graph &rarr; Compositor &rarr; Master FX &middot; Tab: back to deck</span>'+
+   '<div id="nehead"><button id="neBack" class="nbtn" title="Back to Live mode (ESC / Tab)">&#8592; Live</button>'+
+   '<span id="neTitle"></span><span class="ncrumb">STUDIO &middot; graph &rarr; Compositor &rarr; Master FX &middot; Tab: back to Live</span>'+
    '<span class="sp"></span>'+
    '<button id="neAdd" class="nbtn" title="Add node (double-click canvas)">+ Node</button>'+
    '<button id="neZout" class="nbtn" title="Zoom out">&minus;</button>'+
@@ -11050,7 +11287,7 @@ function buildNodeEd(){
    '<div id="nemain"><div id="necanvas"><svg id="newires"></svg><div id="neworld"></div>'+
    '<div id="nepal" style="display:none"></div></div>'+
    '<div id="neprops"></div></div>'+
-   '<div id="nebar">drag background: pan &middot; wheel: zoom &middot; double-click: add node &middot; drag port &rarr; port: connect &middot; click wire: select &middot; Del: delete &middot; Ctrl+D: duplicate &middot; ESC / Tab: deck</div>';
+   '<div id="nebar">drag background: pan &middot; wheel: zoom &middot; double-click: add node &middot; drag port &rarr; port: connect &middot; click wire: select &middot; Del: delete &middot; Ctrl+D: duplicate &middot; ESC / Tab: Live mode</div>';
   document.body.appendChild(root);
   $('neBack').addEventListener('click',closeNodes);
   $('neAdd').addEventListener('click',(e)=>{ openPalette(neCanvasCenter()); e.stopPropagation(); });
@@ -11081,8 +11318,8 @@ function openNodes(i,dive){
   neSel=null; neDragWire=null; closePalette();
   $('nodeed').style.display='flex'; neOpen=true;
   $('neTitle').textContent=neDive?
-    ('Clip '+LAYER_NAMES[i]+' \u00B7 C'+(neDive.c+1)+' ('+srcName(neDive.src)+') \u2014 Node Graph'):
-    ('Layer '+LAYER_NAMES[i]+' \u2014 Node Graph');
+    ('Clip '+LAYER_NAMES[i]+' \u00B7 C'+(neDive.c+1)+' ('+srcName(neDive.src)+') \u2014 HoloMapper Studio'):
+    ('Layer '+LAYER_NAMES[i]+' \u2014 HoloMapper Studio');
   drawNodes(); drawWires(); applyNeTransform(); renderNodeProps(null);
   if(neAfTimer) clearInterval(neAfTimer);
   neAfTimer=setInterval(neAfTick,250);
@@ -11291,6 +11528,8 @@ function addWire(i,fromId,fromPort,toId,toPort){
   if(!fn||!tn||fromId===toId) return 'bad';
   const fd=NTYPES[fn.type], td=NTYPES[tn.type];
   if(!(fd.outs&&fd.outs[fromPort])||!(td.ins&&td.ins[toPort])) return 'bad';
+  const fk=(fd.outs[fromPort].kind)||'tex', tk=(td.ins[toPort].kind)||'tex';
+  if(fk!==tk) return 'kind';
   if(wouldCycle(g,fromId,toId)) return 'cycle';
   /* one wire per input port: replace existing */
   g.wires=g.wires.filter(w=>!(w.t.n===toId&&w.t.p===toPort));
@@ -11410,6 +11649,7 @@ function nePointerUp(e){
       if(dw.dir==='out'&&dir2==='in') res=addWire(neLayer,dw.nid,dw.port,nid2,port2);
       else if(dw.dir==='in'&&dir2==='out') res=addWire(neLayer,nid2,port2,dw.nid,dw.port);
       if(res==='cycle'){ showErr('No cycles allowed in a layer graph.'); setTimeout(()=>$('errbanner').classList.remove('show'),2200); }
+      else if(res==='kind'){ showErr('Port types must match \u2014 mesh\u2192mesh, material\u2192material, tex\u2192tex.'); setTimeout(()=>$('errbanner').classList.remove('show'),2200); }
       else if(res==='bad'){ showErr('Connect an output port \u2192 an input port.'); setTimeout(()=>$('errbanner').classList.remove('show'),2200); }
     }
   }
@@ -11491,7 +11731,7 @@ function renderNodeProps(nd){
   const grp=el('div','nepgrp');
   for(const pd of (def.params||[])){
     const id=nodeParamId(i,nd.id,pd.k);
-    if(pd.kind==='discrete') discreteRow(grp,id,pd.label,(nd.type==='src'&&pd.k==='src')?srcNodeOptions():pd.opts);
+    if(pd.kind==='discrete') discreteRow(grp,id,pd.label,(nd.type==='src'&&pd.k==='src')?srcNodeOptions():((nd.type==='material3d'&&pd.k==='shader')?matShaderOptions():pd.opts));
     else if(pd.kind==='toggle') toggleRow(grp,id,pd.label);
     else paramRow(grp,id,pd.label);
   }
